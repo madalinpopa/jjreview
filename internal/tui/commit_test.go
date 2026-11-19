@@ -1,0 +1,419 @@
+package tui_test
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"testing"
+
+	"github.com/madalinpopa/jjreview/internal/diff"
+	"github.com/madalinpopa/jjreview/internal/jj"
+)
+
+func applied(t *testing.T, parent string, f diff.File, hunks ...int) string {
+	t.Helper()
+	got, err := diff.Apply(parent, f, hunks)
+	if err != nil {
+		t.Fatalf("diff.Apply(%v) error = %v", hunks, err)
+	}
+	return got
+}
+
+func TestCommitModal_success(t *testing.T) {
+	t.Run("c without selection asks to select hunks", func(t *testing.T) {
+		m := press(t, loaded(t, newSource()), "c")
+
+		if m.ModalOpen() {
+			t.Error("ModalOpen() = true, want false")
+		}
+		assertContains(t, view(m), "select hunks first (space / S)")
+	})
+
+	t.Run("c shows the modal while generating", func(t *testing.T) {
+		m := press(t, loaded(t, newSource()), "ctrl+n", "space")
+
+		m, _ = update(t, m, keyMsg("c"))
+
+		assertContains(t, view(m), "New commit", "from kxyzabcd", "src/main.go  @@ -3,2 +3,2 @@  +1 −1",
+			"Commit message", "✨ generating…", "ctrl+r regenerate · esc cancel · ctrl+enter / ctrl+s commit")
+	})
+
+	t.Run("generated message fills the input from the selected hunks patch", func(t *testing.T) {
+		gen := &fakeGenerator{text: "feat(main): use new line\n"}
+		m := start(t, newSource(), gen, 120, 30)
+		m = press(t, m, "ctrl+n", "space")
+
+		m = press(t, m, "c")
+
+		if got := m.Message(); got != "feat(main): use new line" {
+			t.Errorf("Message() = %q, want generated text", got)
+		}
+		assertContains(t, view(m), "✨ generated from 1 hunk, edit freely")
+		f := mainFile()
+		f.Hunks = f.Hunks[:1]
+		if want := diff.Format([]diff.File{f}); !slices.Equal(gen.patches, []string{want}) {
+			t.Errorf("patches = %q, want %q", gen.patches, want)
+		}
+	})
+
+	t.Run("ctrl+r regenerates", func(t *testing.T) {
+		gen := &fakeGenerator{text: "first"}
+		m := start(t, newSource(), gen, 120, 30)
+		m = press(t, m, "ctrl+n", "space", "c")
+		gen.text = "second"
+
+		m = press(t, m, "ctrl+r")
+
+		if got := m.Message(); got != "second" || len(gen.patches) != 2 {
+			t.Errorf("Message() = %q after %d generations, want second after 2", got, len(gen.patches))
+		}
+	})
+
+	t.Run("reopened modal ignores the closed modal's generation", func(t *testing.T) {
+		gen := &fakeGenerator{}
+		m := start(t, newSource(), gen, 120, 30)
+		m = press(t, m, "ctrl+n", "space")
+		m, closed := update(t, m, keyMsg("c"))
+		m = press(t, m, "esc")
+		m, reopened := update(t, m, keyMsg("c"))
+
+		gen.text = "stale"
+		m, _ = update(t, m, closed())
+		gen.text = "fresh"
+		fresh := reopened()
+		if err := gen.ctxs[1].Err(); err != nil {
+			t.Errorf("reopened generation ctx.Err() = %v, want nil", err)
+		}
+		m, _ = update(t, m, fresh)
+
+		if got := m.Message(); got != "fresh" {
+			t.Errorf("Message() = %q, want fresh", got)
+		}
+	})
+
+	t.Run("typing edits the message", func(t *testing.T) {
+		m := start(t, newSource(), nil, 120, 30)
+		m = press(t, m, "ctrl+n", "space", "c")
+
+		m = press(t, m, "f", "i", "x", "q")
+
+		if got := m.Message(); got != "fixq" {
+			t.Errorf("Message() = %q, want fixq", got)
+		}
+	})
+
+	t.Run("without a generator shows the setup hint and starts empty", func(t *testing.T) {
+		m := start(t, newSource(), nil, 160, 30)
+
+		m = press(t, m, "ctrl+n", "space", "c")
+
+		if m.Message() != "" {
+			t.Errorf("Message() = %q, want empty", m.Message())
+		}
+		assertContains(t, view(m), "ANTHROPIC_API_KEY")
+	})
+
+	t.Run("esc closes the modal and keeps the selection", func(t *testing.T) {
+		m := press(t, loaded(t, newSource()), "ctrl+n", "space", "c", "esc")
+
+		if m.ModalOpen() {
+			t.Error("ModalOpen() = true, want false")
+		}
+		assertContains(t, view(m), "1 hunk selected")
+	})
+}
+
+func TestCommitModal_failed(t *testing.T) {
+	t.Run("generator error is shown", func(t *testing.T) {
+		gen := &fakeGenerator{err: errors.New("quota exceeded")}
+		m := start(t, newSource(), gen, 160, 30)
+
+		m = press(t, m, "ctrl+n", "space", "c")
+
+		assertContains(t, view(m), "generation failed: quota exceeded")
+	})
+
+	t.Run("empty message is rejected", func(t *testing.T) {
+		src := newSource()
+		m := start(t, src, nil, 160, 30)
+
+		m = press(t, m, "ctrl+n", "space", "c", "ctrl+s")
+
+		if !m.ModalOpen() || len(src.splits) != 0 {
+			t.Errorf("ModalOpen() = %v with %d splits, want open modal and no split", m.ModalOpen(), len(src.splits))
+		}
+		assertContains(t, view(m), "commit message is empty")
+	})
+
+	t.Run("merge changes cannot be split", func(t *testing.T) {
+		src := newSource()
+		src.change.Parents = []string{"p1", "p2"}
+
+		m := press(t, loaded(t, src), "ctrl+n", "space", "c")
+
+		if m.ModalOpen() {
+			t.Error("ModalOpen() = true, want false")
+		}
+		assertContains(t, view(m), "2 parents")
+	})
+
+	t.Run("split error keeps the modal open", func(t *testing.T) {
+		src := newSource()
+		src.splitErr = errors.New("conflict")
+
+		m := press(t, loaded(t, src), "ctrl+n", "space", "c", "ctrl+s")
+
+		if !m.ModalOpen() {
+			t.Error("ModalOpen() = false, want true")
+		}
+		assertContains(t, view(m), "conflict")
+	})
+}
+
+func TestCommit_success(t *testing.T) {
+	t.Run("splits the selected hunk applied to the parent", func(t *testing.T) {
+		src := newSource()
+		m := press(t, loaded(t, src), "ctrl+n", "space", "c", "ctrl+enter")
+
+		want := []splitCall{{
+			changeID: "kxyzabcdefgh",
+			message:  "feat: generated",
+			files:    []jj.SplitFile{{Path: "src/main.go", Content: applied(t, mainParent, mainFile(), 0), Mode: "100644"}},
+		}}
+		if !slices.EqualFunc(src.splits, want, equalSplit) {
+			t.Errorf("splits = %+v, want %+v", src.splits, want)
+		}
+		if m.ModalOpen() {
+			t.Error("ModalOpen() = true, want false")
+		}
+		got := view(m)
+		assertContains(t, got, "✓ created kxyzabcd: feat: generated", "▾ ✓ @@ -3,2 +3,2 @@", "nothing selected", "@ rest1zzz")
+	})
+
+	t.Run("second commit targets the rest change and includes committed hunks", func(t *testing.T) {
+		src := newSource()
+		m := press(t, loaded(t, src), "ctrl+n", "space", "c", "ctrl+s")
+
+		m = press(t, m, "j", "j", "j", "space", "c", "ctrl+s")
+
+		if len(src.splits) != 2 {
+			t.Fatalf("splits = %d, want 2", len(src.splits))
+		}
+		second := src.splits[1]
+		want := []jj.SplitFile{{Path: "src/main.go", Content: applied(t, mainParent, mainFile(), 0, 1), Mode: "100644"}}
+		if second.changeID != "rest1zzzzzzzzzz" || !slices.Equal(second.files, want) {
+			t.Errorf("second split = %+v, want rest1zzzzzzzzzz with %+v", second, want)
+		}
+		if n := strings.Count(strings.Join(src.requested, ","), "parent1:src/main.go"); n != 1 {
+			t.Errorf("parent content requested %d times, want 1", n)
+		}
+		assertContains(t, view(m), "✓ main.go", "1/4 ✓", "@ rest2zzz")
+	})
+
+	t.Run("whole-file units become content or deletions", func(t *testing.T) {
+		src := newSource()
+		src.files = []diff.File{
+			imageFile(),
+			{OldPath: "old.txt", NewPath: "new.txt", OldMode: "100644", NewMode: "100644", Status: diff.StatusRenamed},
+			{OldPath: "gone.txt", Status: diff.StatusDeleted, Hunks: []diff.Hunk{{OldStart: 1, OldLines: 1, Lines: []diff.Line{{Kind: diff.LineRemoved, Text: "bye", OldNo: 1}}}}},
+		}
+		src.contents["commit1:new.txt"] = "moved"
+		m := loaded(t, src)
+
+		press(t, m, "S", "ctrl+n", "S", "ctrl+n", "S", "c", "ctrl+s")
+
+		want := []jj.SplitFile{
+			{Path: "gone.txt", Delete: true},
+			{Path: "img.png", Content: "PNG", Mode: "100644"},
+			{Path: "new.txt", Content: "moved", Mode: "100644"},
+			{Path: "old.txt", Delete: true},
+		}
+		if len(src.splits) != 1 || !slices.Equal(src.splits[0].files, want) {
+			t.Errorf("splits = %+v, want files %+v", src.splits, want)
+		}
+	})
+}
+
+func TestCommitStale_failed(t *testing.T) {
+	src := newSource()
+	m := loaded(t, src)
+	src.head = "commit2"
+
+	m = press(t, m, "ctrl+n", "space", "c", "ctrl+s")
+
+	if !m.ModalOpen() {
+		t.Error("ModalOpen() = false, want true")
+	}
+	if len(src.splits) != 0 {
+		t.Errorf("splits = %+v, want none", src.splits)
+	}
+	got := view(m)
+	assertContains(t, got, "restart jjr to review it")
+	for _, unwanted := range []string{"split done; restart jjr to continue", "▾ ✓ @@ -3,2 +3,2 @@"} {
+		if strings.Contains(got, unwanted) {
+			t.Errorf("View() contains %q:\n%s", unwanted, got)
+		}
+	}
+}
+
+func TestCommitIncomplete_success(t *testing.T) {
+	src := newSource()
+	src.splitErr = fmt.Errorf("split: %w: reload failed", jj.ErrSplitIncomplete)
+	m := press(t, loaded(t, src), "ctrl+n", "space", "c", "ctrl+s")
+
+	if m.ModalOpen() {
+		t.Error("ModalOpen() = true, want false")
+	}
+	assertContains(t, view(m), "▾ ✓ @@ -3,2 +3,2 @@", "kxyzabcd", "split done; restart jjr to continue")
+
+	src.splitErr = nil
+	m = press(t, m, "j", "j", "j", "space", "c")
+
+	if m.ModalOpen() || len(src.splits) != 0 {
+		t.Errorf("ModalOpen() = %v with %d splits, want commits blocked", m.ModalOpen(), len(src.splits))
+	}
+	assertContains(t, view(m), "split done; restart jjr to continue")
+}
+
+func TestCommitModes_success(t *testing.T) {
+	t.Run("mode-only change is a whole-file unit with the new mode", func(t *testing.T) {
+		src := newSource()
+		src.files = []diff.File{{OldPath: "run.sh", NewPath: "run.sh", OldMode: "100644", NewMode: "100755"}}
+		src.contents["commit1:run.sh"] = "#!/bin/sh\n"
+		m := loaded(t, src)
+
+		assertContains(t, view(m), "mode 100644 → 100755")
+
+		m = press(t, m, "S")
+		assertContains(t, view(m), "● run.sh", "1 hunk selected")
+		press(t, m, "c", "ctrl+s")
+
+		want := []jj.SplitFile{{Path: "run.sh", Content: "#!/bin/sh\n", Mode: "100755"}}
+		if len(src.splits) != 1 || !slices.Equal(src.splits[0].files, want) {
+			t.Errorf("splits = %+v, want files %+v", src.splits, want)
+		}
+	})
+
+	t.Run("symlink is a whole-file unit", func(t *testing.T) {
+		src := newSource()
+		src.files = []diff.File{{OldPath: "link", NewPath: "link", OldMode: "120000", NewMode: "120000", Hunks: []diff.Hunk{
+			{OldStart: 1, OldLines: 1, NewStart: 1, NewLines: 1, Lines: []diff.Line{
+				{Kind: diff.LineRemoved, Text: "a", OldNo: 1},
+				{Kind: diff.LineAdded, Text: "b", NewNo: 1},
+			}},
+		}}}
+		src.contents["commit1:link"] = "b"
+		m := loaded(t, src)
+
+		m = press(t, m, "space")
+		assertContains(t, view(m), "nothing selected")
+
+		m = press(t, m, "S", "c", "ctrl+s")
+
+		want := []jj.SplitFile{{Path: "link", Content: "b", Mode: "120000"}}
+		if len(src.splits) != 1 || !slices.Equal(src.splits[0].files, want) {
+			t.Errorf("splits = %+v, want files %+v", src.splits, want)
+		}
+		assertContains(t, view(m), "✓ link")
+	})
+}
+
+func TestGenerating_success(t *testing.T) {
+	t.Run("typing is ignored while generating", func(t *testing.T) {
+		gen := &fakeGenerator{text: "generated"}
+		m := start(t, newSource(), gen, 120, 30)
+		m = press(t, m, "ctrl+n", "space")
+		m, genCmd := update(t, m, keyMsg("c"))
+
+		m, _ = update(t, m, keyMsg("x"))
+		m = run(t, m, genCmd)
+
+		if got := m.Message(); got != "generated" {
+			t.Errorf("Message() = %q, want generated", got)
+		}
+	})
+
+	t.Run("ctrl+r cancels the in-flight generation", func(t *testing.T) {
+		gen := &fakeGenerator{text: "generated"}
+		m := start(t, newSource(), gen, 120, 30)
+		m = press(t, m, "ctrl+n", "space")
+		m, first := update(t, m, keyMsg("c"))
+		first()
+
+		press(t, m, "ctrl+r")
+
+		if len(gen.ctxs) != 2 || gen.ctxs[0].Err() == nil {
+			t.Errorf("first generation context err = %v after ctrl+r, want canceled", gen.ctxs[0].Err())
+		}
+	})
+}
+
+func TestModalErrors_success(t *testing.T) {
+	t.Run("long generation errors wrap instead of being clipped", func(t *testing.T) {
+		gen := &fakeGenerator{err: errors.New("the model endpoint refused the request because the account quota has been fully consumed for today tailword")}
+		m := start(t, newSource(), gen, 80, 30)
+
+		m = press(t, m, "ctrl+n", "space", "c")
+
+		assertContains(t, view(m), "tailword")
+	})
+
+	t.Run("long commit errors wrap instead of being clipped", func(t *testing.T) {
+		src := newSource()
+		src.splitErr = errors.New("jj split failed with a very long explanation of what went wrong in the working copy endword")
+		m := start(t, src, &fakeGenerator{text: "msg"}, 80, 30)
+
+		m = press(t, m, "ctrl+n", "space", "c", "ctrl+s")
+
+		assertContains(t, view(m), "endword")
+	})
+}
+
+func equalSplit(a, b splitCall) bool {
+	return a.changeID == b.changeID && a.message == b.message && slices.Equal(a.files, b.files)
+}
+
+func TestImmutable_success(t *testing.T) {
+	immutable := func() *fakeSource {
+		src := newSource()
+		src.change.Immutable = true
+		return src
+	}
+
+	t.Run("marks the review read only", func(t *testing.T) {
+		got := view(loaded(t, immutable()))
+
+		assertContains(t, got, "read only")
+		for _, hint := range []string{"select hunk", "select file", "commit selected"} {
+			if strings.Contains(got, hint) {
+				t.Errorf("View() of an immutable revision shows %q", hint)
+			}
+		}
+	})
+
+	t.Run("does not select hunks or files", func(t *testing.T) {
+		for name, keys := range map[string][]string{
+			"space in the diff pane": {"ctrl+n", "space"},
+			"S":                      {"ctrl+n", "S"},
+			"space in the file pane": {"ctrl+n", "h", "space"},
+		} {
+			t.Run(name, func(t *testing.T) {
+				m := press(t, loaded(t, immutable()), keys...)
+
+				assertContains(t, view(m), "nothing selected", "immutable revision: read only")
+			})
+		}
+	})
+
+	t.Run("does not open the commit dialog", func(t *testing.T) {
+		src := immutable()
+
+		m := press(t, loaded(t, src), "ctrl+n", "c")
+
+		if m.ModalOpen() {
+			t.Error("ModalOpen() = true, want false")
+		}
+		assertContains(t, view(m), "immutable revision: read only")
+	})
+}
