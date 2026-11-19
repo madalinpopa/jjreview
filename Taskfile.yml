@@ -1,0 +1,93 @@
+# yaml-language-server: $schema=https://taskfile.dev/schema.json
+version: '3'
+
+tasks:
+  init:
+    desc: Download Go module dependencies
+    cmd: go mod download
+
+  build:
+    desc: Build the jjr binary into bin/, versioned with the latest git commit
+    vars:
+      VERSION:
+        sh: git rev-parse --short HEAD
+    cmd: go build -ldflags "-X main.version={{.VERSION}}" {{.CLI_ARGS}} -o bin/jjr ./cmd/jjr
+
+  run:
+    desc: Run a main package (pass the package and its arguments after --)
+    cmd: go run {{.CLI_ARGS}}
+
+  test:
+    desc: Run Go tests with the race detector
+    cmd: go test -race ./... {{.CLI_ARGS}}
+
+  lint:
+    desc: Run golangci-lint and verify go.mod and go.sum are tidy
+    cmds:
+      - golangci-lint run ./...
+      - go mod tidy -diff
+
+  format:
+    desc: Format Go code
+    cmds:
+      - go fmt ./...
+      - golangci-lint fmt ./...
+
+  check:
+    desc: Format code and run linters
+    cmds:
+      - task: test
+      - task: format
+      - task: lint
+
+  release:next:
+    desc: Tag and push the next patch release
+    cmds:
+      - task: release:patch
+
+  release:patch:
+    desc: Tag and push the next patch release (vX.Y.Z+1)
+    cmds:
+      - task: _release
+        vars: {BUMP: patch}
+
+  release:minor:
+    desc: Tag and push the next minor release (vX.Y+1.0)
+    cmds:
+      - task: _release
+        vars: {BUMP: minor}
+
+  release:major:
+    desc: Tag and push the next major release (vX+1.0.0)
+    cmds:
+      - task: _release
+        vars: {BUMP: major}
+
+  _release:
+    internal: true
+    vars:
+      LATEST:
+        sh: git fetch --quiet --tags origin && git tag --list 'v*' --sort=-v:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1 || true
+      NEXT:
+        sh: |
+          v='{{.LATEST | default "v0.0.0"}}'; v=${v#v}
+          M=${v%%.*}; r=${v#*.}; m=${r%%.*}; p=${r#*.}
+          case '{{.BUMP}}' in
+            major) echo "v$((M + 1)).0.0" ;;
+            minor) echo "v$M.$((m + 1)).0" ;;
+            patch) echo "v$M.$m.$((p + 1))" ;;
+          esac
+    preconditions:
+      - sh: git fetch --quiet origin main && git merge-base --is-ancestor HEAD origin/main
+        msg: HEAD is not on origin/main; push main first, since the release workflow rejects other commits.
+      - sh: '[ "$(gh run list --workflow ci.yml --branch main --event push --commit "$(git rev-parse HEAD)" --status success --json databaseId --jq length)" -gt 0 ]'
+        msg: CI has not passed on HEAD yet; wait for the CI workflow on main to succeed.
+      - sh: '! git rev-parse -q --verify "refs/tags/{{.NEXT}}" >/dev/null'
+        msg: Tag {{.NEXT}} already exists.
+      - sh: git diff --quiet HEAD
+        msg: The worktree has uncommitted changes; commit or discard them first.
+    prompt: Tag {{.LATEST | default "no release"}} -> {{.NEXT}} and push the tag?
+    cmds:
+      - git tag -a {{.NEXT}} -m "Release {{.NEXT}}"
+      - git push origin {{.NEXT}}
+      - echo "Pushed {{.NEXT}}; the release workflow runs on GitHub Actions."

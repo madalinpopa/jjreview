@@ -1,0 +1,45 @@
+version: 2
+
+project_name: jjr
+
+builds:
+  - main: ./cmd/jjr
+    env: [CGO_ENABLED=0]
+    goos: [linux, darwin]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - formats: [tar.gz]
+
+checksum:
+  algorithm: sha256
+
+changelog:
+  use: github-native
+
+release:
+  prerelease: auto
+
+homebrew_casks:
+  - name: jjr
+    binaries: [jjr]
+    homepage: https://github.com/madalinpopa/jjreview
+    description: Review a jj change hunk by hunk and split it into commits
+    license: MIT
+    skip_upload: auto
+    repository:
+      owner: madalinpopa
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    commit_msg_template: "jjr {{ .Tag }}"
+    custom_block: |
+      postflight_steps do
+        on_macos do
+          run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ "{{staged_path}}" }}/jjr"]
+        end
+      end

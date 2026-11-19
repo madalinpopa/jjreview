@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=https://golangci-lint.run/jsonschema/golangci.jsonschema.json
+version: '2'
+
+linters:
+  default: none
+  enable:
+    - bodyclose
+    - contextcheck
+    - errcheck
+    - errorlint
+    - gochecknoglobals
+    - gocognit
+    - gosec
+    - govet
+    - ineffassign
+    - modernize
+    - nilerr
+    - noctx
+    - nolintlint
+    - revive
+    - staticcheck
+    - thelper
+    - tparallel
+    - unused
+    - usetesting
+
+  settings:
+    errcheck:
+      check-blank: true
+    gocognit:
+      min-complexity: 20
+    gosec:
+      excludes:
+        - G104
+    revive:
+      rules:
+        - name: context-as-argument
+    usetesting:
+      context-background: true
+      context-todo: true
+
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - gocognit
+          - gosec
+
+issues:
+  uniq-by-line: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
