@@ -31,7 +31,7 @@ func keyHints(filesFocus, readOnly bool) []keyHint {
 	if !filesFocus {
 		hints = append(hints, keyHint{keys: []string{"d"}, label: "diff"})
 	}
-	return append(hints, keyHint{keys: []string{"?"}, label: "help"})
+	return append(hints, keyHint{keys: []string{"e"}, label: "edit"}, keyHint{keys: []string{"?"}, label: "help"})
 }
 
 func (m Model) View() tea.View {

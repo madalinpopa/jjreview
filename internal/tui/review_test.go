@@ -42,7 +42,7 @@ func TestLoad_success(t *testing.T) {
 		assertContains(t, got,
 			"@ kxyzabcd", "jj review", "changes only", "nothing selected",
 			"FILES", "0/4 ✓", "UNIFIED DIFF", "src/ui/view.go",
-			"h l pane · j k line · space select · c commit · d diff · ? help", "file 1/4 · 1 hunk",
+			"h l pane · j k line · space select · c commit · d diff · e edit · ? help", "file 1/4 · 1 hunk",
 		)
 	})
 
@@ -590,8 +590,8 @@ func TestKeyBar_success(t *testing.T) {
 
 		got := view(m)
 
-		assertContains(t, got, "h l pane", "j k line", "space select", "c commit", "d diff", "? help", "file 1/4 · 1 hunk")
-		for _, hint := range []string{"half page", "^n ^p", "fold", "S select file", "full / changes", "e edit"} {
+		assertContains(t, got, "h l pane", "j k line", "space select", "c commit", "d diff", "e edit", "? help", "file 1/4 · 1 hunk")
+		for _, hint := range []string{"half page", "^n ^p", "fold", "S select file", "full / changes"} {
 			if strings.Contains(got, hint) {
 				t.Errorf("View() key bar shows %q", hint)
 			}
@@ -603,7 +603,7 @@ func TestKeyBar_success(t *testing.T) {
 
 		got := view(m)
 
-		assertContains(t, got, "h l pane", "j k file", "space select", "c commit", "? help", "file 1/4 · 1 hunk")
+		assertContains(t, got, "h l pane", "j k file", "space select", "c commit", "e edit", "? help", "file 1/4 · 1 hunk")
 		for _, hint := range []string{"j k line", "d diff"} {
 			if strings.Contains(got, hint) {
 				t.Errorf("View() with the file pane focused shows %q", hint)
