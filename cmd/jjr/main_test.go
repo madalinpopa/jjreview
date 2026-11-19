@@ -1,0 +1,108 @@
+package main
+
+import (
+	"bytes"
+	"errors"
+	"slices"
+	"testing"
+)
+
+func TestRun_success(t *testing.T) {
+	t.Run("prints the version", func(t *testing.T) {
+		var out bytes.Buffer
+
+		err := run(t.Context(), []string{"-version"}, &out)
+
+		if err != nil {
+			t.Fatalf("run(-version) error = %v", err)
+		}
+		if got := out.String(); got != "dev\n" {
+			t.Errorf("run(-version) output = %q, want %q", got, "dev\n")
+		}
+	})
+}
+
+func TestRun_help(t *testing.T) {
+	err := run(t.Context(), []string{"-h"}, &bytes.Buffer{})
+
+	if err != nil {
+		t.Errorf("run(-h) error = %v, want nil", err)
+	}
+}
+
+func TestRun_failed(t *testing.T) {
+	t.Run("rejects apply-split with missing arguments", func(t *testing.T) {
+		err := run(t.Context(), []string{"apply-split", "spec.json"}, &bytes.Buffer{})
+
+		if !errors.Is(err, errUsage) {
+			t.Errorf("run(apply-split spec.json) error = %v, want %v", err, errUsage)
+		}
+	})
+
+}
+
+func TestParseArgs_success(t *testing.T) {
+	tests := map[string]struct {
+		args []string
+		want string
+	}{
+		"defaults to the working copy": {args: nil, want: "@"},
+		"takes a positional revision":  {args: []string{"@-"}, want: "@-"},
+		"takes a revset expression":    {args: []string{"trunk()..@"}, want: "trunk()..@"},
+		"takes -r":                     {args: []string{"-r", "xyz"}, want: "xyz"},
+		"takes --revision":             {args: []string{"--revision", "xyz"}, want: "xyz"},
+		"takes -R before the revision": {args: []string{"-R", "/repo", "abc"}, want: "abc"},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := parseArgs(tt.args)
+
+			if err != nil {
+				t.Fatalf("parseArgs(%q) error = %v", tt.args, err)
+			}
+			if got.rev != tt.want {
+				t.Errorf("parseArgs(%q) rev = %q, want %q", tt.args, got.rev, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseArgs_failed(t *testing.T) {
+	tests := map[string][]string{
+		"two positional revisions":   {"a", "b"},
+		"positional revision and -r": {"-r", "a", "b"},
+	}
+
+	for name, args := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := parseArgs(args)
+
+			if !errors.Is(err, errRevision) {
+				t.Errorf("parseArgs(%q) error = %v, want %v", args, err, errRevision)
+			}
+		})
+	}
+}
+
+func TestEditorCommand_success(t *testing.T) {
+	tests := map[string]struct {
+		visual, editor string
+		want           []string
+	}{
+		"prefers VISUAL":         {visual: "code -w", editor: "nano", want: []string{"code", "-w", "/r/a.go"}},
+		"falls back to EDITOR":   {editor: "nvim", want: []string{"nvim", "/r/a.go"}},
+		"falls back to vi":       {want: []string{"vi", "/r/a.go"}},
+		"ignores blank settings": {visual: "  ", editor: "hx", want: []string{"hx", "/r/a.go"}},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			cmd := editorCommand(tt.visual, tt.editor)(t.Context(), "/r/a.go")
+
+			if !slices.Equal(cmd.Args, tt.want) {
+				t.Errorf("editorCommand(%q, %q) args = %q, want %q", tt.visual, tt.editor, cmd.Args, tt.want)
+			}
+		})
+	}
+}
