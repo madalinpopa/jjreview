@@ -1,0 +1,43 @@
+diff --git a/chmodedit.sh b/chmodedit.sh
+old mode 100644
+new mode 100755
+index f2ad6c76f0..3cc58df837
+--- a/chmodedit.sh
++++ b/chmodedit.sh
+@@ -1,1 +1,1 @@
+-c
++C
+diff --git a/chmodonly.sh b/chmodonly.sh
+old mode 100644
+new mode 100755
+diff --git a/exec.sh b/exec.sh
+new file mode 100755
+index 0000000000..1a2485251c
+--- /dev/null
++++ b/exec.sh
+@@ -0,0 +1,1 @@
++#!/bin/sh
+diff --git a/gonex.sh b/gonex.sh
+deleted file mode 100755
+index 286c5f5776..0000000000
+--- a/gonex.sh
++++ /dev/null
+@@ -1,1 +0,0 @@
+-gone
+diff --git a/link b/link
+new file mode 120000
+index 0000000000..4cbb553f3f
+--- /dev/null
++++ b/link
+@@ -0,0 +1,1 @@ target.txt
++target.txt
+\ No newline at end of file
+diff --git a/oldlink b/oldlink
+index 4cbb553f3f..dab8c79946 120000
+--- a/oldlink
++++ b/oldlink
+@@ -1,1 +1,1 @@ plain.txt
+-target.txt
+\ No newline at end of file
++plain.txt
+\ No newline at end of file

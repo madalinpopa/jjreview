@@ -1,0 +1,115 @@
+diff --git a/added.txt b/added.txt
+new file mode 100644
+index 0000000000..07f33c419c
+--- /dev/null
++++ b/added.txt
+@@ -0,0 +1,2 @@ new
++new
++file
+diff --git a/bin.dat b/bin.dat
+index 8352675d67..c5793f9878 100644
+Binary files a/bin.dat and b/bin.dat differ
+diff --git a/copied.txt b/copied.txt
+new file mode 100644
+index 0000000000..d92818a4ff
+--- /dev/null
++++ b/copied.txt
+@@ -0,0 +1,21 @@
++100
++101
++102
++103
++104
++105
++106
++107
++108
++109
++110
++111
++112
++113
++114
++115
++116
++117
++118
++119
++120
+diff --git a/del.txt b/del.txt
+deleted file mode 100644
+index 2fa992c0b8..0000000000
+--- a/del.txt
++++ /dev/null
+@@ -1,1 +0,0 @@ keep
+-keep
+diff --git a/emptied.txt b/emptied.txt
+index 422c2b7ab3..e69de29bb2 100644
+--- a/emptied.txt
++++ b/emptied.txt
+@@ -1,2 +0,0 @@ a
+-a
+-b
+diff --git a/empty.txt b/empty.txt
+old mode 100644
+new mode 100755
+diff --git a/mod.txt b/mod.txt
+index e8823e1766..6677a4855b 100644
+--- a/mod.txt
++++ b/mod.txt
+@@ -1,5 +1,6 @@ top
++top
+ 1
+-2
++two
+ 3
+ 4
+ 5
+@@ -22,9 +23,8 @@ two
+ 22
+ 23
+ 24
+-25
++twentyfive
+ 26
+ 27
+-28
+ 29
+ 30
+diff --git a/newempty.txt b/newempty.txt
+new file mode 100644
+index 0000000000..e69de29bb2
+diff --git a/nonl.txt b/nonl.txt
+index c1b0730e01..e25f1814e5 100644
+--- a/nonl.txt
++++ b/nonl.txt
+@@ -1,1 +1,1 @@ y
+-x
+\ No newline at end of file
++y
+\ No newline at end of file
+diff --git a/ren.txt b/renamed.txt
+rename from ren.txt
+rename to renamed.txt
+index 0ff3bbb9c8..e4ad0b7eba 100644
+--- a/ren.txt
++++ b/renamed.txt
+@@ -18,3 +18,4 @@ z
+ 18
+ 19
+ 20
++z
+diff --git a/sp ace.txt b/sp ace.txt
+index bca70f3531..4286f428e3 100644
+--- a/sp ace.txt
++++ b/sp ace.txt
+@@ -1,1 +1,1 @@ r
+-q
++r
+diff --git a/ünï.txt b/ünï.txt
+index be761e039d..d3b4b915a1 100644
+--- a/ünï.txt
++++ b/ünï.txt
+@@ -1,1 +1,1 @@
+-ü
++ö

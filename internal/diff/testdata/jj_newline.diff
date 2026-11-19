@@ -1,0 +1,40 @@
+diff --git a/addnl.txt b/addnl.txt
+index 1c943a9888..de980441c3 100644
+--- a/addnl.txt
++++ b/addnl.txt
+@@ -1,3 +1,3 @@ a
+ a
+ b
+-c
+\ No newline at end of file
++c
+diff --git a/ctxnl.txt b/ctxnl.txt
+index 1c943a9888..63c4c65b96 100644
+--- a/ctxnl.txt
++++ b/ctxnl.txt
+@@ -1,3 +1,3 @@ A
+-a
++A
+ b
+ c
+\ No newline at end of file
+diff --git a/midnl.txt b/midnl.txt
+index 0b669b66ed..e7c23f4ad9 100644
+--- a/midnl.txt
++++ b/midnl.txt
+@@ -1,4 +1,4 @@ one
+-1
++one
+ 2
+ 3
+ 4
+diff --git a/rmnl.txt b/rmnl.txt
+index de980441c3..1c943a9888 100644
+--- a/rmnl.txt
++++ b/rmnl.txt
+@@ -1,3 +1,3 @@ a
+ a
+ b
+-c
++c
+\ No newline at end of file
