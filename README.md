@@ -1,7 +1,7 @@
 <h1 align="center">jjr</h1>
 
 <p align="center">
-  Review a <a href="https://jj-vcs.github.io/jj/">jj</a> change hunk by hunk and split the hunks you select into their own commits, with messages drafted by Claude.
+  Review a <a href="https://jj-vcs.github.io/jj/">jj</a> change hunk by hunk and split the hunks you select into their own commits, with messages drafted by AI.
 </p>
 
 <p align="center">
