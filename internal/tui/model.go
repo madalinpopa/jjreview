@@ -45,6 +45,7 @@ type Model struct {
 	cursor      int
 	diffTop     int
 	listTop     int
+	treeWidth   int
 	full        bool
 	filesFocus  bool
 	status      string
