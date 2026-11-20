@@ -24,9 +24,14 @@ type Provider struct {
 	Model  string
 }
 
+type Copilot struct {
+	Model string
+}
+
 type Config struct {
 	Provider  string
 	Anthropic Provider
+	Copilot   Copilot
 	Theme     theme.Theme
 }
 
