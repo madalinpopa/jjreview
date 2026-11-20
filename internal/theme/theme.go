@@ -117,21 +117,50 @@ func Default() Theme {
 	}
 }
 
-func New(colors, syntax map[string]string) (Theme, error) {
+func New(sections map[string]map[string]string) (Theme, error) {
 	t := Default()
-	if err := apply(t.colorFields(), colors, ""); err != nil {
-		return Theme{}, err
+	fields := t.fields()
+	for _, name := range slices.Sorted(maps.Keys(sections)) {
+		section, ok := fields[name]
+		if !ok {
+			return Theme{}, fmt.Errorf("unknown section theme.%s; use %s", name, Sections())
+		}
+		if err := apply(section, sections[name], "theme."+name+"."); err != nil {
+			return Theme{}, err
+		}
 	}
-	if err := apply(t.Syntax.fields(), syntax, "syntax."); err != nil {
-		return Theme{}, err
-	}
-	_, cursorSet := colors["cursor_bg"]
-	_, hunkSet := colors["hunk_bg"]
+	_, cursorSet := sections["base"]["cursor_bg"]
+	_, hunkSet := sections["diff"]["hunk_bg"]
 	pageUnset := t.Page == lipgloss.NoColor{}
 	cardUnset := t.Card == lipgloss.NoColor{}
 	t.autoCursor = !cursorSet && pageUnset
 	t.autoHunk = !hunkSet && pageUnset && cardUnset
 	return t, nil
+}
+
+func Moved(key string) (string, bool) {
+	switch key {
+	case "page", "text", "card", "border", "title", "header", "strong", "muted", "faint", "dim",
+		"selection", "on_selection", "cursor_bg":
+		return "base." + key, true
+	case "added", "added_bg", "removed", "removed_bg", "hunk", "hunk_bg", "hunk_bar", "folded_bar", "stats":
+		return "diff." + key, true
+	case "dir_name", "picked":
+		return "files." + key, true
+	case "chip", "chip_text", "key", "status", "badge_idle", "badge_idle_fg", "badge_selected":
+		return "bar." + key, true
+	case "modal_border":
+		return "modal.border", true
+	case "input":
+		return "modal.input", true
+	}
+	return "", false
+}
+
+func Sections() string {
+	var t Theme
+	names := slices.Sorted(maps.Keys(t.fields()))
+	return strings.Join(names[:len(names)-1], ", ") + " or " + names[len(names)-1]
 }
 
 func (t Theme) WithBackground(bg color.Color, dark bool) Theme {
@@ -159,11 +188,11 @@ func apply(fields map[string]*color.Color, values map[string]string, prefix stri
 	for _, key := range slices.Sorted(maps.Keys(values)) {
 		field, ok := fields[key]
 		if !ok {
-			return fmt.Errorf("theme: unknown colour %q", prefix+key)
+			return fmt.Errorf("unknown colour %s", prefix+key)
 		}
 		c, err := ParseColor(values[key])
 		if err != nil {
-			return fmt.Errorf("theme: %s: %w", prefix+key, err)
+			return fmt.Errorf("%s: %w", prefix+key, err)
 		}
 		*field = c
 	}
@@ -240,23 +269,28 @@ func named(name string) (color.Color, bool) {
 	return nil, false
 }
 
-func (t *Theme) colorFields() map[string]*color.Color {
-	return map[string]*color.Color{
-		"page": &t.Page, "text": &t.Text, "card": &t.Card, "border": &t.Border,
-		"chip": &t.Chip, "chip_text": &t.ChipText, "title": &t.Title, "header": &t.Header,
-		"strong": &t.Strong, "dir_name": &t.DirName, "muted": &t.Muted, "faint": &t.Faint,
-		"dim": &t.Dim, "added": &t.Added, "added_bg": &t.AddedBg, "removed": &t.Removed,
-		"removed_bg": &t.RemovedBg, "hunk": &t.Hunk, "hunk_bg": &t.HunkBg, "hunk_bar": &t.HunkBar,
-		"folded_bar": &t.FoldedBar, "stats": &t.Stats, "selection": &t.Selection, "cursor_bg": &t.CursorBg,
-		"key": &t.Key, "status": &t.Status, "picked": &t.Picked, "on_selection": &t.OnSelection,
-		"badge_idle": &t.BadgeIdle, "badge_idle_fg": &t.BadgeIdleFg, "badge_selected": &t.BadgeSel,
-		"modal_border": &t.ModalBorder, "input": &t.Input,
-	}
-}
-
-func (s *Syntax) fields() map[string]*color.Color {
-	return map[string]*color.Color{
-		"type": &s.Type, "keyword": &s.Keyword, "function": &s.Function,
-		"string": &s.String, "literal": &s.Literal, "comment": &s.Comment,
+func (t *Theme) fields() map[string]map[string]*color.Color {
+	return map[string]map[string]*color.Color{
+		"base": {
+			"page": &t.Page, "text": &t.Text, "card": &t.Card, "border": &t.Border,
+			"title": &t.Title, "header": &t.Header, "strong": &t.Strong, "muted": &t.Muted,
+			"faint": &t.Faint, "dim": &t.Dim, "selection": &t.Selection,
+			"on_selection": &t.OnSelection, "cursor_bg": &t.CursorBg,
+		},
+		"diff": {
+			"added": &t.Added, "added_bg": &t.AddedBg, "removed": &t.Removed, "removed_bg": &t.RemovedBg,
+			"hunk": &t.Hunk, "hunk_bg": &t.HunkBg, "hunk_bar": &t.HunkBar, "folded_bar": &t.FoldedBar,
+			"stats": &t.Stats,
+		},
+		"files": {"dir_name": &t.DirName, "picked": &t.Picked},
+		"bar": {
+			"chip": &t.Chip, "chip_text": &t.ChipText, "key": &t.Key, "status": &t.Status,
+			"badge_idle": &t.BadgeIdle, "badge_idle_fg": &t.BadgeIdleFg, "badge_selected": &t.BadgeSel,
+		},
+		"modal": {"border": &t.ModalBorder, "input": &t.Input},
+		"syntax": {
+			"type": &t.Syntax.Type, "keyword": &t.Syntax.Keyword, "function": &t.Syntax.Function,
+			"string": &t.Syntax.String, "literal": &t.Syntax.Literal, "comment": &t.Syntax.Comment,
+		},
 	}
 }

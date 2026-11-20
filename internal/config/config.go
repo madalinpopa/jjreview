@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/viper"
 
@@ -79,36 +81,39 @@ func Load(path string) (Config, error) {
 		return Config{}, fmt.Errorf("config: %s: providers.copilot does not take api_key; sign in by running copilot", path)
 	}
 
-	colors, syntax, err := themeValues(v.GetStringMap("theme"))
+	sections, err := themeSections(v.GetStringMap("theme"))
 	if err != nil {
 		return Config{}, fmt.Errorf("config: %s: %w", path, err)
 	}
-	if cfg.Theme, err = theme.New(colors, syntax); err != nil {
+	if cfg.Theme, err = theme.New(sections); err != nil {
 		return Config{}, fmt.Errorf("config: %s: %w", path, err)
 	}
 	return cfg, nil
 }
 
-func themeValues(raw map[string]any) (colors, syntax map[string]string, err error) {
-	colors = map[string]string{}
-	for key, value := range raw {
-		if key == "syntax" {
-			table, ok := value.(map[string]any)
-			if !ok {
-				return nil, nil, errors.New("theme.syntax must be a table")
-			}
-			if syntax, err = stringValues(table, "theme.syntax."); err != nil {
-				return nil, nil, err
+func themeSections(raw map[string]any) (map[string]map[string]string, error) {
+	sections := make(map[string]map[string]string, len(raw))
+	var flat []error
+	for _, name := range slices.Sorted(maps.Keys(raw)) {
+		table, ok := raw[name].(map[string]any)
+		if !ok {
+			if moved, known := theme.Moved(name); known {
+				flat = append(flat, fmt.Errorf("theme.%s moved to theme.%s", name, moved))
+			} else {
+				flat = append(flat, fmt.Errorf("unknown theme key theme.%s; use a section: %s", name, theme.Sections()))
 			}
 			continue
 		}
-		s, ok := value.(string)
-		if !ok {
-			return nil, nil, fmt.Errorf("theme.%s must be a string", key)
+		values, err := stringValues(table, "theme."+name+".")
+		if err != nil {
+			return nil, err
 		}
-		colors[key] = s
+		sections[name] = values
 	}
-	return colors, syntax, nil
+	if err := errors.Join(flat...); err != nil {
+		return nil, err
+	}
+	return sections, nil
 }
 
 func stringValues(table map[string]any, prefix string) (map[string]string, error) {
