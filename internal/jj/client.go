@@ -14,7 +14,7 @@ import (
 	"github.com/madalinpopa/jjreview/internal/diff"
 )
 
-const changeTemplate = `"{\"commit\":" ++ json(self) ++ ",\"immutable\":" ++ json(immutable) ++ "}\n"`
+const changeTemplate = `"{\"commit\":" ++ json(self) ++ ",\"immutable\":" ++ json(immutable) ++ ",\"working_copy\":" ++ json(current_working_copy) ++ "}\n"`
 
 const splitTool = "jjr-apply"
 
@@ -38,8 +38,9 @@ type commitJSON struct {
 }
 
 type changeJSON struct {
-	Commit    commitJSON `json:"commit"`
-	Immutable bool       `json:"immutable"`
+	Commit      commitJSON `json:"commit"`
+	Immutable   bool       `json:"immutable"`
+	WorkingCopy bool       `json:"working_copy"`
 }
 
 type Client struct {
@@ -150,6 +151,7 @@ func (c Client) Change(ctx context.Context, rev string) (Change, error) {
 		Author:      author,
 		Description: commit.Description,
 		Immutable:   commits[0].Immutable,
+		WorkingCopy: commits[0].WorkingCopy,
 	}, nil
 }
 

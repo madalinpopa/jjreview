@@ -153,6 +153,27 @@ func TestChange_success(t *testing.T) {
 		}
 	})
 
+	t.Run("marks the working-copy revision", func(t *testing.T) {
+		dir := newRepo(t)
+		client := newClient(t, dir)
+
+		work, err := client.Change(t.Context(), "@")
+		if err != nil {
+			t.Fatalf("Change(@) error = %v", err)
+		}
+		root, err := client.Change(t.Context(), "root()")
+		if err != nil {
+			t.Fatalf("Change(root()) error = %v", err)
+		}
+
+		if !work.WorkingCopy {
+			t.Error("Change(@).WorkingCopy = false, want true")
+		}
+		if root.WorkingCopy {
+			t.Error("Change(root()).WorkingCopy = true, want false")
+		}
+	})
+
 	t.Run("fills every field", func(t *testing.T) {
 		dir := newRepo(t)
 		writeFile(t, dir, "a.txt", "hello\n")

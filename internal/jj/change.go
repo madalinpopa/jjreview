@@ -9,6 +9,7 @@ type Change struct {
 	Author      string
 	Description string
 	Immutable   bool
+	WorkingCopy bool
 }
 
 type SplitFile struct {
