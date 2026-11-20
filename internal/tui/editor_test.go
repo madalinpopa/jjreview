@@ -20,7 +20,7 @@ func withEditor(m tui.Model, opened *[]string) tui.Model {
 func TestEditor_success(t *testing.T) {
 	t.Run("e opens the current file from the workspace root", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, newSource()), "ctrl+n"), &opened)
+		m := withEditor(press(t, loaded(t, newSource()), "h", "j", "l"), &opened)
 
 		_, cmd := update(t, m, keyMsg("e"))
 
@@ -34,7 +34,7 @@ func TestEditor_success(t *testing.T) {
 
 	t.Run("reloads the change after the editor exits and keeps the file", func(t *testing.T) {
 		src := newSource()
-		m := press(t, loaded(t, src), "ctrl+n")
+		m := press(t, loaded(t, src), "h", "j", "l")
 
 		m, cmd := update(t, m, tui.EditorFinishedMsg{})
 		m = run(t, m, cmd)
@@ -48,7 +48,7 @@ func TestEditor_success(t *testing.T) {
 	})
 
 	t.Run("keeps shown removed lines and folds of unchanged hunks after the reload", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "d", "j", "j", "z")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "d", "j", "j", "z")
 
 		m, cmd := update(t, m, tui.EditorFinishedMsg{})
 		m = run(t, m, cmd)
@@ -72,6 +72,18 @@ func TestEditor_failed(t *testing.T) {
 		assertContains(t, view(m), "file deleted; nothing to edit")
 	})
 
+	t.Run("a revision other than the working copy cannot be edited", func(t *testing.T) {
+		var opened []string
+		m := withEditor(press(t, loaded(t, revisionSource()), "ctrl+p"), &opened)
+
+		m = press(t, m, "e")
+
+		if len(opened) != 0 {
+			t.Errorf("opened = %v, want nothing", opened)
+		}
+		assertContains(t, view(m), "not the working copy; press @ to edit files")
+	})
+
 	t.Run("shows the editor error", func(t *testing.T) {
 		m := loaded(t, newSource())
 
@@ -82,9 +94,21 @@ func TestEditor_failed(t *testing.T) {
 }
 
 func TestEditor_reloading(t *testing.T) {
+	t.Run("e does not open the editor while a revision loads", func(t *testing.T) {
+		var opened []string
+		m := withEditor(loaded(t, revisionSource()), &opened)
+		m, _ = update(t, m, keyMsg("ctrl+p"))
+
+		press(t, m, "e")
+
+		if len(opened) != 0 {
+			t.Errorf("opened = %v, want nothing", opened)
+		}
+	})
+
 	t.Run("c does not open the commit modal before the editor finishes", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, newSource()), "ctrl+n", "space"), &opened)
+		m := withEditor(press(t, loaded(t, newSource()), "h", "j", "l", "space"), &opened)
 
 		m = press(t, m, "e", "c")
 
@@ -95,7 +119,7 @@ func TestEditor_reloading(t *testing.T) {
 
 	t.Run("c opens the commit modal again after an editor error", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, newSource()), "ctrl+n", "space"), &opened)
+		m := withEditor(press(t, loaded(t, newSource()), "h", "j", "l", "space"), &opened)
 		m = press(t, m, "e")
 		m, _ = update(t, m, tui.EditorFinishedMsg{Err: errors.New("exit status 2")})
 
@@ -108,7 +132,7 @@ func TestEditor_reloading(t *testing.T) {
 
 	t.Run("c does not open the commit modal until the reload arrives", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, newSource()), "ctrl+n", "space"), &opened)
+		m := withEditor(press(t, loaded(t, newSource()), "h", "j", "l", "space"), &opened)
 		m = press(t, m, "e")
 		m, reload := update(t, m, tui.EditorFinishedMsg{})
 
@@ -129,7 +153,7 @@ func TestEditor_reloading(t *testing.T) {
 	t.Run("a failed reload stops reloading", func(t *testing.T) {
 		var opened []string
 		src := newSource()
-		m := withEditor(press(t, loaded(t, src), "ctrl+n", "space"), &opened)
+		m := withEditor(press(t, loaded(t, src), "h", "j", "l", "space"), &opened)
 		m = press(t, m, "e")
 		m, reload := update(t, m, tui.EditorFinishedMsg{})
 		src.err = errors.New("revision not found")
