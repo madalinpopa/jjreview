@@ -58,6 +58,8 @@ type Theme struct {
 	ModalBorder color.Color
 	Input       color.Color
 	Syntax      Syntax
+
+	autoCursor bool
 }
 
 func Default() Theme {
@@ -96,6 +98,7 @@ func Default() Theme {
 		BadgeSel:    none,
 		ModalBorder: lipgloss.BrightBlack,
 		Input:       none,
+		autoCursor:  true,
 		Syntax: Syntax{
 			Type:     lipgloss.Cyan,
 			Keyword:  lipgloss.Magenta,
@@ -115,7 +118,21 @@ func New(colors, syntax map[string]string) (Theme, error) {
 	if err := apply(t.Syntax.fields(), syntax, "syntax."); err != nil {
 		return Theme{}, err
 	}
+	_, cursorSet := colors["cursor_bg"]
+	t.autoCursor = !cursorSet && t.Page == lipgloss.NoColor{}
 	return t, nil
+}
+
+func (t Theme) WithBackground(bg color.Color, dark bool) Theme {
+	if !t.autoCursor || bg == nil {
+		return t
+	}
+	if dark {
+		t.CursorBg = lipgloss.Lighten(bg, 0.08)
+	} else {
+		t.CursorBg = lipgloss.Darken(bg, 0.06)
+	}
+	return t
 }
 
 func apply(fields map[string]*color.Color, values map[string]string, prefix string) error {

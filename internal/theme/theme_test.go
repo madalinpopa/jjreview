@@ -100,3 +100,43 @@ func TestNew_failure(t *testing.T) {
 		})
 	}
 }
+
+func TestTheme_WithBackground(t *testing.T) {
+	t.Run("derives a subtle cursor background from the terminal", func(t *testing.T) {
+		dark := theme.Default().WithBackground(color.RGBA{R: 0x20, G: 0x20, B: 0x20, A: 0xff}, true)
+		light := theme.Default().WithBackground(color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, false)
+
+		if want := (color.RGBA{R: 0x34, G: 0x34, B: 0x34, A: 0xff}); !sameColor(dark.CursorBg, want) {
+			t.Errorf("dark CursorBg = %v, want %v", dark.CursorBg, want)
+		}
+		if want := (color.RGBA{R: 0xef, G: 0xef, B: 0xef, A: 0xff}); !sameColor(light.CursorBg, want) {
+			t.Errorf("light CursorBg = %v, want %v", light.CursorBg, want)
+		}
+	})
+
+	t.Run("keeps a configured cursor background", func(t *testing.T) {
+		th, err := theme.New(map[string]string{"cursor_bg": "blue"}, nil)
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		got := th.WithBackground(color.RGBA{A: 0xff}, true)
+
+		if got.CursorBg != lipgloss.Blue {
+			t.Errorf("CursorBg = %v, want lipgloss.Blue", got.CursorBg)
+		}
+	})
+
+	t.Run("keeps the default cursor background over a configured page", func(t *testing.T) {
+		th, err := theme.New(map[string]string{"page": "#1e1e2e"}, nil)
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		got := th.WithBackground(color.RGBA{A: 0xff}, true)
+
+		if got.CursorBg != theme.Default().CursorBg {
+			t.Errorf("CursorBg = %v, want the default", got.CursorBg)
+		}
+	})
+}

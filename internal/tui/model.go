@@ -80,7 +80,7 @@ func (m Model) WithTheme(t theme.Theme) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return load(m.ctx, m.src, m.rev)
+	return tea.Batch(load(m.ctx, m.src, m.rev), tea.RequestBackgroundColor)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -89,6 +89,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.resizeModal()
+	case tea.BackgroundColorMsg:
+		m.pal = m.pal.WithBackground(msg.Color, msg.IsDark())
 	case loadedMsg:
 		cmd = m.applyLoad(msg)
 	case contentMsg:
