@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/diff"
@@ -613,6 +614,80 @@ func TestLayout_success(t *testing.T) {
 	if strings.Contains(got, "f00.go") {
 		t.Errorf("View() still shows the first file:\n%s", got)
 	}
+}
+
+func TestFilesPaneWidth_success(t *testing.T) {
+	long := "a_really_long_file_name_that_used_to_be_cut.go"
+	longFile := func() diff.File {
+		return diff.File{OldPath: "internal/" + long, NewPath: "internal/" + long, Binary: true}
+	}
+
+	t.Run("grows to fit the longest file row", func(t *testing.T) {
+		src := newSource()
+		src.files = append(src.files, longFile())
+		m := start(t, src, nil, 160, 30)
+
+		line := lineWith(t, view(m), "○ "+long)
+
+		assertContains(t, line, "○ "+long+" bin │")
+	})
+
+	t.Run("shrinks to fit short file rows", func(t *testing.T) {
+		src := newSource()
+		src.files = []diff.File{imageFile()}
+		m := start(t, src, nil, 160, 30)
+
+		got := view(m)
+
+		assertContains(t, lineWith(t, got, "○ img.png"), "│▌○ img.png bin │")
+		if col := diffCardColumn(t, got); col != 18 {
+			t.Errorf("diff card starts at column %d, want 18", col)
+		}
+	})
+
+	t.Run("reserves room for every file being done when the header is the widest row", func(t *testing.T) {
+		src := newSource()
+		src.files = nil
+		for i := range 10 {
+			name := fmt.Sprintf("a%d.go", i)
+			src.files = append(src.files, diff.File{OldPath: name, NewPath: name, Binary: true})
+		}
+		m := start(t, src, nil, 160, 30)
+
+		got := view(m)
+
+		assertContains(t, got, "0/10 ✓")
+		if col := diffCardColumn(t, got); col != 18 {
+			t.Errorf("diff card starts at column %d, want 18 to fit 10/10 ✓", col)
+		}
+	})
+
+	t.Run("keeps at least half of the screen for the diff", func(t *testing.T) {
+		src := newSource()
+		src.files = append(src.files, longFile())
+		m := start(t, src, nil, 80, 30)
+
+		if got := diffCardColumn(t, view(m)); got != 40 {
+			t.Errorf("diff card starts at column %d, want 40", got)
+		}
+	})
+
+	t.Run("caps its width on wide screens", func(t *testing.T) {
+		src := newSource()
+		name := strings.Repeat("vendor/", 10) + long
+		src.files = append(src.files, diff.File{OldPath: name, NewPath: name, Binary: true})
+		m := start(t, src, nil, 300, 30)
+
+		if got := diffCardColumn(t, view(m)); got != 61 {
+			t.Errorf("diff card starts at column %d, want 61", got)
+		}
+	})
+}
+
+func diffCardColumn(t *testing.T, screen string) int {
+	t.Helper()
+	border := lineWith(t, screen, "╭")
+	return utf8.RuneCountInString(border[:strings.LastIndex(border, "╭")])
 }
 
 func TestKeyBar_success(t *testing.T) {
