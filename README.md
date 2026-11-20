@@ -85,14 +85,16 @@ The file tree is on the left and the unified diff of the current file on the rig
 | `h` / `l` | Focus the file pane / the diff pane |
 | `j` / `k` | Next / previous file in the file pane, next / previous line in the diff pane |
 | `ctrl+d` / `ctrl+u` | Half a page down / up in the focused pane |
-| `ctrl+n` / `ctrl+p` | Next / previous file |
+| `ctrl+n` / `ctrl+p` | Review the child / parent revision; selections in the current revision are dropped |
+| `@` | Review the working-copy revision again; selections in the current revision are dropped |
 | `space` | Select the hunk under the cursor (in the file pane: the whole file) |
 | `S` | Select every open hunk in the file |
 | `z` / `enter` | Fold or unfold the hunk under the cursor |
 | `Z` | Fold or unfold every hunk in the file |
 | `d` | Show or hide the removed lines of the hunk under the cursor |
 | `c` | Commit the selected hunks |
-| `e` | Open the current file in `$VISUAL` / `$EDITOR` (default `vi`); the change reloads when the editor exits |
+| `R` | Reload the change to pick up edits made outside jjr; stays on the current file and drops selections |
+| `e` | Open the current file in `$VISUAL` / `$EDITOR` (default `vi`); the change reloads when the editor exits. Only on the working-copy revision |
 | `f` | Switch between changes only and the full file |
 | `?` | Show every key in a popup; the bottom bar lists only the essentials |
 | `q` | Quit |

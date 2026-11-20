@@ -31,10 +31,12 @@ func helpSections(readOnly bool) []helpSection {
 			{keys: []string{"h", "l"}, label: "focus the file / diff pane"},
 			{keys: []string{"j", "k"}, label: "next / previous line or file"},
 			{keys: []string{"^d", "^u"}, label: "half page down / up"},
-			{keys: []string{"^n", "^p"}, label: "next / previous file"},
+			{keys: []string{"^n", "^p"}, label: "child / parent revision"},
+			{keys: []string{"@"}, label: "working-copy revision"},
 		}},
 		{title: "Review", hints: review},
 		{title: "Other", hints: []keyHint{
+			{keys: []string{"R"}, label: "reload the change"},
 			{keys: []string{"e"}, label: "open in $EDITOR"},
 			{keys: []string{"f"}, label: "full file / changes only"},
 			{keys: []string{"?"}, label: "toggle this help"},

@@ -25,9 +25,11 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 	case "ctrl+u":
 		return m.page(-m.halfPage())
 	case "ctrl+n":
-		return m.moveFile(1)
+		return m.moveRevision(childStep)
 	case "ctrl+p":
-		return m.moveFile(-1)
+		return m.moveRevision(parentStep)
+	case "@":
+		return m.moveRevision(workingCopyStep)
 	case "f":
 		m.full = !m.full
 		m.cursor = firstRow(m.rows())
@@ -36,6 +38,11 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.openModal()
 	case "e":
 		return m.openEditor()
+	case "R":
+		if !m.canLoad() {
+			return nil
+		}
+		return m.reload()
 	case "?":
 		m.help = true
 	default:
