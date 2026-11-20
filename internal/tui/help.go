@@ -3,52 +3,21 @@ package tui
 import (
 	"strings"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
 
-type helpSection struct {
-	title string
-	hints []keyHint
-}
-
-func helpSections(readOnly bool) []helpSection {
-	review := []keyHint{
-		{keys: []string{"space"}, label: "select the hunk (the file in the file pane)"},
-		{keys: []string{"S"}, label: "select every hunk in the file"},
-		{keys: []string{"c"}, label: "commit the selected hunks"},
-	}
-	if readOnly {
-		review = nil
-	}
-	review = append(review,
-		keyHint{keys: []string{"z", "enter"}, label: "fold the hunk"},
-		keyHint{keys: []string{"Z"}, label: "fold all hunks"},
-		keyHint{keys: []string{"d"}, label: "show removed lines of the hunk"},
-	)
-	return []helpSection{
-		{title: "Navigation", hints: []keyHint{
-			{keys: []string{"h", "l"}, label: "focus the file / diff pane"},
-			{keys: []string{"j", "k"}, label: "next / previous line or file"},
-			{keys: []string{"^d", "^u"}, label: "half page down / up"},
-			{keys: []string{"^n", "^p"}, label: "child / parent revision"},
-			{keys: []string{"@"}, label: "working-copy revision"},
-		}},
-		{title: "Review", hints: review},
-		{title: "Other", hints: []keyHint{
-			{keys: []string{"R"}, label: "reload the change"},
-			{keys: []string{"e"}, label: "open in $EDITOR"},
-			{keys: []string{"f"}, label: "full file / changes only"},
-			{keys: []string{"?"}, label: "toggle this help"},
-			{keys: []string{"q"}, label: "quit"},
-		}},
-	}
-}
+const helpChrome = 4
 
 func (m *Model) helpKey(msg tea.KeyPressMsg) {
-	switch msg.String() {
-	case "?", "esc", "q":
+	switch {
+	case key.Matches(msg, m.keys.closeHelp):
 		m.help = false
+	case key.Matches(msg, m.keys.down):
+		m.helpTop = min(m.helpTop+1, m.helpOverflow())
+	case key.Matches(msg, m.keys.up):
+		m.helpTop = max(min(m.helpTop, m.helpOverflow())-1, 0)
 	}
 }
 
@@ -62,9 +31,20 @@ func (m Model) overlay() string {
 	return ""
 }
 
-func (m Model) helpView() string {
+func (m Model) helpRows() int {
+	if m.height <= helpChrome {
+		return max(m.height-2, 1)
+	}
+	return m.height - helpChrome
+}
+
+func (m Model) helpOverflow() int {
+	return max(len(m.helpLines())-m.helpRows(), 0)
+}
+
+func (m Model) helpLines() []string {
 	p := m.pal
-	sections := helpSections(m.change.Immutable)
+	sections := m.helpSections()
 	keyWidth := 0
 	for _, s := range sections {
 		for _, h := range s.hints {
@@ -80,7 +60,21 @@ func (m Model) helpView() string {
 			lines = append(lines, render(p.Card, m.hintSegs(keyHint{keys: h.keys, label: label})))
 		}
 	}
-	lines = append(lines, "", render(p.Card, []seg{span(fg(p.Muted), "? / esc close")}))
+	return lines
+}
+
+func (m Model) helpView() string {
+	p := m.pal
+	lines := m.helpLines()
+	footer := m.keys.closeHelp.Help().Key + " " + m.keys.closeHelp.Help().Desc
+	if overflow := m.helpOverflow(); overflow > 0 {
+		top := min(m.helpTop, overflow)
+		lines = lines[top : top+m.helpRows()]
+		footer = strings.Join(hint("scroll", m.keys.down, m.keys.up).keys, " ") + " scroll · " + footer
+	}
+	if m.height > helpChrome {
+		lines = append(lines, "", render(p.Card, []seg{span(fg(p.Muted), footer)}))
+	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(p.ModalBorder).
