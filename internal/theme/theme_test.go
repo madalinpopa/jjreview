@@ -114,6 +114,54 @@ func TestTheme_WithBackground(t *testing.T) {
 		}
 	})
 
+	t.Run("derives a darker hunk background on a light terminal only", func(t *testing.T) {
+		dark := theme.Default().WithBackground(color.RGBA{R: 0x20, G: 0x20, B: 0x20, A: 0xff}, true)
+		light := theme.Default().WithBackground(color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, false)
+
+		if dark.HunkBg != theme.Default().HunkBg {
+			t.Errorf("dark HunkBg = %v, want the default", dark.HunkBg)
+		}
+		if want := (color.RGBA{R: 0xe0, G: 0xe0, B: 0xe0, A: 0xff}); !sameColor(light.HunkBg, want) {
+			t.Errorf("light HunkBg = %v, want %v", light.HunkBg, want)
+		}
+	})
+
+	t.Run("restores the default hunk background when the terminal turns dark", func(t *testing.T) {
+		light := theme.Default().WithBackground(color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, false)
+
+		got := light.WithBackground(color.RGBA{R: 0x20, G: 0x20, B: 0x20, A: 0xff}, true)
+
+		if got.HunkBg != theme.Default().HunkBg {
+			t.Errorf("HunkBg = %v, want the default", got.HunkBg)
+		}
+	})
+
+	t.Run("keeps the default hunk background over a configured card", func(t *testing.T) {
+		th, err := theme.New(map[string]string{"card": "#d8d8d8"}, nil)
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		got := th.WithBackground(color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, false)
+
+		if got.HunkBg != theme.Default().HunkBg {
+			t.Errorf("HunkBg = %v, want the default", got.HunkBg)
+		}
+	})
+
+	t.Run("keeps a configured hunk background", func(t *testing.T) {
+		th, err := theme.New(map[string]string{"hunk_bg": "blue"}, nil)
+		if err != nil {
+			t.Fatalf("New() error = %v", err)
+		}
+
+		got := th.WithBackground(color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, false)
+
+		if got.HunkBg != lipgloss.Blue {
+			t.Errorf("HunkBg = %v, want lipgloss.Blue", got.HunkBg)
+		}
+	})
+
 	t.Run("keeps a configured cursor background", func(t *testing.T) {
 		th, err := theme.New(map[string]string{"cursor_bg": "blue"}, nil)
 		if err != nil {

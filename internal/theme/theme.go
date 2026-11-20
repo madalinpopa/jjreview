@@ -12,7 +12,12 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-const maxANSI256 = 255
+const (
+	maxANSI256  = 255
+	cursorDark  = 0.08
+	cursorLight = 0.06
+	hunkLight   = 0.12
+)
 
 type Syntax struct {
 	Type     color.Color
@@ -60,6 +65,7 @@ type Theme struct {
 	Syntax      Syntax
 
 	autoCursor bool
+	autoHunk   bool
 }
 
 func Default() Theme {
@@ -99,6 +105,7 @@ func Default() Theme {
 		ModalBorder: lipgloss.BrightBlack,
 		Input:       none,
 		autoCursor:  true,
+		autoHunk:    true,
 		Syntax: Syntax{
 			Type:     lipgloss.Cyan,
 			Keyword:  lipgloss.Magenta,
@@ -119,18 +126,31 @@ func New(colors, syntax map[string]string) (Theme, error) {
 		return Theme{}, err
 	}
 	_, cursorSet := colors["cursor_bg"]
-	t.autoCursor = !cursorSet && t.Page == lipgloss.NoColor{}
+	_, hunkSet := colors["hunk_bg"]
+	pageUnset := t.Page == lipgloss.NoColor{}
+	cardUnset := t.Card == lipgloss.NoColor{}
+	t.autoCursor = !cursorSet && pageUnset
+	t.autoHunk = !hunkSet && pageUnset && cardUnset
 	return t, nil
 }
 
 func (t Theme) WithBackground(bg color.Color, dark bool) Theme {
-	if !t.autoCursor || bg == nil {
+	if bg == nil {
 		return t
 	}
-	if dark {
-		t.CursorBg = lipgloss.Lighten(bg, 0.08)
-	} else {
-		t.CursorBg = lipgloss.Darken(bg, 0.06)
+	if t.autoCursor {
+		if dark {
+			t.CursorBg = lipgloss.Lighten(bg, cursorDark)
+		} else {
+			t.CursorBg = lipgloss.Darken(bg, cursorLight)
+		}
+	}
+	if t.autoHunk {
+		if dark {
+			t.HunkBg = Default().HunkBg
+		} else {
+			t.HunkBg = lipgloss.Darken(bg, hunkLight)
+		}
 	}
 	return t
 }

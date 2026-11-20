@@ -107,7 +107,7 @@ In the commit dialog the message is generated from the selected hunks and can be
 
 ### How committing works
 
-Committing runs `jj split` on the reviewed change. The selected hunks stay in the original change, which gets the new message; the rest moves to a new child change that keeps the original description, and later commits split from it. Committed hunks stay on screen, dimmed and marked with the new change ID. Use `jj undo` to revert a commit made by mistake.
+Committing runs `jj split` on the reviewed change. The selected hunks stay in the original change, which gets the new message; the rest moves to a new child change that keeps the original description, and later commits split from it. Committed hunks stay on screen, folded, dimmed and marked with the new change ID. Use `jj undo` to revert a commit made by mistake.
 
 ## Configuration
 
@@ -167,7 +167,7 @@ literal = "yellow"
 comment = "bright-black"
 ```
 
-A colour is `none` (the terminal default), one of the 16 ANSI names (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white` and their `bright-` forms), a number from 0 to 255, `#rgb` or `#rrggbb`. ANSI names and 0-15 follow the terminal theme. Unknown keys and invalid colours stop `jjr` with an error naming the key. When neither `cursor_bg` nor `page` is set and the terminal reports its background colour, `jjr` shades the cursor line slightly from that background instead of using `bright-black`.
+A colour is `none` (the terminal default), one of the 16 ANSI names (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white` and their `bright-` forms), a number from 0 to 255, `#rgb` or `#rrggbb`. ANSI names and 0-15 follow the terminal theme. Unknown keys and invalid colours stop `jjr` with an error naming the key. When neither `cursor_bg` nor `page` is set and the terminal reports its background colour, `jjr` shades the cursor line slightly from that background instead of using `bright-black`. Likewise, on a light terminal background with none of `hunk_bg`, `card` or `page` set, hunk headers get a slightly darker shade of that background.
 
 ### GitHub Copilot
 
