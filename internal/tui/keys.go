@@ -2,6 +2,7 @@ package tui
 
 import (
 	"iter"
+	"slices"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -158,6 +159,26 @@ func (m *Model) toggleFold() {
 			return
 		}
 	}
+}
+
+func (m *Model) keepCursor(before []row) {
+	after := m.rows()
+	if len(after) == len(before) || m.cursor < 0 || m.cursor >= len(before) {
+		return
+	}
+	folded := m.currentReview().folded
+	hidden := func(r row) bool { return r.kind == rowLine && r.hunk >= 0 && folded[r.hunk] }
+	if cur := before[m.cursor]; hidden(cur) {
+		m.cursor = slices.IndexFunc(after, func(r row) bool { return r.kind == rowHunk && r.hunk == cur.hunk })
+		return
+	}
+	shift := 0
+	for _, r := range before[:m.cursor] {
+		if hidden(r) {
+			shift++
+		}
+	}
+	m.cursor -= shift
 }
 
 func (m *Model) toggleRemoved() {

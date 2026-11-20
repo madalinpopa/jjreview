@@ -188,7 +188,23 @@ func TestCommit_success(t *testing.T) {
 			t.Error("ModalOpen() = true, want false")
 		}
 		got := view(m)
-		assertContains(t, got, "✓ created kxyzabcd: feat: generated", "▾ ✓ @@ -3,2 +3,2 @@", "nothing selected", "@ rest1zzz")
+		assertContains(t, got, "✓ created kxyzabcd: feat: generated", "▸ ✓ @@ -3,2 +3,2 @@", "nothing selected", "@ rest1zzz")
+		if c := m.Cursor(); c != 1 {
+			t.Errorf("Cursor() = %d, want 1, on the folded hunk header", c)
+		}
+	})
+
+	t.Run("folds the committed hunk and keeps the cursor on its line", func(t *testing.T) {
+		src := newSource()
+		m := press(t, loaded(t, src), "ctrl+n", "space", "j", "j", "j", "j")
+		before := m.Cursor()
+
+		m = press(t, m, "c", "ctrl+s")
+
+		if c := m.Cursor(); c != before-2 {
+			t.Errorf("Cursor() = %d, want %d, still on the same line below the folded hunk", c, before-2)
+		}
+		assertContains(t, view(m), "▸ ✓ @@ -3,2 +3,2 @@")
 	})
 
 	t.Run("second commit targets the rest change and includes committed hunks", func(t *testing.T) {
@@ -250,7 +266,7 @@ func TestCommitStale_failed(t *testing.T) {
 	}
 	got := view(m)
 	assertContains(t, got, "restart jjr to review it")
-	for _, unwanted := range []string{"split done; restart jjr to continue", "▾ ✓ @@ -3,2 +3,2 @@"} {
+	for _, unwanted := range []string{"split done; restart jjr to continue", "▸ ✓ @@ -3,2 +3,2 @@"} {
 		if strings.Contains(got, unwanted) {
 			t.Errorf("View() contains %q:\n%s", unwanted, got)
 		}
@@ -265,7 +281,7 @@ func TestCommitIncomplete_success(t *testing.T) {
 	if m.ModalOpen() {
 		t.Error("ModalOpen() = true, want false")
 	}
-	assertContains(t, view(m), "▾ ✓ @@ -3,2 +3,2 @@", "kxyzabcd", "split done; restart jjr to continue")
+	assertContains(t, view(m), "▸ ✓ @@ -3,2 +3,2 @@", "kxyzabcd", "split done; restart jjr to continue")
 
 	src.splitErr = nil
 	m = press(t, m, "j", "j", "j", "space", "c")
@@ -316,6 +332,12 @@ func TestCommitModes_success(t *testing.T) {
 			t.Errorf("splits = %+v, want files %+v", src.splits, want)
 		}
 		assertContains(t, view(m), "✓ link")
+
+		got := view(press(t, m, "l"))
+		assertContains(t, got, "file 1/1 · 1 hunk")
+		if strings.Contains(got, "folded") {
+			t.Errorf("View() reports a folded hunk for a whole-only file:\n%s", got)
+		}
 	})
 }
 

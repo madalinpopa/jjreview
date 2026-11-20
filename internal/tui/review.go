@@ -166,10 +166,11 @@ func (r fileReview) included() []int {
 	return out
 }
 
-func (r fileReview) commit(units []int, id string) {
+func (r fileReview) commit(units []int, id string, fold bool) {
 	for _, k := range units {
 		r.committed[k] = id
 		r.selected[k] = false
+		r.folded[k] = fold
 	}
 }
 

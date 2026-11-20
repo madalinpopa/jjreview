@@ -173,9 +173,11 @@ func (m *Model) applyCommitted(msg committedMsg) {
 		return
 	}
 	id := shortID(msg.selected.ChangeID)
+	before := m.rows()
 	for _, p := range mo.picks {
-		m.reviews[p.file].commit(p.units, id)
+		m.reviews[p.file].commit(p.units, id, !wholeOnly(m.files[p.file]))
 	}
+	m.keepCursor(before)
 	if incomplete {
 		m.blocked = true
 		m.closeModal()
