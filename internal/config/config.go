@@ -16,6 +16,7 @@ const (
 	appName           = "jjr"
 	fileName          = "config.toml"
 	ProviderAnthropic = "anthropic"
+	ProviderCopilot   = "copilot"
 )
 
 type Provider struct {
