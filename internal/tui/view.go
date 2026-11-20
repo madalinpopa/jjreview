@@ -15,26 +15,6 @@ const (
 	cardChrome   = 4
 )
 
-type keyHint struct {
-	keys  []string
-	label string
-}
-
-func keyHints(filesFocus, readOnly bool) []keyHint {
-	move := keyHint{keys: []string{"j", "k"}, label: "line"}
-	if filesFocus {
-		move.label = "file"
-	}
-	hints := []keyHint{{keys: []string{"h", "l"}, label: "pane"}, move}
-	if !readOnly {
-		hints = append(hints, keyHint{keys: []string{"space"}, label: "select"}, keyHint{keys: []string{"c"}, label: "commit"})
-	}
-	if !filesFocus {
-		hints = append(hints, keyHint{keys: []string{"d"}, label: "diff"})
-	}
-	return append(hints, keyHint{keys: []string{"e"}, label: "edit"}, keyHint{keys: []string{"?"}, label: "help"})
-}
-
 func (m Model) View() tea.View {
 	content := m.screen()
 	if box := m.overlay(); box != "" {
@@ -145,7 +125,7 @@ func (m Model) bottomBar() []string {
 	var lines [][]seg
 	var line []seg
 	used := 0
-	for _, h := range keyHints(m.filesFocus, m.change.Immutable) {
+	for _, h := range m.keyHints() {
 		segs := m.hintSegs(h)
 		w := lipgloss.Width(render(p.Page, segs))
 		switch {
