@@ -18,22 +18,26 @@ func (m Model) WithEditor(editor func(ctx context.Context, path string) *exec.Cm
 	return m
 }
 
-func (m *Model) openEditor() tea.Cmd {
+func (m *Model) canEdit() bool {
 	file, ok := m.currentFile()
 	if !m.loaded || m.reloading || !ok {
-		return nil
+		return false
 	}
 	switch {
 	case !m.change.WorkingCopy:
 		m.status = "not the working copy; press @ to edit files"
-		return nil
 	case file.Status == diff.StatusDeleted:
 		m.status = "file deleted; nothing to edit"
-		return nil
 	case m.editor == nil:
 		m.status = "no editor configured"
-		return nil
+	default:
+		return true
 	}
+	return false
+}
+
+func (m *Model) openEditor() tea.Cmd {
+	file, _ := m.currentFile()
 	cmd := m.editor(m.ctx, filepath.Join(m.root, file.Path()))
 	m.reloading = true
 	return tea.ExecProcess(cmd, func(err error) tea.Msg {
