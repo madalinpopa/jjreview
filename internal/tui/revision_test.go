@@ -53,7 +53,7 @@ func TestRevisionNavigation_success(t *testing.T) {
 	}
 
 	t.Run("navigation clears the selection of the previous revision", func(t *testing.T) {
-		m := press(t, loaded(t, revisionSource()), "h", "j", "l", "space", "ctrl+n")
+		m := press(t, loaded(t, revisionSource()), "h", "j", "l", "space", "ctrl+n", "ctrl+n")
 
 		assertContains(t, view(m), "nothing selected")
 	})

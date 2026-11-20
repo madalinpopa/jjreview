@@ -54,7 +54,7 @@ func TestReload_success(t *testing.T) {
 
 func TestReload_reloading(t *testing.T) {
 	t.Run("c does not open the commit modal until the reload arrives", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l", "space")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "space", "R")
 		m, reload := update(t, m, keyMsg("R"))
 
 		m = press(t, m, "c")
