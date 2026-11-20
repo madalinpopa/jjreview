@@ -149,6 +149,13 @@ func TestDiffView_success(t *testing.T) {
 		}
 	})
 
+	t.Run("d in the file pane points to the diff pane", func(t *testing.T) {
+		m := press(t, loaded(t, newSource()), "h", "j", "d")
+
+		assertContains(t, view(m), "d works in the diff pane; press l")
+		assertMissing(t, view(m), "old line")
+	})
+
 	t.Run("help lists d", func(t *testing.T) {
 		got := view(press(t, loaded(t, newSource()), "?"))
 
