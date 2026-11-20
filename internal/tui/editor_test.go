@@ -110,7 +110,7 @@ func TestEditor_reloading(t *testing.T) {
 		var opened []string
 		m := withEditor(press(t, loaded(t, newSource()), "h", "j", "l", "space"), &opened)
 
-		m = press(t, m, "e", "c")
+		m = press(t, m, "e", "e", "c")
 
 		if m.ModalOpen() {
 			t.Fatal("ModalOpen() = true while editing, want false")
@@ -120,7 +120,7 @@ func TestEditor_reloading(t *testing.T) {
 	t.Run("c opens the commit modal again after an editor error", func(t *testing.T) {
 		var opened []string
 		m := withEditor(press(t, loaded(t, newSource()), "h", "j", "l", "space"), &opened)
-		m = press(t, m, "e")
+		m = press(t, m, "e", "e")
 		m, _ = update(t, m, tui.EditorFinishedMsg{Err: errors.New("exit status 2")})
 
 		m = press(t, m, "c")
@@ -133,7 +133,7 @@ func TestEditor_reloading(t *testing.T) {
 	t.Run("c does not open the commit modal until the reload arrives", func(t *testing.T) {
 		var opened []string
 		m := withEditor(press(t, loaded(t, newSource()), "h", "j", "l", "space"), &opened)
-		m = press(t, m, "e")
+		m = press(t, m, "e", "e")
 		m, reload := update(t, m, tui.EditorFinishedMsg{})
 
 		m = press(t, m, "c")
@@ -154,7 +154,7 @@ func TestEditor_reloading(t *testing.T) {
 		var opened []string
 		src := newSource()
 		m := withEditor(press(t, loaded(t, src), "h", "j", "l", "space"), &opened)
-		m = press(t, m, "e")
+		m = press(t, m, "e", "e")
 		m, reload := update(t, m, tui.EditorFinishedMsg{})
 		src.err = errors.New("revision not found")
 
