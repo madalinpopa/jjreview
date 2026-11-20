@@ -82,7 +82,6 @@ The file tree is on the left and the unified diff of the current file on the rig
 
 | Key | Action |
 |-----|--------|
-| `h` / `l` (`ctrl+h` / `ctrl+l`, `←` / `→`) | Focus the file pane / the diff pane |
 | `tab` | Switch between the file pane and the diff pane |
 | `j` / `k` | Next / previous file in the file pane, next / previous line in the diff pane |
 | `ctrl+d` / `ctrl+u` (`pgdown` / `pgup`) | Half a page down / up in the focused pane |

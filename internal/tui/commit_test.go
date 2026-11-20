@@ -31,7 +31,7 @@ func TestCommitModal_success(t *testing.T) {
 	})
 
 	t.Run("c shows the modal while generating", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "space")
+		m := press(t, loaded(t, newSource()), "tab", "j", "tab", "space")
 
 		m, _ = update(t, m, keyMsg("c"))
 
@@ -42,7 +42,7 @@ func TestCommitModal_success(t *testing.T) {
 	t.Run("generated message fills the input from the selected hunks patch", func(t *testing.T) {
 		gen := &fakeGenerator{text: "feat(main): use new line\n"}
 		m := start(t, newSource(), gen, 120, 30)
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space")
+		m = press(t, m, "tab", "j", "tab", "space")
 
 		m = press(t, m, "c")
 
@@ -60,7 +60,7 @@ func TestCommitModal_success(t *testing.T) {
 	t.Run("ctrl+r regenerates", func(t *testing.T) {
 		gen := &fakeGenerator{text: "first"}
 		m := start(t, newSource(), gen, 120, 30)
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space", "c")
+		m = press(t, m, "tab", "j", "tab", "space", "c")
 		gen.text = "second"
 
 		m = press(t, m, "ctrl+r")
@@ -73,7 +73,7 @@ func TestCommitModal_success(t *testing.T) {
 	t.Run("reopened modal ignores the closed modal's generation", func(t *testing.T) {
 		gen := &fakeGenerator{}
 		m := start(t, newSource(), gen, 120, 30)
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space")
+		m = press(t, m, "tab", "j", "tab", "space")
 		m, closed := update(t, m, keyMsg("c"))
 		m = press(t, m, "esc")
 		m, reopened := update(t, m, keyMsg("c"))
@@ -94,7 +94,7 @@ func TestCommitModal_success(t *testing.T) {
 
 	t.Run("typing edits the message", func(t *testing.T) {
 		m := start(t, newSource(), nil, 120, 30)
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space", "c")
+		m = press(t, m, "tab", "j", "tab", "space", "c")
 
 		m = press(t, m, "f", "i", "x", "q")
 
@@ -106,7 +106,7 @@ func TestCommitModal_success(t *testing.T) {
 	t.Run("without a generator shows the setup hint and starts empty", func(t *testing.T) {
 		m := start(t, newSource(), nil, 160, 30)
 
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space", "c")
+		m = press(t, m, "tab", "j", "tab", "space", "c")
 
 		if m.Message() != "" {
 			t.Errorf("Message() = %q, want empty", m.Message())
@@ -115,7 +115,7 @@ func TestCommitModal_success(t *testing.T) {
 	})
 
 	t.Run("esc closes the modal and keeps the selection", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "space", "c", "esc")
+		m := press(t, loaded(t, newSource()), "tab", "j", "tab", "space", "c", "esc")
 
 		if m.ModalOpen() {
 			t.Error("ModalOpen() = true, want false")
@@ -129,7 +129,7 @@ func TestCommitModal_failed(t *testing.T) {
 		gen := &fakeGenerator{err: errors.New("quota exceeded")}
 		m := start(t, newSource(), gen, 160, 30)
 
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space", "c")
+		m = press(t, m, "tab", "j", "tab", "space", "c")
 
 		assertContains(t, view(m), "generation failed: quota exceeded")
 	})
@@ -138,7 +138,7 @@ func TestCommitModal_failed(t *testing.T) {
 		src := newSource()
 		m := start(t, src, nil, 160, 30)
 
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space", "c", "ctrl+s")
+		m = press(t, m, "tab", "j", "tab", "space", "c", "ctrl+s")
 
 		if !m.ModalOpen() || len(src.splits) != 0 {
 			t.Errorf("ModalOpen() = %v with %d splits, want open modal and no split", m.ModalOpen(), len(src.splits))
@@ -150,7 +150,7 @@ func TestCommitModal_failed(t *testing.T) {
 		src := newSource()
 		src.change.Parents = []string{"p1", "p2"}
 
-		m := press(t, loaded(t, src), "ctrl+h", "j", "ctrl+l", "space", "c")
+		m := press(t, loaded(t, src), "tab", "j", "tab", "space", "c")
 
 		if m.ModalOpen() {
 			t.Error("ModalOpen() = true, want false")
@@ -162,7 +162,7 @@ func TestCommitModal_failed(t *testing.T) {
 		src := newSource()
 		src.splitErr = errors.New("conflict")
 
-		m := press(t, loaded(t, src), "ctrl+h", "j", "ctrl+l", "space", "c", "ctrl+s")
+		m := press(t, loaded(t, src), "tab", "j", "tab", "space", "c", "ctrl+s")
 
 		if !m.ModalOpen() {
 			t.Error("ModalOpen() = false, want true")
@@ -174,7 +174,7 @@ func TestCommitModal_failed(t *testing.T) {
 func TestCommit_success(t *testing.T) {
 	t.Run("splits the selected hunk applied to the parent", func(t *testing.T) {
 		src := newSource()
-		m := press(t, loaded(t, src), "ctrl+h", "j", "ctrl+l", "space", "c", "ctrl+enter")
+		m := press(t, loaded(t, src), "tab", "j", "tab", "space", "c", "ctrl+enter")
 
 		want := []splitCall{{
 			changeID: "kxyzabcdefgh",
@@ -196,7 +196,7 @@ func TestCommit_success(t *testing.T) {
 
 	t.Run("folds the committed hunk and keeps the cursor on its line", func(t *testing.T) {
 		src := newSource()
-		m := press(t, loaded(t, src), "ctrl+h", "j", "ctrl+l", "space", "j", "j", "j", "j")
+		m := press(t, loaded(t, src), "tab", "j", "tab", "space", "j", "j", "j", "j")
 		before := m.Cursor()
 
 		m = press(t, m, "c", "ctrl+s")
@@ -209,7 +209,7 @@ func TestCommit_success(t *testing.T) {
 
 	t.Run("second commit targets the rest change and includes committed hunks", func(t *testing.T) {
 		src := newSource()
-		m := press(t, loaded(t, src), "ctrl+h", "j", "ctrl+l", "space", "c", "ctrl+s")
+		m := press(t, loaded(t, src), "tab", "j", "tab", "space", "c", "ctrl+s")
 
 		m = press(t, m, "j", "j", "j", "space", "c", "ctrl+s")
 
@@ -237,7 +237,7 @@ func TestCommit_success(t *testing.T) {
 		src.contents["commit1:new.txt"] = "moved"
 		m := loaded(t, src)
 
-		press(t, m, "S", "ctrl+h", "j", "ctrl+l", "S", "ctrl+h", "j", "ctrl+l", "S", "c", "ctrl+s")
+		press(t, m, "S", "tab", "j", "tab", "S", "tab", "j", "tab", "S", "c", "ctrl+s")
 
 		want := []jj.SplitFile{
 			{Path: "gone.txt", Delete: true},
@@ -256,7 +256,7 @@ func TestCommitStale_failed(t *testing.T) {
 	m := loaded(t, src)
 	src.head = "commit2"
 
-	m = press(t, m, "ctrl+h", "j", "ctrl+l", "space", "c", "ctrl+s")
+	m = press(t, m, "tab", "j", "tab", "space", "c", "ctrl+s")
 
 	if !m.ModalOpen() {
 		t.Error("ModalOpen() = false, want true")
@@ -276,7 +276,7 @@ func TestCommitStale_failed(t *testing.T) {
 func TestCommitIncomplete_success(t *testing.T) {
 	src := newSource()
 	src.splitErr = fmt.Errorf("split: %w: reload failed", jj.ErrSplitIncomplete)
-	m := press(t, loaded(t, src), "ctrl+h", "j", "ctrl+l", "space", "c", "ctrl+s")
+	m := press(t, loaded(t, src), "tab", "j", "tab", "space", "c", "ctrl+s")
 
 	if m.ModalOpen() {
 		t.Error("ModalOpen() = true, want false")
@@ -333,7 +333,7 @@ func TestCommitModes_success(t *testing.T) {
 		}
 		assertContains(t, view(m), "✓ link")
 
-		got := view(press(t, m, "ctrl+l"))
+		got := view(press(t, m, "tab", "tab"))
 		assertContains(t, got, "file 1/1 · 1 hunk")
 		if strings.Contains(got, "folded") {
 			t.Errorf("View() reports a folded hunk for a whole-only file:\n%s", got)
@@ -345,7 +345,7 @@ func TestGenerating_success(t *testing.T) {
 	t.Run("typing is ignored while generating", func(t *testing.T) {
 		gen := &fakeGenerator{text: "generated"}
 		m := start(t, newSource(), gen, 120, 30)
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space")
+		m = press(t, m, "tab", "j", "tab", "space")
 		m, genCmd := update(t, m, keyMsg("c"))
 
 		m, _ = update(t, m, keyMsg("x"))
@@ -359,7 +359,7 @@ func TestGenerating_success(t *testing.T) {
 	t.Run("ctrl+r cancels the in-flight generation", func(t *testing.T) {
 		gen := &fakeGenerator{text: "generated"}
 		m := start(t, newSource(), gen, 120, 30)
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space")
+		m = press(t, m, "tab", "j", "tab", "space")
 		m, first := update(t, m, keyMsg("c"))
 		first()
 
@@ -376,7 +376,7 @@ func TestModalErrors_success(t *testing.T) {
 		gen := &fakeGenerator{err: errors.New("the model endpoint refused the request because the account quota has been fully consumed for today tailword")}
 		m := start(t, newSource(), gen, 80, 30)
 
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space", "c")
+		m = press(t, m, "tab", "j", "tab", "space", "c")
 
 		assertContains(t, view(m), "tailword")
 	})
@@ -386,7 +386,7 @@ func TestModalErrors_success(t *testing.T) {
 		src.splitErr = errors.New("jj split failed with a very long explanation of what went wrong in the working copy endword")
 		m := start(t, src, &fakeGenerator{text: "msg"}, 80, 30)
 
-		m = press(t, m, "ctrl+h", "j", "ctrl+l", "space", "c", "ctrl+s")
+		m = press(t, m, "tab", "j", "tab", "space", "c", "ctrl+s")
 
 		assertContains(t, view(m), "endword")
 	})
@@ -416,9 +416,9 @@ func TestImmutable_success(t *testing.T) {
 
 	t.Run("does not select hunks or files", func(t *testing.T) {
 		for name, keys := range map[string][]string{
-			"space in the diff pane": {"ctrl+h", "j", "ctrl+l", "space"},
-			"S":                      {"ctrl+h", "j", "ctrl+l", "S"},
-			"space in the file pane": {"ctrl+h", "j", "space"},
+			"space in the diff pane": {"tab", "j", "tab", "space"},
+			"S":                      {"tab", "j", "tab", "S"},
+			"space in the file pane": {"tab", "j", "space"},
 		} {
 			t.Run(name, func(t *testing.T) {
 				m := press(t, loaded(t, immutable()), keys...)
@@ -431,7 +431,7 @@ func TestImmutable_success(t *testing.T) {
 	t.Run("does not open the commit dialog", func(t *testing.T) {
 		src := immutable()
 
-		m := press(t, loaded(t, src), "ctrl+h", "j", "ctrl+l", "c")
+		m := press(t, loaded(t, src), "tab", "j", "tab", "c")
 
 		if m.ModalOpen() {
 			t.Error("ModalOpen() = true, want false")

@@ -18,10 +18,6 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.confirmDrop(msg, armed) {
 			return tea.Quit
 		}
-	case key.Matches(msg, m.keys.focusFiles):
-		m.filesFocus = true
-	case key.Matches(msg, m.keys.focusDiff):
-		m.filesFocus = false
 	case key.Matches(msg, m.keys.switchPane):
 		m.filesFocus = !m.filesFocus
 	case key.Matches(msg, m.keys.down):
@@ -111,7 +107,7 @@ func (m *Model) hunkKey(msg tea.KeyPressMsg) {
 		m.toggleFold()
 	case key.Matches(msg, m.keys.removed):
 		if m.filesFocus {
-			m.status = m.keys.removed.Help().Key + " works in the diff pane; press " + m.keys.focusDiff.Help().Key
+			m.status = m.keys.removed.Help().Key + " works in the diff pane; press " + m.keys.switchPane.Help().Key
 			return
 		}
 		m.toggleRemoved()

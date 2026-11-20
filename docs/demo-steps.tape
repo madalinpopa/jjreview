@@ -25,18 +25,18 @@ Sleep 2s
 
 Type@600ms "jj"
 Sleep 1s
-Type "h"
+Tab
 Sleep 500ms
 Type "j"
 Sleep 800ms
-Type "l"
+Tab
 Sleep 800ms
 Type "d"
 Sleep 1.5s
 Type " "
 Sleep 1s
 
-Type "h"
+Tab
 Sleep 500ms
 Type "j"
 Sleep 800ms
@@ -52,13 +52,13 @@ Sleep 2s
 
 Type "k"
 Sleep 800ms
-Type "l"
+Tab
 Sleep 500ms
 Type@400ms "jjjjjjjjj"
 Sleep 800ms
 Type " "
 Sleep 800ms
-Type "h"
+Tab
 Sleep 500ms
 Type "jj"
 Sleep 800ms
@@ -74,7 +74,7 @@ Sleep 2s
 
 Type@500ms "kkk"
 Sleep 800ms
-Type "l"
+Tab
 Sleep 500ms
 Type "f"
 Sleep 2.5s

@@ -7,8 +7,6 @@ import (
 )
 
 type keyMap struct {
-	focusFiles  key.Binding
-	focusDiff   key.Binding
 	switchPane  key.Binding
 	down        key.Binding
 	up          key.Binding
@@ -40,8 +38,6 @@ type keyMap struct {
 
 func newKeyMap() keyMap {
 	return keyMap{
-		focusFiles:  key.NewBinding(key.WithKeys("h", "ctrl+h", "left"), key.WithHelp("h", "focus the file pane")),
-		focusDiff:   key.NewBinding(key.WithKeys("l", "ctrl+l", "right"), key.WithHelp("l", "focus the diff pane")),
 		switchPane:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
 		down:        key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next line or file")),
 		up:          key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous line or file")),
@@ -94,7 +90,7 @@ func (m Model) keyHints() []keyHint {
 	if m.filesFocus {
 		move.label = "file"
 	}
-	hints := []keyHint{hint("pane", m.keys.focusFiles, m.keys.focusDiff), move}
+	hints := []keyHint{hint("pane", m.keys.switchPane), move}
 	if !m.change.Immutable {
 		hints = append(hints, hint("select", m.keys.selectHunk), hint("commit", m.keys.commit))
 	}
@@ -122,7 +118,6 @@ func (m Model) helpSections() []helpSection {
 	review = append(review, describe(m.keys.fold), describe(m.keys.foldAll), describe(m.keys.removed), describe(m.keys.removedAll))
 	return []helpSection{
 		{title: "Navigation", hints: []keyHint{
-			hint("focus the file / diff pane", m.keys.focusFiles, m.keys.focusDiff),
 			describe(m.keys.switchPane),
 			hint("next / previous line or file", m.keys.down, m.keys.up),
 			hint("half page down / up", m.keys.halfDown, m.keys.halfUp),
