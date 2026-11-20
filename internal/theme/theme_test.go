@@ -43,16 +43,19 @@ func TestDefault_success(t *testing.T) {
 
 func TestNew_success(t *testing.T) {
 	t.Run("overrides only the given colours", func(t *testing.T) {
-		got, err := theme.New(
-			map[string]string{"border": "red", "cursor_bg": "bright-black", "added": "#00ff00", "removed": "196", "hunk": "14", "page": "none"},
-			map[string]string{"keyword": "Bright_Blue"},
-		)
+		got, err := theme.New(map[string]map[string]string{
+			"base":   {"border": "red", "cursor_bg": "bright-black", "page": "none"},
+			"diff":   {"added": "#00ff00", "removed": "196", "hunk": "14"},
+			"modal":  {"border": "blue"},
+			"syntax": {"keyword": "Bright_Blue"},
+		})
 		if err != nil {
 			t.Fatalf("New() error = %v", err)
 		}
 
 		for name, pair := range map[string][2]color.Color{
 			"border":         {got.Border, lipgloss.Red},
+			"modal.border":   {got.ModalBorder, lipgloss.Blue},
 			"cursor_bg":      {got.CursorBg, lipgloss.BrightBlack},
 			"added":          {got.Added, lipgloss.Color("#00ff00")},
 			"removed":        {got.Removed, lipgloss.ANSIColor(196)},
@@ -82,20 +85,73 @@ func TestNew_success(t *testing.T) {
 
 func TestNew_failure(t *testing.T) {
 	for name, tc := range map[string]struct {
-		colors, syntax map[string]string
-		want           string
+		sections map[string]map[string]string
+		want     string
 	}{
-		"unknown colour key":  {colors: map[string]string{"bordr": "red"}, want: "bordr"},
-		"unknown syntax key":  {syntax: map[string]string{"keywrd": "red"}, want: "syntax.keywrd"},
-		"invalid name":        {colors: map[string]string{"border": "redish"}, want: "border"},
-		"invalid hex":         {colors: map[string]string{"border": "#12345"}, want: "border"},
-		"number out of range": {colors: map[string]string{"border": "256"}, want: "border"},
+		"unknown section":      {sections: map[string]map[string]string{"colors": {"border": "red"}}, want: "unknown section theme.colors; use bar, base, diff, files, modal or syntax"},
+		"key in wrong section": {sections: map[string]map[string]string{"diff": {"border": "red"}}, want: "unknown colour theme.diff.border"},
+		"unknown syntax key":   {sections: map[string]map[string]string{"syntax": {"keywrd": "red"}}, want: "unknown colour theme.syntax.keywrd"},
+		"invalid name":         {sections: map[string]map[string]string{"base": {"border": "redish"}}, want: "theme.base.border: "},
+		"invalid hex":          {sections: map[string]map[string]string{"base": {"border": "#12345"}}, want: "theme.base.border: "},
+		"number out of range":  {sections: map[string]map[string]string{"base": {"border": "256"}}, want: "theme.base.border: "},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := theme.New(tc.colors, tc.syntax)
+			_, err := theme.New(tc.sections)
 
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
 				t.Errorf("New() error = %v, want one naming %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestMoved_success(t *testing.T) {
+	for key, want := range map[string]string{
+		"border":         "base.border",
+		"added":          "diff.added",
+		"dir_name":       "files.dir_name",
+		"badge_selected": "bar.badge_selected",
+		"modal_border":   "modal.border",
+		"input":          "modal.input",
+	} {
+		t.Run(key, func(t *testing.T) {
+			got, ok := theme.Moved(key)
+
+			if !ok || got != want {
+				t.Errorf("Moved(%q) = %q, %v, want %q, true", key, got, ok, want)
+			}
+		})
+	}
+}
+
+func TestMoved_everyFlatKey(t *testing.T) {
+	flat := []string{
+		"page", "text", "card", "border", "chip", "chip_text", "title", "header", "strong", "dir_name",
+		"muted", "faint", "dim", "added", "added_bg", "removed", "removed_bg", "hunk", "hunk_bg",
+		"hunk_bar", "folded_bar", "stats", "selection", "cursor_bg", "key", "status", "picked",
+		"on_selection", "badge_idle", "badge_idle_fg", "badge_selected", "modal_border", "input",
+	}
+
+	for _, key := range flat {
+		t.Run(key, func(t *testing.T) {
+			moved, ok := theme.Moved(key)
+			if !ok {
+				t.Fatalf("Moved(%q) = false, want the new path", key)
+			}
+			section, name, _ := strings.Cut(moved, ".")
+
+			if _, err := theme.New(map[string]map[string]string{section: {name: "red"}}); err != nil {
+				t.Errorf("Moved(%q) = %q, which New rejects: %v", key, moved, err)
+			}
+		})
+	}
+}
+
+func TestMoved_failed(t *testing.T) {
+	for _, key := range []string{"bordr", "type", "keyword"} {
+		t.Run(key, func(t *testing.T) {
+			if got, ok := theme.Moved(key); ok {
+				t.Errorf("Moved(%q) = %q, true, want false", key, got)
 			}
 		})
 	}
@@ -137,7 +193,7 @@ func TestTheme_WithBackground(t *testing.T) {
 	})
 
 	t.Run("keeps the default hunk background over a configured card", func(t *testing.T) {
-		th, err := theme.New(map[string]string{"card": "#d8d8d8"}, nil)
+		th, err := theme.New(map[string]map[string]string{"base": {"card": "#d8d8d8"}})
 		if err != nil {
 			t.Fatalf("New() error = %v", err)
 		}
@@ -150,7 +206,7 @@ func TestTheme_WithBackground(t *testing.T) {
 	})
 
 	t.Run("keeps a configured hunk background", func(t *testing.T) {
-		th, err := theme.New(map[string]string{"hunk_bg": "blue"}, nil)
+		th, err := theme.New(map[string]map[string]string{"diff": {"hunk_bg": "blue"}})
 		if err != nil {
 			t.Fatalf("New() error = %v", err)
 		}
@@ -163,7 +219,7 @@ func TestTheme_WithBackground(t *testing.T) {
 	})
 
 	t.Run("keeps a configured cursor background", func(t *testing.T) {
-		th, err := theme.New(map[string]string{"cursor_bg": "blue"}, nil)
+		th, err := theme.New(map[string]map[string]string{"base": {"cursor_bg": "blue"}})
 		if err != nil {
 			t.Fatalf("New() error = %v", err)
 		}
@@ -176,7 +232,7 @@ func TestTheme_WithBackground(t *testing.T) {
 	})
 
 	t.Run("keeps the default cursor background over a configured page", func(t *testing.T) {
-		th, err := theme.New(map[string]string{"page": "#1e1e2e"}, nil)
+		th, err := theme.New(map[string]map[string]string{"base": {"page": "#1e1e2e"}})
 		if err != nil {
 			t.Fatalf("New() error = %v", err)
 		}

@@ -75,8 +75,11 @@ provider = "anthropic"
 api_key = "sk-test"
 model = "claude-sonnet-5-5"
 
-[theme]
+[theme.base]
 border = "magenta"
+
+[theme.modal]
+border = "cyan"
 
 [theme.syntax]
 comment = "white"
@@ -92,6 +95,9 @@ comment = "white"
 		}
 		if got.Theme.Border != lipgloss.Magenta || got.Theme.Syntax.Comment != lipgloss.White {
 			t.Errorf("Load().Theme border = %v, comment = %v", got.Theme.Border, got.Theme.Syntax.Comment)
+		}
+		if got.Theme.ModalBorder != lipgloss.Cyan {
+			t.Errorf("Load().Theme.ModalBorder = %v, want lipgloss.Cyan", got.Theme.ModalBorder)
 		}
 		if got.Theme.Added != theme.Default().Added {
 			t.Errorf("Load().Theme.Added = %v, want the default", got.Theme.Added)
@@ -122,9 +128,14 @@ func TestLoad_failure(t *testing.T) {
 		"invalid toml":      {body: "provider = ", want: "config.toml"},
 		"unknown provider":  {body: `provider = "openai"`, want: "openai"},
 		"copilot api key":   {body: "[providers.copilot]\napi_key = \"secret\"\n", want: "api_key"},
-		"unknown theme key": {body: "[theme]\nbordr = \"red\"\n", want: "bordr"},
-		"non-string colour": {body: "[theme]\nborder = 1\n", want: "border"},
-		"invalid colour":    {body: "[theme.syntax]\nkeyword = \"nope\"\n", want: "syntax.keyword"},
+		"unknown theme key": {body: "[theme.base]\nbordr = \"red\"\n", want: "unknown colour theme.base.bordr"},
+		"unknown section":   {body: "[theme.colors]\nborder = \"red\"\n", want: "unknown section theme.colors"},
+		"non-string colour": {body: "[theme.base]\nborder = 1\n", want: "theme.base.border"},
+		"flat theme key":    {body: "[theme]\nadded = \"red\"\n", want: "theme.added moved to theme.diff.added"},
+		"renamed flat key":  {body: "[theme]\nmodal_border = \"red\"\n", want: "theme.modal_border moved to theme.modal.border"},
+		"unknown flat key":  {body: "[theme]\nbordr = \"red\"\n", want: "unknown theme key theme.bordr; use a section: bar, base, diff, files, modal or syntax"},
+		"every flat key":    {body: "[theme]\nadded = \"red\"\nborder = \"red\"\n", want: "theme.added moved to theme.diff.added\ntheme.border moved to theme.base.border"},
+		"invalid colour":    {body: "[theme.syntax]\nkeyword = \"nope\"\n", want: "theme.syntax.keyword: "},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := config.Load(writeConfig(t, tc.body))
