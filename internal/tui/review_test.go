@@ -85,7 +85,7 @@ func TestLoad_success(t *testing.T) {
 	})
 
 	t.Run("renders hunk headers, gaps and one new line number gutter", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "d")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "d")
 
 		got := view(m)
 
@@ -99,7 +99,7 @@ func TestLoad_success(t *testing.T) {
 	})
 
 	t.Run("colours added, removed and hunk lines with the terminal's ANSI palette", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "d")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "d")
 
 		raw := m.View().Content
 
@@ -111,7 +111,7 @@ func TestLoad_success(t *testing.T) {
 	})
 
 	t.Run("leaves background and colours to the terminal theme", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n")
+		m := press(t, loaded(t, newSource()), "h", "j", "l")
 
 		v := m.View()
 
@@ -133,7 +133,7 @@ func TestLoad_success(t *testing.T) {
 	})
 
 	t.Run("tints only the cursor line with the subtle grey of the hunk headers", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n")
+		m := press(t, loaded(t, newSource()), "h", "j", "l")
 		tinted := regexp.MustCompile(`\x1b\[([0-9]+;)*100(;[0-9]+)*m`)
 
 		var hits []string
@@ -149,7 +149,7 @@ func TestLoad_success(t *testing.T) {
 	})
 
 	t.Run("describes binary files", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "ctrl+n", "ctrl+n")
+		m := press(t, loaded(t, newSource()), "h", "j", "j", "j", "l")
 
 		assertContains(t, view(m), "binary file", "file 4/4 · 0 hunks")
 	})
@@ -197,7 +197,7 @@ func TestCursor_success(t *testing.T) {
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			m := press(t, loaded(t, newSource()), "ctrl+n")
+			m := press(t, loaded(t, newSource()), "h", "j", "l")
 
 			m = press(t, m, tt.keys...)
 
@@ -215,10 +215,11 @@ func TestFileNavigation_success(t *testing.T) {
 	}{
 		"starts at the first tree file":   {keys: nil, want: "src/ui/view.go"},
 		"plain n and p do not switch":     {keys: []string{"n", "n", "p"}, want: "src/ui/view.go"},
-		"ctrl+n moves to the next file":   {keys: []string{"ctrl+n"}, want: "src/main.go"},
-		"ctrl+n clamps at the last file":  {keys: []string{"ctrl+n", "ctrl+n", "ctrl+n", "ctrl+n", "ctrl+n"}, want: "img.png"},
-		"ctrl+p moves back":               {keys: []string{"ctrl+n", "ctrl+n", "ctrl+p"}, want: "src/main.go"},
-		"ctrl+p clamps at the first file": {keys: []string{"ctrl+p"}, want: "src/ui/view.go"},
+		"j moves to the next file":        {keys: []string{"h", "j"}, want: "src/main.go"},
+		"j clamps at the last file":       {keys: []string{"h", "j", "j", "j", "j", "j"}, want: "img.png"},
+		"k moves back":                    {keys: []string{"h", "j", "j", "k"}, want: "src/main.go"},
+		"k clamps at the first file":      {keys: []string{"h", "k"}, want: "src/ui/view.go"},
+		"ctrl+n and ctrl+p do not switch": {keys: []string{"ctrl+n", "ctrl+n", "ctrl+p"}, want: "src/ui/view.go"},
 	}
 
 	for name, tt := range tests {
@@ -234,19 +235,19 @@ func TestFileNavigation_success(t *testing.T) {
 
 func TestSpaceSelect_success(t *testing.T) {
 	t.Run("space selects the hunk under the cursor in the diff pane", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "space")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "space")
 
 		assertContains(t, view(m), "▾ ● @@ -3,2 +3,2 @@", "1 hunk selected", "◐ main.go")
 	})
 
 	t.Run("space selects the whole file in the file pane", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "h", "space")
+		m := press(t, loaded(t, newSource()), "h", "j", "space")
 
 		assertContains(t, view(m), "2 hunks selected", "● main.go")
 	})
 
 	t.Run("a selected hunk header gets a blue background", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "space")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "space")
 
 		if !regexp.MustCompile(`\x1b\[([0-9]+;)*44(;[0-9]+)*m[^\x1b]*@@ -3,2 \+3,2 @@`).MatchString(m.View().Content) {
 			t.Error("View() selected hunk header has no ANSI blue (SGR 44) background")
@@ -320,7 +321,7 @@ func TestPaneFocus_success(t *testing.T) {
 
 func TestFold_success(t *testing.T) {
 	t.Run("z folds the hunk under the cursor and moves to its header", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "z")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "z")
 
 		got := view(m)
 
@@ -334,13 +335,13 @@ func TestFold_success(t *testing.T) {
 	})
 
 	t.Run("enter unfolds again", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "z", "enter")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "z", "enter")
 
 		assertContains(t, view(m), "▾ ○ @@ -3,2 +3,2 @@", "new line")
 	})
 
 	t.Run("Z folds all hunks then unfolds them", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "Z")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "Z")
 
 		assertContains(t, view(m), "(2 folded)")
 
@@ -401,7 +402,7 @@ func TestSelect_success(t *testing.T) {
 		src := newSource()
 		src.contents["commit1:README.md"] = "# jjreview\n\nTUI for jujutsu\n"
 
-		got := view(press(t, loaded(t, src), "ctrl+n", "ctrl+n", "f"))
+		got := view(press(t, loaded(t, src), "h", "j", "j", "l", "f"))
 
 		assertContains(t, got, "# jjreview", "+ TUI for jujutsu")
 		if strings.Contains(got, "TUI for git") {
@@ -424,7 +425,7 @@ func TestSelect_success(t *testing.T) {
 	})
 
 	t.Run("space selects the hunk under the cursor", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "space")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "space")
 
 		got := view(m)
 
@@ -432,19 +433,19 @@ func TestSelect_success(t *testing.T) {
 	})
 
 	t.Run("space twice clears the selection", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "space", "space")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "space", "space")
 
 		assertContains(t, view(m), "○ main.go", "nothing selected")
 	})
 
 	t.Run("s does not select", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "s")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "s")
 
 		assertContains(t, view(m), "○ main.go", "nothing selected")
 	})
 
 	t.Run("S selects every hunk of the file then clears them", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "S")
+		m := press(t, loaded(t, newSource()), "h", "j", "l", "S")
 
 		assertContains(t, view(m), "● main.go", "2 hunks selected")
 
@@ -454,7 +455,7 @@ func TestSelect_success(t *testing.T) {
 	})
 
 	t.Run("S on a file without hunks selects it as one unit", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "ctrl+n", "ctrl+n", "ctrl+n", "space")
+		m := press(t, loaded(t, newSource()), "h", "j", "j", "j", "l", "space")
 
 		assertContains(t, view(m), "○ img.png", "nothing selected")
 
@@ -496,7 +497,7 @@ func TestFullMode_success(t *testing.T) {
 		src := newSource()
 		src.contents["commit1:README.md"] = "# jjreview\n\nTUI for jujutsu\n"
 
-		got := view(press(t, loaded(t, src), "ctrl+n", "ctrl+n", "f"))
+		got := view(press(t, loaded(t, src), "h", "j", "j", "l", "f"))
 
 		assertContains(t, got, "# jjreview", "+ TUI for jujutsu")
 		if strings.Contains(got, "TUI for git") {
@@ -555,7 +556,7 @@ func TestFullMode_success(t *testing.T) {
 		src := newSource()
 		src.contents["commit1:src/main.go"] = strings.Repeat("line\n", 15)
 
-		m := press(t, loaded(t, src), "ctrl+n", "f", "f")
+		m := press(t, loaded(t, src), "h", "j", "l", "f", "f")
 
 		assertContains(t, view(m), "⋯ 4 unchanged lines")
 	})
@@ -580,6 +581,20 @@ func TestFullMode_failed(t *testing.T) {
 	}
 }
 
+func TestFullMode_staleError(t *testing.T) {
+	src := newSource()
+	src.contentErr["commit1:src/ui/view.go"] = errors.New("disk gone")
+	m, stale := update(t, loaded(t, src), keyMsg("f"))
+	m = press(t, m, "h", "j", "l", "j", "j")
+	want := m.Cursor()
+
+	m = run(t, m, stale)
+
+	if got := m.Cursor(); got != want {
+		t.Errorf("Cursor() = %d after a stale content error, want %d", got, want)
+	}
+}
+
 func TestLayout_success(t *testing.T) {
 	src := newSource()
 	src.files = nil
@@ -588,7 +603,7 @@ func TestLayout_success(t *testing.T) {
 	}
 	m := start(t, src, nil, 80, 12)
 
-	m = press(t, m, slices.Repeat([]string{"ctrl+n"}, 39)...)
+	m = press(t, m, slices.Concat([]string{"h"}, slices.Repeat([]string{"j"}, 39))...)
 
 	got := view(m)
 	if lines := strings.Count(got, "\n") + 1; lines > 12 {
@@ -634,8 +649,8 @@ func TestHelp_success(t *testing.T) {
 
 		got := view(m)
 
-		assertContains(t, got, "Keys", "^d ^u", "half page", "^n ^p", "next / previous file", "S", "select every hunk in the file",
-			"Z", "fold all hunks", "open in $EDITOR", "full file / changes only", "q", "quit")
+		assertContains(t, got, "Keys", "^d ^u", "half page", "^n ^p", "child / parent revision", "@", "working-copy revision", "S", "select every hunk in the file",
+			"Z", "fold all hunks", "R", "reload the change", "open in $EDITOR", "full file / changes only", "q", "quit")
 	})
 
 	for _, k := range []string{"?", "esc", "q"} {
@@ -770,7 +785,7 @@ func TestHalfPage_success(t *testing.T) {
 }
 
 func TestHunkHeader_success(t *testing.T) {
-	m := press(t, loaded(t, newSource()), "ctrl+n", "j")
+	m := press(t, loaded(t, newSource()), "h", "j", "l", "j")
 
 	raw := m.View().Content
 

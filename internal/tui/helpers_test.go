@@ -31,19 +31,33 @@ type fakeSource struct {
 	head       string
 	diffCalls  int
 	diffRevs   []string
+	revisions  map[string]jj.Change
+	revFiles   map[string][]diff.File
+	revErrs    map[string]error
+	changeRevs []string
 }
 
 func (s *fakeSource) WorkspaceRoot(context.Context) (string, error) {
 	return "/repo", nil
 }
 
-func (s *fakeSource) Change(context.Context, string) (jj.Change, error) {
+func (s *fakeSource) Change(_ context.Context, rev string) (jj.Change, error) {
+	s.changeRevs = append(s.changeRevs, rev)
+	if err, ok := s.revErrs[rev]; ok {
+		return jj.Change{}, err
+	}
+	if change, ok := s.revisions[rev]; ok {
+		return change, nil
+	}
 	return s.change, s.err
 }
 
 func (s *fakeSource) Diff(_ context.Context, rev string) ([]diff.File, error) {
 	s.diffCalls++
 	s.diffRevs = append(s.diffRevs, rev)
+	if files, ok := s.revFiles[rev]; ok {
+		return files, nil
+	}
 	return s.files, s.err
 }
 
@@ -126,7 +140,7 @@ func imageFile() diff.File {
 
 func newSource() *fakeSource {
 	return &fakeSource{
-		change: jj.Change{ChangeID: "kxyzabcdefgh", CommitID: "commit1", Parents: []string{"parent1"}, Description: "wip"},
+		change: jj.Change{ChangeID: "kxyzabcdefgh", CommitID: "commit1", Parents: []string{"parent1"}, Description: "wip", WorkingCopy: true},
 		files:  []diff.File{readmeFile(), mainFile(), viewFile(), imageFile()},
 		contents: map[string]string{
 			"parent1:src/main.go": mainParent,
