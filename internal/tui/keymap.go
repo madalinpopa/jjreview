@@ -29,6 +29,7 @@ type keyMap struct {
 	fold        key.Binding
 	foldAll     key.Binding
 	removed     key.Binding
+	removedAll  key.Binding
 	reload      key.Binding
 	edit        key.Binding
 	full        key.Binding
@@ -61,6 +62,7 @@ func newKeyMap() keyMap {
 		fold:        key.NewBinding(key.WithKeys("z", "enter"), key.WithHelp("z enter", "fold the hunk")),
 		foldAll:     key.NewBinding(key.WithKeys("Z"), key.WithHelp("Z", "fold all hunks")),
 		removed:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "show removed lines of the hunk")),
+		removedAll:  key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "show removed lines of all hunks")),
 		reload:      key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "reload the change")),
 		edit:        key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "open in $EDITOR")),
 		full:        key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full file / changes only")),
@@ -96,7 +98,9 @@ func (m Model) keyHints() []keyHint {
 	if !m.change.Immutable {
 		hints = append(hints, hint("select", m.keys.selectHunk), hint("commit", m.keys.commit))
 	}
-	if !m.filesFocus {
+	if m.filesFocus {
+		hints = append(hints, hint("diff", m.keys.removedAll))
+	} else {
 		hints = append(hints, hint("diff", m.keys.removed))
 	}
 	if m.change.WorkingCopy {
@@ -115,7 +119,7 @@ func (m Model) helpSections() []helpSection {
 	if !m.change.Immutable {
 		review = []keyHint{describe(m.keys.selectHunk), describe(m.keys.selectFile), describe(m.keys.commit)}
 	}
-	review = append(review, describe(m.keys.fold), describe(m.keys.foldAll), describe(m.keys.removed))
+	review = append(review, describe(m.keys.fold), describe(m.keys.foldAll), describe(m.keys.removed), describe(m.keys.removedAll))
 	return []helpSection{
 		{title: "Navigation", hints: []keyHint{
 			hint("focus the file / diff pane", m.keys.focusFiles, m.keys.focusDiff),

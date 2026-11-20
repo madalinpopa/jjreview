@@ -78,7 +78,7 @@ jjr -R ~/src/app # review a repository elsewhere
 
 ### Keys
 
-The file tree is on the left and the unified diff of the current file on the right. The diff shows each hunk as it reads after the change: added and context lines only. Press `d` on a hunk to see its removed lines too.
+The file tree is on the left and the unified diff of the current file on the right. The diff shows each hunk as it reads after the change: added and context lines only. Press `d` on a hunk to see its removed lines too, or `D` for every hunk in the file.
 
 | Key | Action |
 |-----|--------|
@@ -96,6 +96,7 @@ The file tree is on the left and the unified diff of the current file on the rig
 | `z` / `enter` | Fold or unfold the hunk under the cursor |
 | `Z` | Fold or unfold every hunk in the file |
 | `d` | Show or hide the removed lines of the hunk under the cursor |
+| `D` | Show or hide the removed lines of every hunk in the file |
 | `c` | Commit the selected hunks |
 | `R` | Reload the change to pick up edits made outside jjr; stays on the current file and drops selections |
 | `e` | Open the current file in `$VISUAL` / `$EDITOR` (default `vi`); the change reloads when the editor exits. Only on the working-copy revision |

@@ -194,6 +194,37 @@ func (r fileReview) foldAll() {
 	}
 }
 
+func (r fileReview) toggleRemovedAll(f diff.File, full bool) {
+	if wholeOnly(f) {
+		return
+	}
+	hiddenAny, hiddenShown, anyShown := false, false, false
+	for k, h := range f.Hunks {
+		if !hidesRemoved(h) {
+			continue
+		}
+		hiddenAny = hiddenAny || !r.removed[k]
+		if full || !r.folded[k] {
+			anyShown = true
+			hiddenShown = hiddenShown || !r.removed[k]
+		}
+	}
+	show := hiddenAny
+	if anyShown {
+		show = hiddenShown
+	}
+	for k, h := range f.Hunks {
+		if hidesRemoved(h) {
+			r.removed[k] = show
+		}
+	}
+}
+
+func hidesRemoved(h diff.Hunk) bool {
+	_, removed := hunkStats(h)
+	return removed > 0 && !deletesOnly(h)
+}
+
 func hunkStats(h diff.Hunk) (added, removed int) {
 	for _, l := range h.Lines {
 		switch l.Kind {

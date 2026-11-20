@@ -115,6 +115,8 @@ func (m *Model) hunkKey(msg tea.KeyPressMsg) {
 			return
 		}
 		m.toggleRemoved()
+	case key.Matches(msg, m.keys.removedAll):
+		m.toggleRemovedAll()
 	case key.Matches(msg, m.keys.foldAll):
 		m.currentReview().foldAll()
 		m.cursor = firstRow(m.rows())
@@ -264,19 +266,28 @@ func (m *Model) toggleRemoved() {
 	}
 	before := m.rows()
 	review.removed[k] = !review.removed[k]
+	m.followRows(before)
+}
+
+func (m *Model) toggleRemovedAll() {
+	file, _ := m.currentFile()
+	before := m.rows()
+	m.currentReview().toggleRemovedAll(file, m.full)
+	m.followRows(before)
+}
+
+func (m *Model) followRows(before []row) {
+	if m.cursor < 0 || m.cursor >= len(before) {
+		return
+	}
+	k := before[m.cursor].hunk
 	shown := make(map[row]int)
 	for j, r := range m.rows() {
-		if r.hunk != k {
-			continue
-		}
-		if _, ok := shown[r]; !ok {
+		if _, ok := shown[r]; !ok && r.kind != rowGap && r.hunk == k {
 			shown[r] = j
 		}
 	}
 	for i := range nearest(m.cursor, len(before)) {
-		if before[i].hunk != k {
-			continue
-		}
 		if j, ok := shown[before[i]]; ok {
 			m.cursor = j
 			return

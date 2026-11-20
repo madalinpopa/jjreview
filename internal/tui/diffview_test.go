@@ -28,6 +28,150 @@ func trimSource() *fakeSource {
 	return src
 }
 
+func twoEditsSource() *fakeSource {
+	src := newSource()
+	src.files = []diff.File{{OldPath: "src/two.go", NewPath: "src/two.go", OldMode: "100644", NewMode: "100644", Hunks: []diff.Hunk{
+		{OldStart: 2, OldLines: 1, NewStart: 2, NewLines: 1, Lines: []diff.Line{
+			{Kind: diff.LineRemoved, Text: "first old", OldNo: 2},
+			{Kind: diff.LineAdded, Text: "first new", NewNo: 2},
+		}},
+		{OldStart: 9, OldLines: 1, NewStart: 9, NewLines: 1, Lines: []diff.Line{
+			{Kind: diff.LineRemoved, Text: "second old", OldNo: 9},
+			{Kind: diff.LineAdded, Text: "second new", NewNo: 9},
+		}},
+	}}}
+	src.contents["commit1:src/two.go"] = "a\nfirst new\nc\nd\ne\nf\ng\nh\nsecond new\nj\n"
+	return src
+}
+
+func TestDiffViewRemovedAll_success(t *testing.T) {
+	t.Parallel()
+
+	t.Run("D shows the removed lines of every hunk in the file", func(t *testing.T) {
+		t.Parallel()
+
+		m := press(t, loaded(t, twoEditsSource()), "D")
+
+		assertContains(t, view(m), "- first old", "- second old")
+	})
+
+	t.Run("D twice hides them again", func(t *testing.T) {
+		t.Parallel()
+
+		m := press(t, loaded(t, twoEditsSource()), "D", "D")
+
+		assertMissing(t, view(m), "first old", "second old")
+	})
+
+	t.Run("D shows every hunk when only some show removed lines", func(t *testing.T) {
+		t.Parallel()
+
+		m := press(t, loaded(t, twoEditsSource()), "d", "D")
+
+		assertContains(t, view(m), "- first old", "- second old")
+	})
+
+	t.Run("D works from the file pane", func(t *testing.T) {
+		t.Parallel()
+
+		m := press(t, loaded(t, twoEditsSource()), "tab", "D")
+
+		assertContains(t, view(m), "- first old", "- second old")
+	})
+
+	t.Run("D shows removed lines in full file mode", func(t *testing.T) {
+		t.Parallel()
+
+		m := press(t, loaded(t, twoEditsSource()), "f", "D")
+
+		assertContains(t, view(m), "- first old", "- second old", "+ first new", "+ second new")
+	})
+
+	t.Run("D applies to folded hunks once unfolded", func(t *testing.T) {
+		t.Parallel()
+
+		m := press(t, loaded(t, twoEditsSource()), "Z", "D", "Z")
+
+		assertContains(t, view(m), "- first old", "- second old")
+	})
+
+	t.Run("D keeps the lines of a hunk that only deletes", func(t *testing.T) {
+		t.Parallel()
+
+		m := press(t, loaded(t, trimSource()), "D", "D")
+
+		assertContains(t, view(m), "- drop a", "- drop b")
+	})
+
+	t.Run("D keeps the cursor on the same line", func(t *testing.T) {
+		t.Parallel()
+		m := press(t, loaded(t, twoEditsSource()), "]")
+		before := m.Cursor()
+
+		m = press(t, m, "j", "D")
+
+		if got := m.Cursor(); got != before+3 {
+			t.Errorf("Cursor() = %d, want %d, still on the second new line below both shown removed lines", got, before+3)
+		}
+	})
+
+	t.Run("hiding removed lines keeps the cursor in its hunk", func(t *testing.T) {
+		t.Parallel()
+		src := twoEditsSource()
+		src.files[0].Hunks[0].Lines = []diff.Line{
+			{Kind: diff.LineAdded, Text: "first new", NewNo: 2},
+			{Kind: diff.LineRemoved, Text: "first old", OldNo: 2},
+		}
+		m := press(t, loaded(t, src), "D", "j")
+
+		m = press(t, m, "D")
+
+		if got := m.Cursor(); got != 2 {
+			t.Errorf("Cursor() = %d, want 2, on the new line before the hidden removed line", got)
+		}
+	})
+
+	t.Run("D hides shown lines when the other hunks have no removed lines", func(t *testing.T) {
+		t.Parallel()
+		src := twoEditsSource()
+		src.files[0].Hunks[0] = diff.Hunk{OldStart: 2, OldLines: 0, NewStart: 2, NewLines: 1, Lines: []diff.Line{
+			{Kind: diff.LineAdded, Text: "first new", NewNo: 2},
+		}}
+		m := press(t, loaded(t, src), "]", "d")
+		assertContains(t, view(m), "- second old")
+
+		m = press(t, m, "D")
+
+		assertMissing(t, view(m), "second old")
+	})
+
+	t.Run("D ignores folded hunks when the diff shows changes only", func(t *testing.T) {
+		t.Parallel()
+		m := press(t, loaded(t, twoEditsSource()), "d", "]", "z")
+		assertContains(t, view(m), "- first old")
+
+		m = press(t, m, "D")
+
+		assertMissing(t, view(m), "first old")
+	})
+
+	t.Run("footer lists D in the file pane", func(t *testing.T) {
+		t.Parallel()
+
+		m := press(t, loaded(t, twoEditsSource()), "tab")
+
+		assertContains(t, view(m), "D diff")
+	})
+
+	t.Run("help lists D", func(t *testing.T) {
+		t.Parallel()
+
+		got := view(press(t, loaded(t, newSource()), "?"))
+
+		assertContains(t, got, "show removed lines of all hunks")
+	})
+}
+
 func TestDiffView_success(t *testing.T) {
 	t.Run("hides removed lines by default", func(t *testing.T) {
 		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l")
