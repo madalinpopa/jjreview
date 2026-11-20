@@ -44,13 +44,29 @@ func blank(width int, bg color.Color) string {
 
 func paint(width int, bg color.Color, left, right []seg) string {
 	r := clip(render(bg, right), width)
-	avail := width - lipgloss.Width(r)
-	if len(right) > 0 {
-		avail--
-	}
+	avail := width - lipgloss.Width(r) - gapWidth(right)
 	l := clip(render(bg, left), avail)
 	fill := width - lipgloss.Width(l) - lipgloss.Width(r)
 	return clip(l+blank(fill, bg)+r, width)
+}
+
+func gapWidth(right []seg) int {
+	if len(right) > 0 {
+		return 1
+	}
+	return 0
+}
+
+func segsWidth(segs []seg) int {
+	w := 0
+	for _, s := range segs {
+		w += lipgloss.Width(s.text)
+	}
+	return w
+}
+
+func rowWidth(left, right []seg) int {
+	return segsWidth(left) + gapWidth(right) + segsWidth(right)
 }
 
 func scrollTop(top, cursor, height, total int) int {
