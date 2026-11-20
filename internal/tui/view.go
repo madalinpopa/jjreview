@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"image/color"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,7 +11,7 @@ import (
 )
 
 const (
-	maxListWidth = 32
+	maxListWidth = 60
 	cardChrome   = 4
 )
 
@@ -68,7 +69,15 @@ func (m Model) screen() string {
 }
 
 func (m Model) listWidth() int {
-	return min(maxListWidth, max(m.width/3, 1))
+	return max(min(m.treeWidth+2, maxListWidth, (m.width-1)/2), 1)
+}
+
+func (m Model) measureTree() int {
+	w := rowWidth(m.cardHeader("Files", m.filesValue(len(m.files))))
+	for _, r := range m.treeRows() {
+		w = max(w, rowWidth(m.treeSegs(r)))
+	}
+	return w
 }
 
 func (m Model) diffCardWidth() int {
@@ -185,9 +194,10 @@ func (m Model) card(width int, title string, focused bool, value []seg, body []s
 		edge = fg(p.Selection)
 	}
 	side := edge.Background(p.Card).Render("│")
+	header, values := m.cardHeader(title, value)
 	lines := []string{
 		edge.Render("╭" + strings.Repeat("─", inner) + "╮"),
-		side + paint(inner, p.Card, []seg{span(fg(p.Header), " "+strings.ToUpper(title))}, append(value, span(lipgloss.NewStyle(), " "))) + side,
+		side + paint(inner, p.Card, header, values) + side,
 		edge.Background(p.Card).Render("├" + strings.Repeat("─", inner) + "┤"),
 	}
 	for i := range max(m.bodyHeight()-cardChrome, 0) {
@@ -202,6 +212,14 @@ func (m Model) card(width int, title string, focused bool, value []seg, body []s
 	return strings.Join(lines[:min(len(lines), m.bodyHeight())], "\n")
 }
 
+func (m Model) cardHeader(title string, value []seg) ([]seg, []seg) {
+	return []seg{span(fg(m.pal.Header), " "+strings.ToUpper(title))}, slices.Concat(value, []seg{span(lipgloss.NewStyle(), " ")})
+}
+
+func (m Model) filesValue(done int) []seg {
+	return []seg{span(fg(m.pal.Title), fmt.Sprintf("%d/%d ✓", done, len(m.files)))}
+}
+
 func (m Model) filesCard() string {
 	done := 0
 	for _, r := range m.reviews {
@@ -209,25 +227,34 @@ func (m Model) filesCard() string {
 			done++
 		}
 	}
-	value := []seg{span(fg(m.pal.Title), fmt.Sprintf("%d/%d ✓", done, len(m.files)))}
 	rows := m.treeRows()
-	inner := max(m.listWidth()-2, 0)
+	width := m.listWidth()
+	inner := max(width-2, 0)
 	var body []string
 	for i := m.listTop; i < len(rows) && len(body) < m.diffHeight(); i++ {
 		body = append(body, m.treeLine(rows[i], inner))
 	}
-	return m.card(m.listWidth(), "Files", m.filesFocus, value, body)
+	return m.card(width, "Files", m.filesFocus, m.filesValue(done), body)
 }
 
 func (m Model) treeLine(r treeRow, width int) string {
+	bg := m.pal.Card
+	if !r.dir && r.file == m.fileIdx {
+		bg = m.pal.CursorBg
+	}
+	left, right := m.treeSegs(r)
+	return paint(width, bg, left, right)
+}
+
+func (m Model) treeSegs(r treeRow) ([]seg, []seg) {
 	p := m.pal
 	if r.dir {
 		left := []seg{span(lipgloss.NewStyle(), strings.Repeat(" ", 1+r.depth*2)), span(fg(p.Muted), "▾ "), span(fg(p.DirName), r.name)}
-		return paint(width, p.Card, left, []seg{span(fg(p.Muted), fmt.Sprint(r.count)), span(lipgloss.NewStyle(), " ")})
+		return left, []seg{span(fg(p.Muted), fmt.Sprint(r.count)), span(lipgloss.NewStyle(), " ")}
 	}
-	name, bg, bar := fg(p.Strong), p.Card, p.Card
+	name, bar := fg(p.Strong), p.Card
 	if r.file == m.fileIdx {
-		name, bg, bar = fg(p.Selection).Bold(true), p.CursorBg, p.Selection
+		name, bar = fg(p.Selection).Bold(true), p.Selection
 	}
 	st := m.reviews[r.file].state()
 	left := []seg{
@@ -237,7 +264,7 @@ func (m Model) treeLine(r treeRow, width int) string {
 		span(lipgloss.NewStyle(), " "),
 		span(name, r.name),
 	}
-	return paint(width, bg, left, []seg{span(fg(p.Muted), m.fileSummary(r.file)), span(lipgloss.NewStyle(), " ")})
+	return left, []seg{span(fg(p.Muted), m.fileSummary(r.file)), span(lipgloss.NewStyle(), " ")}
 }
 
 func (m Model) glyphStyle(st fileState) lipgloss.Style {
