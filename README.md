@@ -38,7 +38,7 @@ go install github.com/madalinpopa/jjreview/cmd/jjr@latest
 
 Prebuilt archives for Linux and macOS (amd64, arm64) are attached to each [release](https://github.com/madalinpopa/jjreview/releases).
 
-`jjr` requires jj 0.47 or newer in `PATH`. Generated commit messages need an Anthropic API key in the config file, in `ANTHROPIC_API_KEY`, or a profile created with `ant auth login`. Without credentials the message box starts empty and you write the message yourself.
+`jjr` requires jj 0.47 or newer in `PATH`. Generated commit messages need an Anthropic API key in the config file, in `ANTHROPIC_API_KEY`, or a profile created with `ant auth login`. Without credentials the message box starts empty and you write the message yourself. Alternatively, set `provider = "copilot"` to generate messages with a signed-in [GitHub Copilot CLI](https://github.com/github/copilot-cli).
 
 ## Quick start
 
@@ -120,6 +120,9 @@ provider = "anthropic"
 api_key = ""                  # falls back to ANTHROPIC_API_KEY / ant auth login
 model = "claude-haiku-5-5"
 
+[providers.copilot]
+model = "auto"
+
 [theme]
 page = "none"
 text = "none"
@@ -164,7 +167,11 @@ literal = "yellow"
 comment = "bright-black"
 ```
 
-A colour is `none` (the terminal default), one of the 16 ANSI names (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white` and their `bright-` forms), a number from 0 to 255, `#rgb` or `#rrggbb`. ANSI names and 0-15 follow the terminal theme. Unknown keys and invalid colours stop `jjr` with an error naming the key.
+A colour is `none` (the terminal default), one of the 16 ANSI names (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white` and their `bright-` forms), a number from 0 to 255, `#rgb` or `#rrggbb`. ANSI names and 0-15 follow the terminal theme. Unknown keys and invalid colours stop `jjr` with an error naming the key. When neither `cursor_bg` nor `page` is set and the terminal reports its background colour, `jjr` shades the cursor line slightly from that background instead of using `bright-black`.
+
+### GitHub Copilot
+
+With `provider = "copilot"`, `jjr` runs the Copilot CLI through the [GitHub Copilot SDK](https://github.com/microsoft/copilot-sdk). The CLI is looked up as `copilot` in `PATH`, or taken from `COPILOT_CLI_PATH`, and must support SDK protocol 4. When it is missing or incompatible, the message box shows the error and you write the message yourself. Sign in once by running `copilot`. Sessions run without tools, MCP servers, or custom instructions, time out after two minutes, and count against your Copilot plan.
 
 ### Data sent to the model
 
@@ -172,7 +179,7 @@ Only the selected hunks are sent, formatted as a unified diff, together with the
 
 ## Development
 
-Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and [golangci-lint](https://golangci-lint.run). The demo GIFs are recorded with [VHS](https://github.com/charmbracelet/vhs).
+Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and [golangci-lint](https://golangci-lint.run). The demo GIFs are recorded with [VHS](https://github.com/charmbracelet/vhs) and composited with [FFmpeg](https://ffmpeg.org).
 
 | Command | Description |
 |---------|-------------|
@@ -181,7 +188,7 @@ Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and [golangci-lint]
 | `task lint` | Lint and verify `go.mod` and `go.sum` are tidy |
 | `task format` | Format the code |
 | `task check` | Test, format, then lint |
-| `vhs docs/demo.tape` | Record the demo in a throwaway repository (`docs/demo-light.tape` for the light theme) |
+| `docs/demo.sh` | Record both demo GIFs in a throwaway repository, on a translucent window over a gradient backdrop |
 
 | Package | Responsibility |
 |---------|----------------|
@@ -192,7 +199,7 @@ Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and [golangci-lint]
 | [`internal/config`](internal/config) | Loading the TOML config file |
 | [`internal/theme`](internal/theme) | Colours and colour parsing |
 | [`internal/prompt`](internal/prompt) | Commit message system prompt and prompt construction |
-| [`internal/llm`](internal/llm) | Commit message `Provider` interface and the Anthropic implementation |
+| [`internal/llm`](internal/llm) | Commit message `Provider` interface and the Anthropic and Copilot implementations |
 | [`internal/tui`](internal/tui) | The Bubble Tea interface |
 
 ## Contributing
