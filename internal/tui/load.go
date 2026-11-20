@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 
@@ -24,20 +25,32 @@ type contentMsg struct {
 
 func load(ctx context.Context, src Source, rev string) tea.Cmd {
 	return func() tea.Msg {
-		change, err := src.Change(ctx, rev)
-		if err != nil {
-			return loadedMsg{err: fmt.Errorf("load change %s: %w", rev, err)}
-		}
-		files, err := src.Diff(ctx, change.CommitID)
-		if err != nil {
-			return loadedMsg{err: fmt.Errorf("load diff %s: %w", rev, err)}
-		}
-		root, err := src.WorkspaceRoot(ctx)
-		if err != nil {
-			return loadedMsg{err: fmt.Errorf("find workspace root: %w", err)}
-		}
-		return loadedMsg{change: change, files: files, root: root}
+		return fetch(ctx, src, rev)
 	}
+}
+
+func (m *Model) reload() tea.Cmd {
+	if file, ok := m.currentFile(); ok {
+		m.reloadPath = file.Path()
+	}
+	m.reloading = true
+	return load(m.ctx, m.src, cmp.Or(m.target, m.rev))
+}
+
+func fetch(ctx context.Context, src Source, rev string) loadedMsg {
+	change, err := src.Change(ctx, rev)
+	if err != nil {
+		return loadedMsg{err: fmt.Errorf("load change %s: %w", rev, err)}
+	}
+	files, err := src.Diff(ctx, change.CommitID)
+	if err != nil {
+		return loadedMsg{err: fmt.Errorf("load diff %s: %w", rev, err)}
+	}
+	root, err := src.WorkspaceRoot(ctx)
+	if err != nil {
+		return loadedMsg{err: fmt.Errorf("find workspace root: %w", err)}
+	}
+	return loadedMsg{change: change, files: files, root: root}
 }
 
 func loadContent(ctx context.Context, src Source, key contentKey) tea.Cmd {

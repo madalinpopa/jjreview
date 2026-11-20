@@ -93,6 +93,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pal = m.pal.WithBackground(msg.Color, msg.IsDark())
 	case loadedMsg:
 		cmd = m.applyLoad(msg)
+	case revisionMsg:
+		cmd = m.applyRevision(msg)
 	case contentMsg:
 		m.applyContent(msg)
 	case generatedMsg:
@@ -183,7 +185,9 @@ func (m *Model) applyLoad(msg loadedMsg) tea.Cmd {
 func (m *Model) applyContent(msg contentMsg) {
 	if msg.err != nil {
 		m.contentErrs[msg.key] = msg.err
-		m.cursor = 0
+		if file, ok := m.currentFile(); ok && m.contentKey(file) == msg.key {
+			m.cursor = 0
+		}
 		return
 	}
 	delete(m.contentErrs, msg.key)
