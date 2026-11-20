@@ -82,7 +82,7 @@ The file tree is on the left and the unified diff of the current file on the rig
 
 | Key | Action |
 |-----|--------|
-| `h` / `l` (`←` / `→`) | Focus the file pane / the diff pane |
+| `h` / `l` (`ctrl+h` / `ctrl+l`, `←` / `→`) | Focus the file pane / the diff pane |
 | `tab` | Switch between the file pane and the diff pane |
 | `j` / `k` | Next / previous file in the file pane, next / previous line in the diff pane |
 | `ctrl+d` / `ctrl+u` (`pgdown` / `pgup`) | Half a page down / up in the focused pane |
@@ -131,20 +131,22 @@ model = "claude-haiku-5-5"
 [providers.copilot]
 model = "auto"
 
-[theme]
+[theme.base]
 page = "none"
 text = "none"
 card = "none"
 border = "bright-black"
-chip = "none"
-chip_text = "blue"
 title = "none"
 header = "bright-black"
 strong = "none"
-dir_name = "bright-black"
 muted = "bright-black"
 faint = "bright-black"
 dim = "bright-black"
+selection = "blue"
+on_selection = "black"
+cursor_bg = "bright-black"
+
+[theme.diff]
 added = "green"
 added_bg = "none"
 removed = "red"
@@ -154,16 +156,22 @@ hunk_bg = "bright-black"
 hunk_bar = "cyan"
 folded_bar = "bright-black"
 stats = "bright-black"
-selection = "blue"
-cursor_bg = "bright-black"
+
+[theme.files]
+dir_name = "bright-black"
+picked = "blue"
+
+[theme.bar]
+chip = "none"
+chip_text = "blue"
 key = "yellow"
 status = "magenta"
-picked = "blue"
-on_selection = "black"
 badge_idle = "none"
 badge_idle_fg = "bright-black"
 badge_selected = "none"
-modal_border = "bright-black"
+
+[theme.modal]
+border = "bright-black"
 input = "none"
 
 [theme.syntax]
@@ -175,7 +183,7 @@ literal = "yellow"
 comment = "bright-black"
 ```
 
-A colour is `none` (the terminal default), one of the 16 ANSI names (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white` and their `bright-` forms), a number from 0 to 255, `#rgb` or `#rrggbb`. ANSI names and 0-15 follow the terminal theme. Unknown keys and invalid colours stop `jjr` with an error naming the key. When neither `cursor_bg` nor `page` is set and the terminal reports its background colour, `jjr` shades the cursor line slightly from that background instead of using `bright-black`. Likewise, on a light terminal background with none of `hunk_bg`, `card` or `page` set, hunk headers get a slightly darker shade of that background.
+A colour is `none` (the terminal default), one of the 16 ANSI names (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white` and their `bright-` forms), a number from 0 to 255, `#rgb` or `#rrggbb`. ANSI names and 0-15 follow the terminal theme. Unknown keys and invalid colours stop `jjr` with an error naming the key; a colour set directly under `[theme]` names the section it now belongs to. When neither `base.cursor_bg` nor `base.page` is set and the terminal reports its background colour, `jjr` shades the cursor line slightly from that background instead of using `bright-black`. Likewise, on a light terminal background with none of `diff.hunk_bg`, `base.card` or `base.page` set, hunk headers get a slightly darker shade of that background.
 
 ### GitHub Copilot
 
