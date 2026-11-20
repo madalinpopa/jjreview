@@ -195,7 +195,7 @@ Only the selected hunks are sent, formatted as a unified diff, together with the
 
 ## Development
 
-Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and [golangci-lint](https://golangci-lint.run). The demo GIFs are recorded with [VHS](https://github.com/charmbracelet/vhs) and composited with [FFmpeg](https://ffmpeg.org).
+Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and [golangci-lint](https://golangci-lint.run). The demo GIFs are recorded with [VHS](https://github.com/charmbracelet/vhs).
 
 | Command | Description |
 |---------|-------------|
@@ -204,7 +204,7 @@ Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and [golangci-lint]
 | `task lint` | Lint and verify `go.mod` and `go.sum` are tidy |
 | `task format` | Format the code |
 | `task check` | Test, format, then lint |
-| `docs/demo.sh` | Record both demo GIFs in a throwaway repository, on a translucent window over a gradient backdrop |
+| `docs/demo.sh` | Record both demo GIFs in a throwaway repository with the Rosé Pine themes |
 
 | Package | Responsibility |
 |---------|----------------|
