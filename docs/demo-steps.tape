@@ -10,7 +10,8 @@ Set TypingSpeed 45ms
 Set WindowBar Colorful
 
 Hide
-Type `root=$(docs/demo-setup.sh) && go build -o "$root/bin/jjr" ./cmd/jjr && export PS1='> ' PATH="$root/bin:$PATH" JJ_CONFIG="$root/jj.toml" && cd "$root/repo" && clear`
+Sleep 1s
+Type `root=$(docs/demo-setup.sh) && go build -o "$root/bin/jjr" ./cmd/jjr && export PS1='> ' PATH="$root/bin:$PATH" JJ_CONFIG="$root/jj.toml" && cd "$root/repo" && clear || exit 1`
 Enter
 Wait@60s
 Show
