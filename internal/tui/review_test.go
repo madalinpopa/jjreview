@@ -718,14 +718,60 @@ func TestKeyBar_success(t *testing.T) {
 	})
 }
 
+func TestKeyBar_notWorkingCopy(t *testing.T) {
+	m := press(t, loaded(t, revisionSource()), "ctrl+p")
+
+	assertContains(t, view(m), "? help")
+	assertMissing(t, view(m), "e edit")
+	assertMissing(t, view(press(t, m, "?")), "open in $EDITOR")
+}
+
 func TestHelp_success(t *testing.T) {
 	t.Run("? opens a popup with every key", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "?")
+		m := press(t, start(t, newSource(), nil, 120, 50), "?")
 
 		got := view(m)
 
 		assertContains(t, got, "Keys", "^d ^u", "half page", "^n ^p", "child / parent revision", "@", "working-copy revision", "S", "select every hunk in the file",
 			"Z", "fold all hunks", "R", "reload the change", "open in $EDITOR", "full file / changes only", "q", "quit")
+	})
+
+	t.Run("lists the jump keys", func(t *testing.T) {
+		got := view(press(t, start(t, newSource(), nil, 120, 40), "?"))
+
+		assertContains(t, got, "tab", "switch pane", "g G", "first / last line or file", "] [", "next / previous hunk", "J K", "next / previous file")
+	})
+
+	t.Run("scrolls with j and k when taller than the screen", func(t *testing.T) {
+		m := press(t, start(t, newSource(), nil, 100, 20), "?")
+
+		assertContains(t, view(m), "focus the file / diff pane", "j k scroll")
+		assertMissing(t, view(m), "quit")
+
+		m = press(t, m, slices.Repeat([]string{"j"}, 30)...)
+
+		assertContains(t, view(m), "quit")
+		assertMissing(t, view(m), "focus the file / diff pane")
+
+		m = press(t, m, slices.Repeat([]string{"k"}, 30)...)
+
+		assertContains(t, view(m), "focus the file / diff pane")
+	})
+
+	t.Run("fits a terminal shorter than its chrome", func(t *testing.T) {
+		got := view(press(t, start(t, newSource(), nil, 100, 4), "?"))
+
+		if n := strings.Count(got, "\n") + 1; n > 4 {
+			t.Errorf("View() is %d lines tall, want at most 4", n)
+		}
+		assertContains(t, got, "╰")
+	})
+
+	t.Run("does not scroll when it fits", func(t *testing.T) {
+		got := view(press(t, start(t, newSource(), nil, 120, 50), "?", "j"))
+
+		assertContains(t, got, "focus the file / diff pane", "quit")
+		assertMissing(t, got, "j k scroll")
 	})
 
 	for _, k := range []string{"?", "esc", "q"} {
