@@ -97,12 +97,31 @@ comment = "white"
 			t.Errorf("Load().Theme.Added = %v, want the default", got.Theme.Added)
 		}
 	})
+
+	t.Run("reads the copilot provider", func(t *testing.T) {
+		path := writeConfig(t, `
+provider = "copilot"
+
+[providers.copilot]
+model = "gpt-5-mini"
+`)
+
+		got, err := config.Load(path)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+
+		if got.Provider != config.ProviderCopilot || got.Copilot.Model != "gpt-5-mini" {
+			t.Errorf("Load() provider = %q, copilot = %+v", got.Provider, got.Copilot)
+		}
+	})
 }
 
 func TestLoad_failure(t *testing.T) {
 	for name, tc := range map[string]struct{ body, want string }{
 		"invalid toml":      {body: "provider = ", want: "config.toml"},
 		"unknown provider":  {body: `provider = "openai"`, want: "openai"},
+		"copilot api key":   {body: "[providers.copilot]\napi_key = \"secret\"\n", want: "api_key"},
 		"unknown theme key": {body: "[theme]\nbordr = \"red\"\n", want: "bordr"},
 		"non-string colour": {body: "[theme]\nborder = 1\n", want: "border"},
 		"invalid colour":    {body: "[theme.syntax]\nkeyword = \"nope\"\n", want: "syntax.keyword"},
