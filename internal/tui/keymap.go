@@ -39,8 +39,8 @@ type keyMap struct {
 
 func newKeyMap() keyMap {
 	return keyMap{
-		focusFiles:  key.NewBinding(key.WithKeys("h", "left"), key.WithHelp("h", "focus the file pane")),
-		focusDiff:   key.NewBinding(key.WithKeys("l", "right"), key.WithHelp("l", "focus the diff pane")),
+		focusFiles:  key.NewBinding(key.WithKeys("h", "ctrl+h", "left"), key.WithHelp("h", "focus the file pane")),
+		focusDiff:   key.NewBinding(key.WithKeys("l", "ctrl+l", "right"), key.WithHelp("l", "focus the diff pane")),
 		switchPane:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
 		down:        key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next line or file")),
 		up:          key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous line or file")),
