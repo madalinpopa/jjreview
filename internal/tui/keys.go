@@ -1,76 +1,129 @@
 package tui
 
 import (
+	"fmt"
 	"iter"
 	"slices"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 )
 
 func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 	m.status = ""
-	switch msg.String() {
-	case "q":
-		return tea.Quit
-	case "h":
+	armed := m.armed
+	m.armed = ""
+	switch {
+	case key.Matches(msg, m.keys.quit):
+		if m.confirmDrop(msg, armed) {
+			return tea.Quit
+		}
+	case key.Matches(msg, m.keys.focusFiles):
 		m.filesFocus = true
-	case "l":
+	case key.Matches(msg, m.keys.focusDiff):
 		m.filesFocus = false
-	case "j", "down":
+	case key.Matches(msg, m.keys.switchPane):
+		m.filesFocus = !m.filesFocus
+	case key.Matches(msg, m.keys.down):
 		return m.move(1)
-	case "k", "up":
+	case key.Matches(msg, m.keys.up):
 		return m.move(-1)
-	case "ctrl+d":
+	case key.Matches(msg, m.keys.halfDown):
 		return m.page(m.halfPage())
-	case "ctrl+u":
+	case key.Matches(msg, m.keys.halfUp):
 		return m.page(-m.halfPage())
-	case "ctrl+n":
-		return m.moveRevision(childStep)
-	case "ctrl+p":
-		return m.moveRevision(parentStep)
-	case "@":
-		return m.moveRevision(workingCopyStep)
-	case "f":
+	case key.Matches(msg, m.keys.top):
+		if m.filesFocus {
+			return m.moveFile(-len(m.files))
+		}
+		m.cursor = firstRow(m.rows())
+	case key.Matches(msg, m.keys.bottom):
+		return m.move(m.extent())
+	case key.Matches(msg, m.keys.nextHunk):
+		m.jumpHunk(1)
+	case key.Matches(msg, m.keys.prevHunk):
+		m.jumpHunk(-1)
+	case key.Matches(msg, m.keys.nextFile):
+		return m.moveFile(1)
+	case key.Matches(msg, m.keys.prevFile):
+		return m.moveFile(-1)
+	case key.Matches(msg, m.keys.child, m.keys.parent, m.keys.workingCopy, m.keys.reload):
+		if m.canLoad() && m.confirmDrop(msg, armed) {
+			return m.loadFor(msg)
+		}
+	case key.Matches(msg, m.keys.full):
 		m.full = !m.full
 		m.cursor = firstRow(m.rows())
 		return m.requestContent()
-	case "c":
+	case key.Matches(msg, m.keys.commit):
 		return m.openModal()
-	case "e":
-		return m.openEditor()
-	case "R":
-		if !m.canLoad() {
-			return nil
+	case key.Matches(msg, m.keys.edit):
+		if m.canEdit() && m.confirmDrop(msg, armed) {
+			return m.openEditor()
 		}
-		return m.reload()
-	case "?":
+	case key.Matches(msg, m.keys.help):
 		m.help = true
+		m.helpTop = 0
 	default:
-		m.hunkKey(msg.String())
+		m.hunkKey(msg)
 	}
 	return nil
 }
 
-func (m *Model) hunkKey(key string) {
+func (m *Model) loadFor(msg tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case key.Matches(msg, m.keys.child):
+		return m.moveRevision(childStep)
+	case key.Matches(msg, m.keys.parent):
+		return m.moveRevision(parentStep)
+	case key.Matches(msg, m.keys.workingCopy):
+		return m.moveRevision(workingCopyStep)
+	}
+	return m.reload()
+}
+
+func (m *Model) confirmDrop(msg tea.KeyPressMsg, armed string) bool {
+	n := pickedUnits(m.picks())
+	k := msg.String()
+	if n == 0 || k == armed {
+		return true
+	}
+	m.armed = k
+	m.status = fmt.Sprintf("press %s again to drop %d selected %s", m.dropLabel(msg), n, plural(n, "hunk"))
+	return false
+}
+
+func (m Model) dropLabel(msg tea.KeyPressMsg) string {
+	for _, b := range []key.Binding{m.keys.quit, m.keys.child, m.keys.parent, m.keys.workingCopy, m.keys.reload, m.keys.edit} {
+		if key.Matches(msg, b) {
+			return b.Help().Key
+		}
+	}
+	return msg.String()
+}
+
+func (m *Model) hunkKey(msg tea.KeyPressMsg) {
 	if !m.ready() {
 		return
 	}
-	switch key {
-	case "z", "enter":
+	switch {
+	case key.Matches(msg, m.keys.fold):
 		m.toggleFold()
-	case "d":
-		if !m.filesFocus {
-			m.toggleRemoved()
+	case key.Matches(msg, m.keys.removed):
+		if m.filesFocus {
+			m.status = m.keys.removed.Help().Key + " works in the diff pane; press " + m.keys.focusDiff.Help().Key
+			return
 		}
-	case "Z":
+		m.toggleRemoved()
+	case key.Matches(msg, m.keys.foldAll):
 		m.currentReview().foldAll()
 		m.cursor = firstRow(m.rows())
-	case "space", "S":
+	case key.Matches(msg, m.keys.selectHunk, m.keys.selectFile):
 		if m.change.Immutable {
 			m.status = immutableStatus
 			return
 		}
-		if key == "S" || m.filesFocus {
+		if key.Matches(msg, m.keys.selectFile) || m.filesFocus {
 			m.currentReview().toggleFile()
 			return
 		}
@@ -102,6 +155,20 @@ func (m *Model) page(delta int) tea.Cmd {
 	m.moveCursor(delta)
 	m.diffTop = max(m.diffTop+m.cursor-before, 0)
 	return nil
+}
+
+func (m Model) extent() int {
+	return len(m.rows()) + len(m.files)
+}
+
+func (m *Model) jumpHunk(step int) {
+	rows := m.rows()
+	for i := m.cursor + step; i >= 0 && i < len(rows); i += step {
+		if rows[i].hunk >= 0 && (i == 0 || rows[i-1].hunk != rows[i].hunk) {
+			m.cursor = i
+			return
+		}
+	}
 }
 
 func (m Model) halfPage() int {
