@@ -66,9 +66,17 @@ func Load(path string) (Config, error) {
 			APIKey: v.GetString("providers.anthropic.api_key"),
 			Model:  v.GetString("providers.anthropic.model"),
 		},
+		Copilot: Copilot{
+			Model: v.GetString("providers.copilot.model"),
+		},
 	}
-	if cfg.Provider != ProviderAnthropic {
-		return Config{}, fmt.Errorf("config: %s: unknown provider %q; supported: %s", path, cfg.Provider, ProviderAnthropic)
+	switch cfg.Provider {
+	case ProviderAnthropic, ProviderCopilot:
+	default:
+		return Config{}, fmt.Errorf("config: %s: unknown provider %q; supported: %s, %s", path, cfg.Provider, ProviderAnthropic, ProviderCopilot)
+	}
+	if v.IsSet("providers.copilot.api_key") {
+		return Config{}, fmt.Errorf("config: %s: providers.copilot does not take api_key; sign in by running copilot", path)
 	}
 
 	colors, syntax, err := themeValues(v.GetStringMap("theme"))
