@@ -30,7 +30,7 @@ func trimSource() *fakeSource {
 
 func TestDiffView_success(t *testing.T) {
 	t.Run("hides removed lines by default", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l")
 
 		got := view(m)
 
@@ -39,19 +39,19 @@ func TestDiffView_success(t *testing.T) {
 	})
 
 	t.Run("d shows the removed lines of the hunk under the cursor", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l", "d")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "d")
 
 		assertContains(t, view(m), "- old line", "+ new line")
 	})
 
 	t.Run("d twice hides them again", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l", "d", "d")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "d", "d")
 
 		assertMissing(t, view(m), "old line")
 	})
 
 	t.Run("d keeps the cursor on the same line", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l")
 		before := m.Cursor()
 
 		m = press(t, m, "d")
@@ -62,19 +62,19 @@ func TestDiffView_success(t *testing.T) {
 	})
 
 	t.Run("d leaves other hunks alone", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l", "j", "j", "j", "d")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "j", "j", "j", "d")
 
 		assertMissing(t, view(m), "old line")
 	})
 
 	t.Run("d does nothing in the file pane", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "d")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "d")
 
 		assertMissing(t, view(m), "old line")
 	})
 
 	t.Run("d shows removed lines in full file mode", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l", "f")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "f")
 		assertMissing(t, view(m), "old line")
 
 		m = press(t, m, "d")
@@ -110,13 +110,13 @@ func TestDiffView_success(t *testing.T) {
 	})
 
 	t.Run("d does nothing on a folded hunk", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l", "z", "d", "enter")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "z", "d", "enter")
 
 		assertMissing(t, view(m), "old line")
 	})
 
 	t.Run("d shows removed lines of a folded hunk in full file mode", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l", "z", "f", "d")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "z", "f", "d")
 
 		assertContains(t, view(m), "- old line", "+ new line")
 
@@ -126,7 +126,7 @@ func TestDiffView_success(t *testing.T) {
 	})
 
 	t.Run("hiding removed lines moves the cursor to the next line still shown", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l", "d", "k", "d")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "d", "k", "d")
 
 		if got := m.Cursor(); got != 3 {
 			t.Errorf("Cursor() = %d, want 3, on the new line after the hidden removed line", got)
@@ -150,7 +150,7 @@ func TestDiffView_success(t *testing.T) {
 	})
 
 	t.Run("d in the file pane points to the diff pane", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "d")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "d")
 
 		assertContains(t, view(m), "d works in the diff pane; press l")
 		assertMissing(t, view(m), "old line")

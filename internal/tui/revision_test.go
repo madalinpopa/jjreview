@@ -53,7 +53,7 @@ func TestRevisionNavigation_success(t *testing.T) {
 	}
 
 	t.Run("navigation clears the selection of the previous revision", func(t *testing.T) {
-		m := press(t, loaded(t, revisionSource()), "h", "j", "l", "space", "ctrl+n", "ctrl+n")
+		m := press(t, loaded(t, revisionSource()), "ctrl+h", "j", "ctrl+l", "space", "ctrl+n", "ctrl+n")
 
 		assertContains(t, view(m), "nothing selected")
 	})
@@ -103,7 +103,7 @@ func TestRevisionNavigation_afterCommit(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			src := revisionSource()
-			m := press(t, loaded(t, src), "h", "j", "l", "space", "c", "ctrl+s")
+			m := press(t, loaded(t, src), "ctrl+h", "j", "ctrl+l", "space", "c", "ctrl+s")
 
 			press(t, m, tt.key)
 
@@ -133,7 +133,7 @@ func TestRevisionNavigation_blocked(t *testing.T) {
 		t.Run(key+" is blocked after an incomplete split", func(t *testing.T) {
 			src := revisionSource()
 			src.splitErr = fmt.Errorf("split: %w: reload failed", jj.ErrSplitIncomplete)
-			m := press(t, loaded(t, src), "h", "j", "l", "space", "c", "ctrl+s")
+			m := press(t, loaded(t, src), "ctrl+h", "j", "ctrl+l", "space", "c", "ctrl+s")
 			calls := len(src.changeRevs)
 
 			m = press(t, m, key)

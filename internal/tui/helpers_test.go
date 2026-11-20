@@ -222,7 +222,7 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
-	case "ctrl+c", "ctrl+r", "ctrl+s", "ctrl+d", "ctrl+u", "ctrl+n", "ctrl+p":
+	case "ctrl+c", "ctrl+r", "ctrl+s", "ctrl+d", "ctrl+u", "ctrl+n", "ctrl+p", "ctrl+h", "ctrl+l":
 		return tea.KeyPressMsg{Code: rune(k[len(k)-1]), Mod: tea.ModCtrl}
 	case "ctrl+enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl}

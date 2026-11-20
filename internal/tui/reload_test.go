@@ -19,7 +19,7 @@ func TestReload_success(t *testing.T) {
 	})
 
 	t.Run("R keeps the current file", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l", "R")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "R")
 
 		if got := m.CurrentFile(); got != "src/main.go" {
 			t.Errorf("CurrentFile() = %q, want %q", got, "src/main.go")
@@ -28,7 +28,7 @@ func TestReload_success(t *testing.T) {
 
 	t.Run("R reloads the revision left after a commit", func(t *testing.T) {
 		src := newSource()
-		m := press(t, loaded(t, src), "h", "j", "l", "space", "c", "ctrl+s")
+		m := press(t, loaded(t, src), "ctrl+h", "j", "ctrl+l", "space", "c", "ctrl+s")
 
 		press(t, m, "R")
 
@@ -54,7 +54,7 @@ func TestReload_success(t *testing.T) {
 
 func TestReload_reloading(t *testing.T) {
 	t.Run("c does not open the commit modal until the reload arrives", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "h", "j", "l", "space", "R")
+		m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l", "space", "R")
 		m, reload := update(t, m, keyMsg("R"))
 
 		m = press(t, m, "c")

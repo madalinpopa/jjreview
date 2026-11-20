@@ -31,8 +31,8 @@ func TestJump_success(t *testing.T) {
 	}{
 		"G moves to the last diff row":           {keys: []string{"G"}, want: position{file: "big.txt", cursor: 100}},
 		"g moves to the first change":            {keys: []string{"G", "g"}, want: position{file: "big.txt", cursor: 1}},
-		"G in the file pane picks the last file": {keys: []string{"h", "G"}, want: position{file: "other.txt", cursor: 1, files: true}},
-		"g in the file pane picks the first":     {keys: []string{"h", "G", "g"}, want: position{file: "big.txt", cursor: 1, files: true}},
+		"G in the file pane picks the last file": {keys: []string{"ctrl+h", "G"}, want: position{file: "other.txt", cursor: 1, files: true}},
+		"g in the file pane picks the first":     {keys: []string{"ctrl+h", "G", "g"}, want: position{file: "big.txt", cursor: 1, files: true}},
 	}
 
 	for name, tt := range tests {
@@ -62,16 +62,16 @@ func TestKeyAlias_success(t *testing.T) {
 		keys []string
 		same []string
 	}{
-		"left is h":       {keys: []string{"left"}, same: []string{"h"}},
-		"right is l":      {keys: []string{"h", "right"}, same: []string{"h", "l"}},
-		"tab is h":        {keys: []string{"tab"}, same: []string{"h"}},
-		"tab twice is l":  {keys: []string{"tab", "tab"}, same: []string{"h", "l"}},
+		"left is ^h":      {keys: []string{"left"}, same: []string{"ctrl+h"}},
+		"right is ^l":     {keys: []string{"ctrl+h", "right"}, same: []string{"ctrl+h", "ctrl+l"}},
+		"tab is ^h":       {keys: []string{"tab"}, same: []string{"ctrl+h"}},
+		"tab twice is ^l": {keys: []string{"tab", "tab"}, same: []string{"ctrl+h", "ctrl+l"}},
 		"pgdown is ^d":    {keys: []string{"pgdown"}, same: []string{"ctrl+d"}},
 		"pgup is ^u":      {keys: []string{"pgdown", "pgdown", "pgup"}, same: []string{"ctrl+d", "ctrl+d", "ctrl+u"}},
 		"home is g":       {keys: []string{"G", "home"}, same: []string{"G", "g"}},
 		"end is G":        {keys: []string{"end"}, same: []string{"G"}},
-		"end in files":    {keys: []string{"h", "end"}, same: []string{"h", "G"}},
-		"pgdown in files": {keys: []string{"h", "pgdown"}, same: []string{"h", "ctrl+d"}},
+		"end in files":    {keys: []string{"ctrl+h", "end"}, same: []string{"ctrl+h", "G"}},
+		"pgdown in files": {keys: []string{"ctrl+h", "pgdown"}, same: []string{"ctrl+h", "ctrl+d"}},
 	}
 
 	for name, tt := range tests {
@@ -95,7 +95,7 @@ func TestFileJump_success(t *testing.T) {
 		"K opens the previous file":   {keys: []string{"J", "J", "K"}, want: "src/main.go"},
 		"K clamps at the first file":  {keys: []string{"K"}, want: "src/ui/view.go"},
 		"J clamps at the last file":   {keys: []string{"J", "J", "J", "J", "J"}, want: "img.png"},
-		"J works from the file pane":  {keys: []string{"h", "J"}, want: "src/main.go"},
+		"J works from the file pane":  {keys: []string{"ctrl+h", "J"}, want: "src/main.go"},
 		"K returns to the first file": {keys: []string{"J", "J", "K", "K"}, want: "src/ui/view.go"},
 	}
 
@@ -128,13 +128,13 @@ func TestHunkJump_success(t *testing.T) {
 		"[ moves to the start of the current hunk":      {keys: []string{"["}, want: 1},
 		"[ moves to the previous hunk":                  {keys: []string{"]", "["}, want: 1},
 		"[ stays on the first hunk":                     {keys: []string{"[", "["}, want: 1},
-		"] works with the file pane focused":            {keys: []string{"h", "]"}, want: 5},
+		"] works with the file pane focused":            {keys: []string{"ctrl+h", "]"}, want: 5},
 		"[ from inside the last hunk goes to its start": {keys: []string{"]", "j", "j", "["}, want: 5},
 	}
 
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			m := press(t, loaded(t, newSource()), "h", "j", "l")
+			m := press(t, loaded(t, newSource()), "ctrl+h", "j", "ctrl+l")
 
 			m = press(t, m, tt.keys...)
 
