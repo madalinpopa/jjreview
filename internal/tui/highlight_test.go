@@ -151,7 +151,7 @@ func TestHighlight_success(t *testing.T) {
 			diff.Line{Kind: diff.LineContext, Text: "var end = 1", OldNo: 2, NewNo: 3},
 		)
 		src.contents["parent1:cmd/app/main.go"] = "package main\nvar end = 1\n"
-		m := press(t, loaded(t, src), "S", "c", "ctrl+s", "j")
+		m := press(t, loaded(t, src), "S", "c", "ctrl+s", "z")
 		if len(src.splits) != 1 {
 			t.Fatalf("splits = %d, want 1", len(src.splits))
 		}
