@@ -30,6 +30,7 @@ type Model struct {
 	gen         llm.Provider
 	rev         string
 	pal         theme.Theme
+	keys        keyMap
 	loaded      bool
 	reloading   bool
 	err         error
@@ -49,11 +50,13 @@ type Model struct {
 	full        bool
 	filesFocus  bool
 	status      string
+	armed       string
 	width       int
 	height      int
 	modal       *commitModal
 	genSeq      int
 	help        bool
+	helpTop     int
 	blocked     bool
 	editor      func(ctx context.Context, path string) *exec.Cmd
 	root        string
@@ -67,6 +70,7 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		gen:         gen,
 		rev:         rev,
 		pal:         theme.Default(),
+		keys:        newKeyMap(),
 		contents:    map[contentKey]string{},
 		contentErrs: map[contentKey]error{},
 		highlights:  map[highlightKey]fileHighlight{},
