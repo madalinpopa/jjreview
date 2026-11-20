@@ -81,7 +81,19 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return err
 	}
 
-	model := tui.New(ctx, jj.New(opts.repo, exe), provider(cfg), opts.rev).
+	gen, err := provider(cfg)
+	if err != nil {
+		return err
+	}
+	if c, ok := gen.(io.Closer); ok {
+		defer func() {
+			if err := c.Close(); err != nil {
+				fmt.Fprintln(os.Stderr, "jjr: warning:", err)
+			}
+		}()
+	}
+
+	model := tui.New(ctx, jj.New(opts.repo, exe), gen, opts.rev).
 		WithTheme(cfg.Theme).
 		WithEditor(editorCommand(os.Getenv("VISUAL"), os.Getenv("EDITOR")))
 	if _, err := tea.NewProgram(model, tea.WithContext(ctx)).Run(); err != nil && !errors.Is(err, tea.ErrProgramKilled) {
@@ -90,12 +102,19 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	return nil
 }
 
-func provider(cfg config.Config) llm.Provider {
-	var opts []option.RequestOption
-	if cfg.Anthropic.APIKey != "" {
-		opts = append(opts, option.WithAPIKey(cfg.Anthropic.APIKey))
+func provider(cfg config.Config) (llm.Provider, error) {
+	switch cfg.Provider {
+	case config.ProviderAnthropic:
+		var opts []option.RequestOption
+		if cfg.Anthropic.APIKey != "" {
+			opts = append(opts, option.WithAPIKey(cfg.Anthropic.APIKey))
+		}
+		return llm.NewAnthropic(cfg.Anthropic.Model, opts...), nil
+	case config.ProviderCopilot:
+		return llm.NewCopilot(cfg.Copilot.Model), nil
+	default:
+		return nil, fmt.Errorf("unknown provider %q", cfg.Provider)
 	}
-	return llm.NewAnthropic(cfg.Anthropic.Model, opts...)
 }
 
 func parseArgs(args []string) (options, error) {
