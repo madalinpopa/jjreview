@@ -82,9 +82,13 @@ The file tree is on the left and the unified diff of the current file on the rig
 
 | Key | Action |
 |-----|--------|
-| `h` / `l` | Focus the file pane / the diff pane |
+| `h` / `l` (`←` / `→`) | Focus the file pane / the diff pane |
+| `tab` | Switch between the file pane and the diff pane |
 | `j` / `k` | Next / previous file in the file pane, next / previous line in the diff pane |
-| `ctrl+d` / `ctrl+u` | Half a page down / up in the focused pane |
+| `ctrl+d` / `ctrl+u` (`pgdown` / `pgup`) | Half a page down / up in the focused pane |
+| `g` / `G` (`home` / `end`) | First / last file in the file pane, first / last line in the diff pane |
+| `]` / `[` | Next hunk / start of the current or previous hunk |
+| `J` / `K` | Next / previous file from either pane |
 | `ctrl+n` / `ctrl+p` | Review the child / parent revision; selections in the current revision are dropped |
 | `@` | Review the working-copy revision again; selections in the current revision are dropped |
 | `space` | Select the hunk under the cursor (in the file pane: the whole file) |
@@ -96,8 +100,10 @@ The file tree is on the left and the unified diff of the current file on the rig
 | `R` | Reload the change to pick up edits made outside jjr; stays on the current file and drops selections |
 | `e` | Open the current file in `$VISUAL` / `$EDITOR` (default `vi`); the change reloads when the editor exits. Only on the working-copy revision |
 | `f` | Switch between changes only and the full file |
-| `?` | Show every key in a popup; the bottom bar lists only the essentials |
+| `?` | Show every key in a popup (`j` / `k` scroll it when it does not fit); the bottom bar lists only the essentials |
 | `q` | Quit |
+
+`q`, `ctrl+n`, `ctrl+p`, `@`, `R` and `e` drop the selected hunks, so with a selection they first ask you to press the same key again. `ctrl+c` always quits at once.
 
 In the commit dialog the message is generated from the selected hunks and can be edited freely:
 
