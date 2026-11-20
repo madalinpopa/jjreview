@@ -11,7 +11,7 @@ Set WindowBar Colorful
 
 Hide
 Sleep 1s
-Type `root=$(docs/demo-setup.sh) && go build -o "$root/bin/jjr" ./cmd/jjr && export PS1='> ' PATH="$root/bin:$PATH" JJ_CONFIG="$root/jj.toml" && cd "$root/repo" && clear || exit 1`
+Type `root=$(docs/demo-setup.sh) && go build -o "$root/bin/jjr" ./cmd/jjr && export PS1='> ' PATH="$root/bin:$PATH" JJ_CONFIG="$root/jj.toml" XDG_CONFIG_HOME="$root/config" && cd "$root/repo" && clear || exit 1`
 Enter
 Wait@60s
 Show

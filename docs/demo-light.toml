@@ -1,0 +1,50 @@
+[theme.base]
+page = "none"
+text = "#575279"
+card = "none"
+border = "#dfdad9"
+title = "#575279"
+header = "#797593"
+strong = "#575279"
+muted = "#797593"
+faint = "#9893a5"
+dim = "#cecacd"
+selection = "#286983"
+on_selection = "#faf4ed"
+cursor_bg = "#f2e9e1"
+
+[theme.diff]
+added = "#286983"
+added_bg = "#e1e6e1"
+removed = "#b4637a"
+removed_bg = "#efdedc"
+hunk = "#907aa9"
+hunk_bg = "#eae2e3"
+hunk_bar = "#907aa9"
+folded_bar = "#9893a5"
+stats = "#797593"
+
+[theme.files]
+dir_name = "#9893a5"
+picked = "#907aa9"
+
+[theme.bar]
+chip = "#f2e9e1"
+chip_text = "#907aa9"
+key = "#ea9d34"
+status = "#d7827e"
+badge_idle = "#f2e9e1"
+badge_idle_fg = "#797593"
+badge_selected = "#dfdad9"
+
+[theme.modal]
+border = "#cecacd"
+input = "#fffaf3"
+
+[theme.syntax]
+type = "#56949f"
+keyword = "#286983"
+function = "#d7827e"
+string = "#ea9d34"
+literal = "#907aa9"
+comment = "#9893a5"

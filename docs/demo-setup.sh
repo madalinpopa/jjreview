@@ -12,6 +12,15 @@ paginate = "never"
 EOF
 export JJ_CONFIG="$root/jj.toml"
 
+config=${XDG_CONFIG_HOME:-$HOME/.config}
+mkdir -p "$root/config/jjr"
+for entry in "$config"/*; do
+	if [ -e "$entry" ] && [ "$(basename "$entry")" != jjr ]; then
+		ln -s "$entry" "$root/config/"
+	fi
+done
+cp "${JJR_DEMO_THEME:-docs/demo-dark.toml}" "$root/config/jjr/config.toml"
+
 mkdir -p "$root/repo/server" "$root/repo/cmd/shortener"
 cd "$root/repo"
 jj git init --quiet

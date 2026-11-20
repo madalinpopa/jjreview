@@ -1,2 +1,2 @@
-Set Theme "GitHub Dark"
+Set Theme "Rose Pine"
 Source docs/demo-steps.tape
