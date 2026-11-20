@@ -61,7 +61,7 @@ type Model struct {
 }
 
 func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
-	return Model{
+	m := Model{
 		ctx:         ctx,
 		src:         src,
 		gen:         gen,
@@ -73,6 +73,8 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		width:       defaultWidth,
 		height:      defaultHeight,
 	}
+	m.treeWidth = m.measureTree()
+	return m
 }
 
 func (m Model) WithTheme(t theme.Theme) Model {
@@ -174,6 +176,7 @@ func (m *Model) applyLoad(msg loadedMsg) tea.Cmd {
 			m.reviews[i].keepView(f, prevFiles[j], prevReviews[j])
 		}
 	}
+	m.treeWidth = m.measureTree()
 	m.fileIdx = max(slices.IndexFunc(m.files, func(f diff.File) bool { return f.Path() == m.reloadPath }), 0)
 	m.reloadPath = ""
 	clear(m.contents)
