@@ -68,6 +68,22 @@ func TestLoad_success(t *testing.T) {
 		}
 	})
 
+	t.Run("highlights the current file row like the diff cursor", func(t *testing.T) {
+		m := loaded(t, newSource())
+
+		got, raw := view(m), m.View().Content
+
+		if l := lineWith(t, got, "○ view.go"); !strings.HasPrefix(l, "│▌") {
+			t.Errorf("current file row = %q, want a selection bar", l)
+		}
+		if l := lineWith(t, got, "○ main.go"); strings.HasPrefix(l, "│▌") {
+			t.Errorf("other file row = %q, want no selection bar", l)
+		}
+		if params := sgrBefore(t, raw, "view.go"); !hasSGR(params, "100") {
+			t.Errorf("SGR before current file = %q, want cursor background 100", params)
+		}
+	})
+
 	t.Run("renders hunk headers, gaps and one new line number gutter", func(t *testing.T) {
 		m := press(t, loaded(t, newSource()), "ctrl+n", "d")
 

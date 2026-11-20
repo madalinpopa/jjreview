@@ -221,18 +221,23 @@ func (m Model) filesCard() string {
 
 func (m Model) treeLine(r treeRow, width int) string {
 	p := m.pal
-	indent := span(lipgloss.NewStyle(), strings.Repeat(" ", 1+r.depth*2))
 	if r.dir {
-		left := []seg{indent, span(fg(p.Muted), "▾ "), span(fg(p.DirName), r.name)}
+		left := []seg{span(lipgloss.NewStyle(), strings.Repeat(" ", 1+r.depth*2)), span(fg(p.Muted), "▾ "), span(fg(p.DirName), r.name)}
 		return paint(width, p.Card, left, []seg{span(fg(p.Muted), fmt.Sprint(r.count)), span(lipgloss.NewStyle(), " ")})
 	}
-	name := fg(p.Strong)
+	name, bg, bar := fg(p.Strong), p.Card, p.Card
 	if r.file == m.fileIdx {
-		name = fg(p.Selection).Bold(true)
+		name, bg, bar = fg(p.Selection).Bold(true), p.CursorBg, p.Selection
 	}
 	st := m.reviews[r.file].state()
-	left := []seg{indent, span(m.glyphStyle(st), st.glyph()), span(lipgloss.NewStyle(), " "), span(name, r.name)}
-	return paint(width, p.Card, left, []seg{span(fg(p.Muted), m.fileSummary(r.file)), span(lipgloss.NewStyle(), " ")})
+	left := []seg{
+		span(fg(bar), barGlyph(bar)),
+		span(lipgloss.NewStyle(), strings.Repeat(" ", r.depth*2)),
+		span(m.glyphStyle(st), st.glyph()),
+		span(lipgloss.NewStyle(), " "),
+		span(name, r.name),
+	}
+	return paint(width, bg, left, []seg{span(fg(p.Muted), m.fileSummary(r.file)), span(lipgloss.NewStyle(), " ")})
 }
 
 func (m Model) glyphStyle(st fileState) lipgloss.Style {
