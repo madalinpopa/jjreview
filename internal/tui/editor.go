@@ -20,7 +20,9 @@ type EditorFinishedMsg struct {
 }
 
 type editCheckedMsg struct {
-	err error
+	path  string
+	bgGen int
+	err   error
 }
 
 type queryBackgroundMsg struct{}
@@ -34,10 +36,10 @@ func (m Model) WithEditor(editor func(ctx context.Context, path string) *exec.Cm
 	return m
 }
 
-func (m *Model) canEdit() bool {
+func (m *Model) editablePath() (string, bool) {
 	file, ok := m.currentFile()
 	if !m.loaded || m.reloading || !ok {
-		return false
+		return "", false
 	}
 	switch {
 	case !m.change.WorkingCopy:
@@ -47,48 +49,59 @@ func (m *Model) canEdit() bool {
 	case m.editor == nil:
 		m.status = "no editor configured"
 	default:
-		return true
+		return filepath.Join(m.root, file.Path()), true
 	}
-	return false
+	return "", false
 }
 
-func (m *Model) checkEdit() tea.Cmd {
+func (m *Model) startEdit(path string) tea.Cmd {
 	m.reloading = true
-	ctx, src, rev := m.ctx, m.src, jj.WorkingCopyRevset(m.target)
+	if m.bgPending == 0 {
+		return m.checkEdit(path)
+	}
+	return m.hold(m.checkEdit(path))
+}
+
+func (m *Model) checkEdit(path string) tea.Cmd {
+	ctx, src, rev, gen := m.ctx, m.src, jj.WorkingCopyRevset(m.target), m.bgGen
 	return func() tea.Msg {
 		_, err := src.Change(ctx, rev)
-		return editCheckedMsg{err: err}
+		return editCheckedMsg{path: path, bgGen: gen, err: err}
 	}
 }
 
 func (m *Model) editChecked(msg editCheckedMsg) tea.Cmd {
-	m.reloading = false
 	switch {
 	case errors.Is(msg.err, jj.ErrNoRevision):
+		m.reloading = false
 		m.change.WorkingCopy = false
 		m.status = movedStatus
 	case msg.err != nil:
+		m.reloading = false
 		m.status = "edit: " + msg.err.Error()
+	case m.bgPending > 0:
+		return m.hold(m.checkEdit(msg.path))
+	case msg.bgGen != m.bgGen:
+		return m.checkEdit(msg.path)
 	default:
-		return m.openEditor()
+		return m.openEditor(msg.path)
 	}
 	return nil
 }
 
-func (m *Model) openEditor() tea.Cmd {
-	file, _ := m.currentFile()
-	cmd := m.editor(m.ctx, filepath.Join(m.root, file.Path()))
-	m.reloading = true
-	run := tea.ExecProcess(cmd, func(err error) tea.Msg {
+func (m *Model) openEditor(path string) tea.Cmd {
+	m.editing = true
+	run := tea.ExecProcess(m.editor(m.ctx, path), func(err error) tea.Msg {
 		return EditorFinishedMsg{Err: err}
 	})
 	if m.autoTheme() {
-		run = tea.Sequence(tea.Raw(ansi.ResetModeLightDark), run)
+		return tea.Sequence(tea.Raw(ansi.ResetModeLightDark), run)
 	}
-	if m.bgPending == 0 {
-		return run
-	}
-	m.held = run
+	return run
+}
+
+func (m *Model) hold(cmd tea.Cmd) tea.Cmd {
+	m.held = cmd
 	m.holdSeq++
 	seq := m.holdSeq
 	return tea.Tick(editorHoldTimeout, func(time.Time) tea.Msg {
@@ -97,6 +110,11 @@ func (m *Model) openEditor() tea.Cmd {
 }
 
 func (m *Model) requestBackground() tea.Cmd {
+	if m.editing {
+		m.bgDeferred = true
+		return nil
+	}
+	m.bgGen++
 	m.bgPending++
 	return tea.RequestBackgroundColor
 }
@@ -116,6 +134,8 @@ func (m *Model) releaseEditor() tea.Cmd {
 }
 
 func (m *Model) editorFinished(msg EditorFinishedMsg) tea.Cmd {
+	deferred := m.bgDeferred
+	m.editing, m.bgDeferred = false, false
 	var cmd tea.Cmd
 	if msg.Err != nil {
 		m.reloading = false
@@ -125,6 +145,9 @@ func (m *Model) editorFinished(msg EditorFinishedMsg) tea.Cmd {
 	}
 	if m.autoTheme() {
 		return tea.Batch(cmd, tea.Raw(ansi.SetModeLightDark), m.requestBackground())
+	}
+	if deferred {
+		return tea.Batch(cmd, m.requestBackground())
 	}
 	return cmd
 }

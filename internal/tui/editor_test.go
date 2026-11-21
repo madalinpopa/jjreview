@@ -32,9 +32,28 @@ func edit(t *testing.T, m tui.Model) (tui.Model, tea.Cmd) {
 func TestEditor_success(t *testing.T) {
 	t.Run("e opens the current file from the workspace root", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, newSource()), "tab", "j", "tab"), &opened)
+		m := withEditor(answered(t, press(t, loaded(t, newSource()), "tab", "j", "tab")), &opened)
 
 		_, cmd := edit(t, m)
+
+		if cmd == nil {
+			t.Fatal("edit cmd = nil, want an editor command")
+		}
+		if len(opened) != 1 || opened[0] != "/repo/src/main.go" {
+			t.Errorf("opened = %v, want [/repo/src/main.go]", opened)
+		}
+	})
+
+	t.Run("opens the file e was pressed on after moving to another file", func(t *testing.T) {
+		var opened []string
+		m := withEditor(answered(t, press(t, loaded(t, newSource()), "tab", "j", "tab")), &opened)
+		m, check := update(t, m, keyMsg("e"))
+		m = press(t, m, "J")
+		if got := m.CurrentFile(); got == "src/main.go" {
+			t.Fatalf("CurrentFile() = %q after J, want another file", got)
+		}
+
+		_, cmd := update(t, m, check())
 
 		if cmd == nil {
 			t.Fatal("edit cmd = nil, want an editor command")

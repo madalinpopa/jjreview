@@ -36,6 +36,9 @@ type Model struct {
 	dark        bool
 	bgAnswered  bool
 	bgPending   int
+	bgGen       int
+	bgDeferred  bool
+	editing     bool
 	held        tea.Cmd
 	holdSeq     int
 	keys        keyMap
@@ -115,7 +118,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.resizeModal()
 		m.resizeSearch()
 	case queryBackgroundMsg:
 		cmd = m.requestBackground()
@@ -177,6 +179,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.updateQuery(msg)
 		}
 	}
+	m.resizeModal()
 	m.ensureHighlight()
 	m.scroll()
 	return m, cmd

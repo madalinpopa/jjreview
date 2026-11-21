@@ -73,7 +73,6 @@ func (m *Model) openModal() tea.Cmd {
 	}
 	ctx, cancel := context.WithCancel(m.ctx)
 	m.modal = &commitModal{ctx: ctx, cancel: cancel, input: newInput(m.pal), picks: picks}
-	m.resizeModal()
 	return m.generate()
 }
 
@@ -197,7 +196,13 @@ func (m *Model) resizeModal() {
 	if m.modal == nil {
 		return
 	}
-	m.modal.input.SetWidth(max(m.modalWidth()-6, 1))
+	in := &m.modal.input
+	if w := boxInner(m.modalInner()); in.Width() != w {
+		in.SetWidth(w)
+	}
+	if h := m.modalLayout().input; in.Height() != h {
+		in.SetHeight(h)
+	}
 }
 
 func (m Model) modalWidth() int {

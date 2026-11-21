@@ -431,6 +431,93 @@ func TestModalErrors_footerVisible(t *testing.T) {
 	}
 }
 
+func TestModalLayout_success(t *testing.T) {
+	stale := fmt.Errorf("split %q: %w: %w", "kxyzabcdefgh", jj.ErrStaleRevision, errors.New("jj split: exit status 1"))
+
+	t.Run("a short terminal keeps the footer and the stale message with four previewed hunks", func(t *testing.T) {
+		src := newSource()
+		src.splitErr = stale
+		m := start(t, src, &fakeGenerator{text: "msg"}, 80, 18)
+		m = press(t, m, "tab", "space", "j", "space", "j", "space", "c")
+		assertContains(t, view(m), "generated from 4 hunks")
+
+		m = press(t, m, "ctrl+s")
+
+		assertContains(t, view(m), "revision changed since its diff was loaded", "review it again", "esc cancel", "ctrl+s commit")
+	})
+
+	t.Run("a narrow terminal shows the commit shortcut", func(t *testing.T) {
+		m := start(t, newSource(), &fakeGenerator{text: "msg"}, 40, 30)
+
+		m = press(t, m, "tab", "j", "tab", "space", "c")
+
+		assertContains(t, view(m), "ctrl+s commit", "esc cancel")
+	})
+
+	t.Run("long message lines in a small dialog keep the footer", func(t *testing.T) {
+		line := strings.Repeat("x", 28) + "y"
+		m := start(t, newSource(), &fakeGenerator{text: strings.Join([]string{line, line, line, line}, "\n")}, 40, 16)
+
+		m = press(t, m, "tab", "j", "tab", "space", "c")
+
+		assertContains(t, view(m), "ctrl+s commit", "esc")
+	})
+
+	t.Run("a very narrow terminal keeps the commit and cancel keys", func(t *testing.T) {
+		m := start(t, newSource(), &fakeGenerator{text: "msg"}, 25, 30)
+
+		m = press(t, m, "tab", "j", "tab", "space", "c")
+
+		assertContains(t, view(m), "^s commit · esc")
+	})
+
+	t.Run("a very short terminal keeps the title, message and footer", func(t *testing.T) {
+		m := start(t, newSource(), &fakeGenerator{text: "msg"}, 80, 10)
+
+		m = press(t, m, "tab", "j", "tab", "space", "c")
+
+		got := view(m)
+		assertContains(t, got, "New commit", "msg", "esc cancel", "ctrl+s commit")
+		lines := strings.Split(got, "\n")
+		if last := lines[len(lines)-1]; !strings.Contains(last, "╰") || !strings.Contains(last, "╯") {
+			t.Errorf("View() last line = %q, want the dialog's bottom border", last)
+		}
+	})
+
+	t.Run("the minimum height keeps the footer", func(t *testing.T) {
+		m := start(t, newSource(), &fakeGenerator{text: "msg"}, 80, 8)
+
+		m = press(t, m, "tab", "j", "tab", "space", "c")
+
+		assertContains(t, view(m), "New commit", "msg", "esc cancel", "ctrl+s commit")
+	})
+
+	t.Run("a very short terminal keeps the error and footer", func(t *testing.T) {
+		src := newSource()
+		src.splitErr = stale
+		m := start(t, src, &fakeGenerator{text: "msg"}, 80, 10)
+		m = press(t, m, "tab", "j", "tab", "space", "c")
+
+		m = press(t, m, "ctrl+s")
+
+		assertContains(t, view(m), "revision changed", "esc cancel", "ctrl+s commit")
+	})
+
+	t.Run("the stale message wins over a generation error", func(t *testing.T) {
+		src := newSource()
+		src.splitErr = stale
+		gen := &fakeGenerator{err: errors.New(strings.Repeat("the model endpoint refused the request ", 6) + "tailword")}
+		m := start(t, src, gen, 80, 18)
+		m = press(t, m, "tab", "j", "tab", "space", "c", "x")
+
+		m = press(t, m, "ctrl+s")
+
+		got := view(m)
+		assertContains(t, got, "revision changed since its diff was loaded", "review it again", "esc cancel", "ctrl+s commit")
+		assertMissing(t, got, "tailword")
+	})
+}
+
 func equalSplit(a, b splitCall) bool {
 	return a.changeID == b.changeID && a.message == b.message && slices.Equal(a.files, b.files)
 }
