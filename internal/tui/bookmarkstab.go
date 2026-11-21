@@ -84,6 +84,9 @@ func (m *Model) bookmarkEffects(cmd tea.Cmd, in bookmarks.Intent) tea.Cmd {
 		m.status = ""
 	}
 	if in.Refresh {
+		if m.view == logView {
+			m.log.RestorePosition(m.log.HoldPosition().Targeting(m.log.SelectedChange()))
+		}
 		return tea.Batch(cmd, m.invalidate())
 	}
 	return cmd

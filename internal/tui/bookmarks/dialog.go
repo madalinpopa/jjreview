@@ -36,6 +36,7 @@ type bookmarkMove struct {
 
 type dialog struct {
 	editing    bool
+	picked     bool
 	oldName    string
 	nameEdited bool
 	oldRef     bookmarkRef
@@ -255,15 +256,17 @@ func joinWarnings(warnings []string) string {
 
 func (b *Model) applySaved(msg savedMsg) Intent {
 	var in Intent
+	mo := b.modal
 	if msg.refresh {
-		b.want = msg.name
+		if mo == nil || !mo.picked {
+			b.want = msg.name
+		}
 		in.Refresh = true
 	}
 	refused := msg.refused != bookmarkMove{}
 	if msg.err == nil && !refused {
 		in.Status = "✓ saved " + msg.name
 	}
-	mo := b.modal
 	if mo == nil {
 		return in
 	}

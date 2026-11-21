@@ -198,6 +198,8 @@ func (b *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Intent, bool) {
 		return cmd, in, true
 	case savedMsg:
 		return nil, b.applySaved(msg), true
+	case pickedMsg:
+		return nil, b.applyPicked(msg), true
 	case deletedMsg:
 		return nil, b.applyDeleted(msg), true
 	}
