@@ -299,22 +299,21 @@ func TestCommit_success(t *testing.T) {
 		assertContains(t, view(m), "✓ main.go", "1/4 ✓", "@ rest2zzz")
 	})
 
-	t.Run("whole-file units become content or deletions", func(t *testing.T) {
+	t.Run("whole-file units keep right paths or delete left paths", func(t *testing.T) {
 		src := newSource()
 		src.files = []diff.File{
 			imageFile(),
 			{OldPath: "old.txt", NewPath: "new.txt", OldMode: "100644", NewMode: "100644", Status: diff.StatusRenamed},
 			{OldPath: "gone.txt", Status: diff.StatusDeleted, Hunks: []diff.Hunk{{OldStart: 1, OldLines: 1, Lines: []diff.Line{{Kind: diff.LineRemoved, Text: "bye", OldNo: 1}}}}},
 		}
-		src.contents["commit1:new.txt"] = "moved"
 		m := loaded(t, src)
 
 		press(t, m, "S", "tab", "j", "tab", "S", "tab", "j", "tab", "S", "c", "ctrl+s")
 
 		want := []jj.SplitFile{
 			{Path: "gone.txt", Delete: true},
-			{Path: "img.png", Content: "PNG", Mode: "100644"},
-			{Path: "new.txt", Content: "moved", Mode: "100644"},
+			{Path: "img.png", FromRight: true},
+			{Path: "new.txt", FromRight: true},
 			{Path: "old.txt", Delete: true},
 		}
 		if len(src.splits) != 1 || !slices.Equal(src.splits[0].files, want) {
@@ -365,10 +364,9 @@ func TestCommitIncomplete_success(t *testing.T) {
 }
 
 func TestCommitModes_success(t *testing.T) {
-	t.Run("mode-only change is a whole-file unit with the new mode", func(t *testing.T) {
+	t.Run("mode-only change is a whole-file unit taken from the right", func(t *testing.T) {
 		src := newSource()
 		src.files = []diff.File{{OldPath: "run.sh", NewPath: "run.sh", OldMode: "100644", NewMode: "100755"}}
-		src.contents["commit1:run.sh"] = "#!/bin/sh\n"
 		m := loaded(t, src)
 
 		assertContains(t, view(m), "mode 100644 → 100755")
@@ -377,7 +375,7 @@ func TestCommitModes_success(t *testing.T) {
 		assertContains(t, view(m), "● run.sh", "1 hunk selected")
 		press(t, m, "c", "ctrl+s")
 
-		want := []jj.SplitFile{{Path: "run.sh", Content: "#!/bin/sh\n", Mode: "100755"}}
+		want := []jj.SplitFile{{Path: "run.sh", FromRight: true}}
 		if len(src.splits) != 1 || !slices.Equal(src.splits[0].files, want) {
 			t.Errorf("splits = %+v, want files %+v", src.splits, want)
 		}
@@ -391,7 +389,6 @@ func TestCommitModes_success(t *testing.T) {
 				{Kind: diff.LineAdded, Text: "b", NewNo: 1},
 			}},
 		}}}
-		src.contents["commit1:link"] = "b"
 		m := loaded(t, src)
 
 		m = press(t, m, "space")
@@ -399,7 +396,7 @@ func TestCommitModes_success(t *testing.T) {
 
 		m = press(t, m, "S", "c", "ctrl+s")
 
-		want := []jj.SplitFile{{Path: "link", Content: "b", Mode: "120000"}}
+		want := []jj.SplitFile{{Path: "link", FromRight: true}}
 		if len(src.splits) != 1 || !slices.Equal(src.splits[0].files, want) {
 			t.Errorf("splits = %+v, want files %+v", src.splits, want)
 		}

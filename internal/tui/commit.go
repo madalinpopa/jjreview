@@ -26,7 +26,6 @@ type commitRequest struct {
 	changeID string
 	headID   string
 	message  string
-	commitID string
 	parentID string
 	jobs     []commitJob
 	cache    map[contentKey]string
@@ -78,7 +77,6 @@ func (m Model) commitRequest(message string, picks []pick) commitRequest {
 		changeID: m.target,
 		headID:   m.targetHead,
 		message:  message,
-		commitID: m.change.CommitID,
 		parentID: m.change.Parents[0],
 		cache:    maps.Clone(m.contents),
 	}
@@ -113,7 +111,7 @@ func runCommit(ctx context.Context, src Source, req commitRequest) tea.Cmd {
 		}
 		var files []jj.SplitFile
 		for _, job := range req.jobs {
-			split, err := splitFiles(job, get, req.commitID, req.parentID)
+			split, err := splitFiles(job, get, req.parentID)
 			if err != nil {
 				return committedMsg{fetched: fetched, err: err}
 			}
@@ -127,18 +125,14 @@ func runCommit(ctx context.Context, src Source, req commitRequest) tea.Cmd {
 	}
 }
 
-func splitFiles(job commitJob, get func(contentKey) (string, error), commitID, parentID string) ([]jj.SplitFile, error) {
+func splitFiles(job commitJob, get func(contentKey) (string, error), parentID string) ([]jj.SplitFile, error) {
 	f := job.file
 	var out jj.SplitFile
 	switch {
 	case job.whole && f.Status == diff.StatusDeleted:
 		out = jj.SplitFile{Path: f.OldPath, Delete: true}
 	case job.whole && (wholeOnly(f) || f.Status == diff.StatusRenamed):
-		content, err := get(contentKey{rev: commitID, path: f.NewPath})
-		if err != nil {
-			return nil, err
-		}
-		out = jj.SplitFile{Path: f.NewPath, Content: content, Mode: f.NewMode}
+		out = jj.SplitFile{Path: f.NewPath, FromRight: true}
 	default:
 		content, err := applyHunks(job, get, parentID)
 		if err != nil {
