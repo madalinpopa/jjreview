@@ -845,3 +845,128 @@ func TestSplit_failedAfterPublishing(t *testing.T) {
 		t.Errorf("Split() selected ChangeID = %q, want %q", selected.ChangeID, loaded.ChangeID)
 	}
 }
+
+func TestSplit_failedGoneBeforeLookup(t *testing.T) {
+	tests := map[string]struct {
+		change  func(t *testing.T, dir, op string, loaded jj.Change)
+		wantErr error
+	}{
+		"abandoned": {
+			change: func(t *testing.T, dir, _ string, loaded jj.Change) {
+				t.Helper()
+				runJJ(t, dir, "abandon", "-r", `change_id("`+loaded.ChangeID+`")`)
+			},
+			wantErr: jj.ErrNoRevision,
+		},
+		"divergent": {
+			change: func(t *testing.T, dir, op string, loaded jj.Change) {
+				t.Helper()
+				runJJ(t, dir, "--at-op", op, "describe", "-r", `change_id("`+loaded.ChangeID+`")`, "-m", "sibling")
+			},
+			wantErr: jj.ErrMultipleRevisions,
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			dir := splitRepo(t)
+			runJJ(t, dir, "new")
+			op := runJJ(t, dir, "operation", "log", "--ignore-working-copy", "--no-graph", "-n1", "-T", "id")
+			runJJ(t, dir, "describe", "-r", "@-", "-m", "loaded")
+			client := newClient(t, dir)
+			loaded, err := client.Change(t.Context(), "@-")
+			if err != nil {
+				t.Fatalf("Change(@-) error = %v", err)
+			}
+			tt.change(t, dir, op, loaded)
+
+			_, _, err = client.Split(t.Context(), loaded.ChangeID, loaded.CommitID, "selected", []jj.SplitFile{{Path: "b.txt", Content: "b2\n"}})
+
+			if !errors.Is(err, jj.ErrStaleRevision) || !errors.Is(err, tt.wantErr) {
+				t.Errorf("Split() error = %v, want %v and %v", err, jj.ErrStaleRevision, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestSplit_failedAfterPublishingWrapped(t *testing.T) {
+	dir := splitRepo(t)
+	if err := os.WriteFile(os.Getenv("JJ_CONFIG"), []byte("ui.log-word-wrap = true\n"), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+	t.Setenv("COLUMNS", "20")
+	client := newClient(t, dir)
+	loaded, err := client.Change(t.Context(), "@")
+	if err != nil {
+		t.Fatalf("Change(@) error = %v", err)
+	}
+	beforeSplit(t, `"$`+realJJEnv+`" "$@" >/dev/null 2>&1; echo 'checkout failed' >&2; exit 1`)
+
+	_, _, err = client.Split(t.Context(), loaded.ChangeID, loaded.CommitID, "selected", []jj.SplitFile{{Path: "b.txt", Content: "b2\n"}})
+
+	if !errors.Is(err, jj.ErrSplitIncomplete) {
+		t.Errorf("Split() error = %v, want %v", err, jj.ErrSplitIncomplete)
+	}
+}
+
+func TestSplit_failedAfterAnotherSplit(t *testing.T) {
+	dir := splitRepo(t)
+	client := newClient(t, dir)
+	loaded, err := client.Change(t.Context(), "@")
+	if err != nil {
+		t.Fatalf("Change(@) error = %v", err)
+	}
+	beforeSplit(t, `"$`+realJJEnv+`" split -r 'commit_id("`+loaded.CommitID+`")' -m other a.txt >/dev/null 2>&1`)
+
+	_, _, err = client.Split(t.Context(), loaded.ChangeID, loaded.CommitID, "selected", []jj.SplitFile{{Path: "b.txt", Content: "b2\n"}})
+
+	if errors.Is(err, jj.ErrSplitIncomplete) {
+		t.Errorf("Split() error = %v, want the other split not taken for ours", err)
+	}
+	if !errors.Is(err, jj.ErrStaleRevision) {
+		t.Errorf("Split() error = %v, want %v", err, jj.ErrStaleRevision)
+	}
+	if _, err := client.Change(t.Context(), `description(substring:"other")`); err != nil {
+		t.Errorf("Change(other) error = %v, want the other split kept", err)
+	}
+}
+
+func TestSplit_failedAfterSplitNamingOurSpec(t *testing.T) {
+	dir := splitRepo(t)
+	client := newClient(t, dir)
+	loaded, err := client.Change(t.Context(), "@")
+	if err != nil {
+		t.Fatalf("Change(@) error = %v", err)
+	}
+	beforeSplit(t, `for a; do case $a in *edit-args=*) cfg=$a;; esac; done
+		"$`+realJJEnv+`" split -r 'commit_id("`+loaded.CommitID+`")' -m "other $cfg" a.txt >/dev/null 2>&1; exit 1`)
+
+	_, _, err = client.Split(t.Context(), loaded.ChangeID, loaded.CommitID, "selected", []jj.SplitFile{{Path: "b.txt", Content: "b2\n"}})
+
+	if errors.Is(err, jj.ErrSplitIncomplete) {
+		t.Errorf("Split() error = %v, want the other split not taken for ours", err)
+	}
+	if !errors.Is(err, jj.ErrStaleRevision) {
+		t.Errorf("Split() error = %v, want %v", err, jj.ErrStaleRevision)
+	}
+}
+
+func TestSplit_failedAfterPublishingQuotedSpec(t *testing.T) {
+	dir := splitRepo(t)
+	tmp := filepath.Join(t.TempDir(), "it's a dir")
+	if err := os.Mkdir(tmp, 0o700); err != nil {
+		t.Fatalf("Mkdir() error = %v", err)
+	}
+	t.Setenv("TMPDIR", tmp)
+	client := newClient(t, dir)
+	loaded, err := client.Change(t.Context(), "@")
+	if err != nil {
+		t.Fatalf("Change(@) error = %v", err)
+	}
+	beforeSplit(t, `"$`+realJJEnv+`" "$@" >/dev/null 2>&1; echo 'checkout failed' >&2; exit 1`)
+
+	_, _, err = client.Split(t.Context(), loaded.ChangeID, loaded.CommitID, "selected", []jj.SplitFile{{Path: "b.txt", Content: "b2\n"}})
+
+	if !errors.Is(err, jj.ErrSplitIncomplete) {
+		t.Errorf("Split() error = %v, want %v", err, jj.ErrSplitIncomplete)
+	}
+}

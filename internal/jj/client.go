@@ -44,6 +44,14 @@ type changeJSON struct {
 	WorkingCopy bool       `json:"working_copy"`
 }
 
+const operationArgSafe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789,-./:@_"
+
+type operationJSON struct {
+	ID          string            `json:"id"`
+	Description string            `json:"description"`
+	Attributes  map[string]string `json:"attributes"`
+}
+
 type Client struct {
 	dir       string
 	applyTool string
@@ -58,6 +66,9 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 		return Change{}, Change{}, fmt.Errorf("split %q: %w", changeID, ErrNoSplitFiles)
 	}
 	original, err := c.Change(ctx, changeRevset(changeID))
+	if errors.Is(err, ErrNoRevision) || errors.Is(err, ErrMultipleRevisions) {
+		return Change{}, Change{}, fmt.Errorf("split %q: %w: %w", changeID, ErrStaleRevision, err)
+	}
 	if err != nil {
 		return Change{}, Change{}, err
 	}
@@ -88,6 +99,7 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 	if err != nil {
 		return Change{}, Change{}, fmt.Errorf("split %q: encode tool arguments: %w", changeID, err)
 	}
+	editConfig := "merge-tools." + splitTool + ".edit-args=" + string(editArgs)
 	baseOp, err := c.headOperation(ctx)
 	if err != nil {
 		return Change{}, Change{}, fmt.Errorf("split %q: %w", changeID, err)
@@ -97,10 +109,10 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 		"--message="+message,
 		"--tool", splitTool,
 		"--config", "merge-tools."+splitTool+".program="+string(program),
-		"--config", "merge-tools."+splitTool+".edit-args="+string(editArgs),
+		"--config", editConfig,
 	)
 	if err != nil {
-		selected, splitDone, err = c.splitFailed(ctx, changeID, original, baseOp, err)
+		selected, splitDone, err = c.splitFailed(ctx, changeID, original, baseOp, editConfig, err)
 		return selected, Change{}, err
 	}
 	splitDone = true
@@ -115,8 +127,8 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 	return selected, rest, nil
 }
 
-func (c Client) splitFailed(ctx context.Context, changeID string, original Change, baseOp string, splitErr error) (Change, bool, error) {
-	published, err := c.splitPublished(ctx, baseOp, original.CommitID)
+func (c Client) splitFailed(ctx context.Context, changeID string, original Change, baseOp, editConfig string, splitErr error) (Change, bool, error) {
+	published, err := c.splitPublished(ctx, baseOp, original.CommitID, editConfig)
 	if err != nil {
 		return Change{}, false, fmt.Errorf("split %q: %w", changeID, errors.Join(splitErr, err))
 	}
@@ -131,28 +143,43 @@ func (c Client) splitFailed(ctx context.Context, changeID string, original Chang
 }
 
 func (c Client) headOperation(ctx context.Context) (string, error) {
-	out, err := c.run(ctx, "operation", "log", "--ignore-working-copy", "--no-graph", "--limit=1", "-T", "id")
+	out, err := c.run(ctx, "operation", "log", "--ignore-working-copy", "--no-graph", "--limit=1", "--config", "ui.log-word-wrap=false", "-T", "id")
 	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (c Client) splitPublished(ctx context.Context, since, commitID string) (bool, error) {
-	out, err := c.run(ctx, "operation", "log", "--ignore-working-copy", "--no-graph", "-T", `id ++ " " ++ description.first_line() ++ "\n"`)
+func (c Client) splitPublished(ctx context.Context, since, commitID, editConfig string) (bool, error) {
+	out, err := c.run(ctx, "operation", "log", "--ignore-working-copy", "--no-graph", "--config", "ui.log-word-wrap=false", "-T", `json(self) ++ "\n"`)
 	if err != nil {
 		return false, err
 	}
-	for line := range strings.Lines(string(out)) {
-		id, description, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
-		if id == since {
+	arg := " --config " + operationArg(editConfig) + " "
+	dec := jsontext.NewDecoder(bytes.NewReader(out))
+	for {
+		var op operationJSON
+		err := json.UnmarshalDecode(dec, &op)
+		if errors.Is(err, io.EOF) {
 			return false, nil
 		}
-		if description == "split commit "+commitID {
+		if err != nil {
+			return false, fmt.Errorf("jj operation log: decode output: %w", err)
+		}
+		if op.ID == since {
+			return false, nil
+		}
+		if op.Description == "split commit "+commitID && strings.Contains(op.Attributes["args"]+" ", arg) {
 			return true, nil
 		}
 	}
-	return false, nil
+}
+
+func operationArg(arg string) string {
+	if strings.TrimLeft(arg, operationArgSafe) == "" {
+		return arg
+	}
+	return "'" + strings.ReplaceAll(arg, "'", `\'`) + "'"
 }
 
 func writeSplitSpec(files []SplitFile) (string, error) {
