@@ -113,8 +113,8 @@ hunk in the file.
 | `d` | Show or hide the removed lines of the hunk under the cursor |
 | `D` | Show or hide the removed lines of every hunk in the file |
 | `c` | Commit the selected hunks |
-| `R` | Reload to pick up edits made outside jjr; working-copy revision only, and only while it is still `@` (press `@` after `jj new`) |
-| `e` | Edit the current file in `$VISUAL` / `$EDITOR` (default `vi`); working-copy revision only, and only while it is still `@` |
+| `R` | Reload the working copy to pick up edits made outside jjr |
+| `e` | Edit the current file in `$VISUAL` / `$EDITOR` (default `vi`); working copy only |
 | `f` | Switch between changes only and the full file |
 | `?` | Show all keys |
 | `q` | Quit |
@@ -143,25 +143,11 @@ included, contains it, ignoring case.
 | `?` | Show all keys |
 | `q` | Quit |
 
-`a` always opens a confirmation box: press `y` to abandon, any other key
-cancels. The box names the change and commit IDs, the local bookmarks that will
-be deleted, and the selected hunks that will be dropped. If the bookmarks on
-the revision changed since the log was loaded, nothing is abandoned: the log
-refreshes and you press `a` again to review the new bookmarks. Immutable
-revisions are refused. Abandoning a revision:
-
-- deletes the local bookmarks that point to it;
-- rebases its descendants onto its parent(s), so they get new commit IDs;
-- when it is `@`, moves the working copy to a new empty change on its parent;
-- affects other workspaces too: if it is, or is an ancestor of, another
-  workspace's working copy, that working copy is replaced or rebased and the
-  other workspace may need `jj workspace update-stale`.
-
-Afterwards the log refreshes, the bookmarks are marked outdated, and the
-review follows: it stays on the reviewed commit if it still exists, follows its
-rebased successor, or moves to the working copy when the abandoned revision was
-the one under review or `@`. If the review cannot be reloaded it is marked out
-of date and blocks selecting and committing until you press `@`.
+`a` asks for confirmation and names the local bookmarks that will be deleted
+and the selected hunks that will be dropped; press `y` to abandon, any other key
+cancels. As with `jj abandon`, descendants are rebased onto the parent, and
+abandoning `@` starts a new empty change. Immutable revisions can't be
+abandoned.
 
 Bookmarks tab:
 
@@ -192,27 +178,11 @@ Bookmark dialog:
 | `enter` / `ctrl+s` | Save the bookmark |
 | `esc` | Cancel |
 
-The target revision is resolved to a single visible commit before anything
-changes (a working-copy snapshot that jj has since replaced is rejected; press
-`R` in the review or pick another revision),
-and the bookmark must still point where it did when the dialog opened: moves
-run `jj bookmark move --from <old target> --to <new target>`, so a bookmark
-that changed or disappeared in the meantime is left alone. jj refuses to move
-a bookmark backwards or sideways; the dialog then names the move and asks you
-to press `enter` again to make exactly that move (`--allow-backwards`). When
-you rename and move at once, the move happens first, so a refused move leaves
-the name unchanged. Warnings from jj, such as a tracked remote bookmark keeping
-the old name, are shown before the dialog closes. When jj reports an error, the
-bookmarks are read again and the dialog or status line shows what they point
-to now. After a move, jjr reads the bookmark again and only
-continues (for example with a rename) when it points at the requested commit.
+jj refuses to move a bookmark backwards or sideways; the dialog then shows the
+move and asks you to press `enter` again to confirm it.
 
-`R` in the log or bookmarks tab, a bookmark change, a commit and `@` mark the
-log and the bookmarks as outdated. `R` in the log or bookmarks tab and a
-bookmark change reload the tab you are looking at right away and the other
-list when you open it; they never reload the review, so press `R` in the
-review tab to pick up file changes. A commit and `@` update the review right
-away, and the log and the bookmarks reload when you open them.
+`R` in the log or bookmarks tab refreshes the lists, not the review; press `R`
+in the review tab to pick up file changes.
 
 Commit dialog:
 
@@ -224,11 +194,10 @@ Commit dialog:
 
 ### How committing works
 
-Committing runs `jj split` on the reviewed change. The selected hunks stay in
-the original change, which gets the new message; the rest moves to a new child
-change that keeps the original description, and later commits split from it.
-Committed hunks stay on screen, folded, dimmed and marked with the new change
-ID. Use `jj undo` to revert a commit made by mistake.
+Committing runs `jj split`: the selected hunks stay in the reviewed change with
+the new message, and the rest moves to a new child change that keeps the
+original description. Committed hunks stay on screen, folded and dimmed. Use
+`jj undo` to revert a commit made by mistake.
 
 ## Configuration
 
@@ -307,9 +276,8 @@ A colour is `none` (terminal default), an ANSI name such as `red` or
 follow the terminal theme. Unknown keys and invalid colours stop `jjr` with an
 error.
 
-If the terminal reports its background, `jjr` derives the cursor line from it
-when `base.cursor_bg` and `base.page` are unset, and on light backgrounds
-derives hunk headers when `diff.hunk_bg`, `base.card` and `base.page` are unset.
+When `base.cursor_bg` or `diff.hunk_bg` is unset, `jjr` may derive it from the
+terminal's background colour.
 
 ### Light and dark profiles
 
@@ -334,17 +302,6 @@ comment = "#6e6a86"
 `mode = "light"` or `"dark"` always uses that profile. With `auto` (the
 default), `jjr` follows the terminal's background colour and switches when it
 changes. Terminals that don't report their background get the dark profile.
-
-Light/dark notifications from the terminal apply at once, and the next
-background reply refines the colours. Before opening `$EDITOR`, `jjr` waits up
-to 300 ms for an outstanding background reply. On Linux, macOS and the BSDs it
-also discards terminal input still queued, so the reply doesn't end up in the
-editor. A reply that arrives later than that, after the editor has started, can
-still reach the editor as stray input. Replies can't be matched to queries, so a
-late reply to an earlier, abandoned query can also end the wait early and let
-the newer reply reach the editor. When the editor exits, `jjr` gives up on
-any unanswered query and asks for the background again, and the next edit waits
-up to 300 ms for that reply too.
 
 ### GitHub Copilot
 
