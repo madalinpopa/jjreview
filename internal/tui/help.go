@@ -26,8 +26,8 @@ func (m Model) overlay() string {
 	switch {
 	case m.modal != nil:
 		return m.modalView()
-	case m.bookmarks.overlayOpen():
-		return m.bookmarks.overlay(m.bookmarkEnv())
+	case m.bookmarks.OverlayOpen():
+		return m.bookmarks.Overlay(m.bookmarkEnv())
 	case m.help:
 		return m.helpView()
 	case m.view == logView && m.log.confirm != nil:

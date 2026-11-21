@@ -44,7 +44,7 @@ func (m Model) screen() string {
 	case logView:
 		body = m.logCard()
 	case bookmarksView:
-		body = m.bookmarks.view(m.bookmarkEnv())
+		body = m.bookmarks.View(m.bookmarkEnv())
 	case reviewView:
 		body = lipgloss.JoinHorizontal(lipgloss.Top,
 			m.filesCard(),

@@ -14,6 +14,7 @@ import (
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/llm"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/bookmarks"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -76,7 +77,7 @@ type Model struct {
 	reloadPath  string
 	view        view
 	log         logState
-	bookmarks   bookmarksModel
+	bookmarks   bookmarks.Model
 }
 
 func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
@@ -93,7 +94,7 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		contentErrs: map[contentKey]error{},
 		highlights:  map[highlightKey]fileHighlight{},
 		log:         newLogState(),
-		bookmarks:   newBookmarksModel(ctx, src),
+		bookmarks:   bookmarks.New(ctx, src),
 		width:       defaultWidth,
 		height:      defaultHeight,
 	}
@@ -161,8 +162,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyLogFiles(msg)
 	case logMsg:
 		cmd = m.applyLog(msg)
-	case bookmarksMsg, bookmarkSavedMsg, bookmarkDeletedMsg:
-		cmd = m.bookmarkEffects(m.bookmarks.update(msg, m.bookmarkEnv()))
 	case committedMsg:
 		m.applyCommitted(msg)
 	case editCheckedMsg:
@@ -175,18 +174,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case m.modal != nil:
 			cmd = m.modalInput(msg)
-		case m.bookmarks.overlayOpen():
-			cmd = m.bookmarks.input(msg)
+		case m.bookmarks.OverlayOpen():
+			cmd = m.bookmarks.Paste(msg)
 		case m.view == logView && m.log.searching:
 			cmd = m.updateQuery(msg)
 		}
 	default:
-		if m.view == logView && m.log.searching {
+		if c, in, ok := m.bookmarks.Update(msg, m.bookmarkEnv()); ok {
+			cmd = m.bookmarkEffects(c, in)
+		} else if m.view == logView && m.log.searching {
 			cmd = m.updateQuery(msg)
 		}
 	}
 	m.resizeModal()
-	m.bookmarks.resize(m.bookmarkEnv())
+	m.bookmarks.Resize(m.bookmarkEnv())
 	m.ensureHighlight()
 	m.scroll()
 	return m, cmd
@@ -202,8 +203,8 @@ func (m *Model) keyPress(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case m.modal != nil:
 		return m.modalKey(msg)
-	case m.bookmarks.overlayOpen():
-		return m.bookmarkEffects(m.bookmarks.key(msg, m.bookmarkEnv()))
+	case m.bookmarks.OverlayOpen():
+		return m.bookmarkEffects(m.bookmarks.Key(msg, m.bookmarkEnv()))
 	case m.help:
 		m.helpKey(msg)
 		return nil
@@ -362,7 +363,7 @@ func (m *Model) scroll() {
 		m.log.keepVisible(m.logHeight())
 		return
 	case bookmarksView:
-		m.bookmarks.keepVisible(m.diffHeight())
+		m.bookmarks.KeepVisible(m.diffHeight())
 		return
 	}
 	m.diffTop = ui.ScrollTop(m.diffTop, m.cursor, m.diffHeight(), len(m.rows()))

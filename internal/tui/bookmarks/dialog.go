@@ -1,4 +1,4 @@
-package tui
+package bookmarks
 
 import (
 	"context"
@@ -17,10 +17,10 @@ import (
 )
 
 const (
-	bookmarkFullChrome    = 12
-	bookmarkCompactChrome = 6
-	bookmarkMinimalChrome = 4
-	bookmarkLabelWidth    = 7
+	fullChrome    = 12
+	compactChrome = 6
+	minimalChrome = 4
+	labelWidth    = 7
 )
 
 var (
@@ -34,7 +34,7 @@ type bookmarkMove struct {
 	to   string
 }
 
-type bookmarkModal struct {
+type dialog struct {
 	editing    bool
 	oldName    string
 	nameEdited bool
@@ -63,7 +63,7 @@ type bookmarkRequest struct {
 	approved bookmarkMove
 }
 
-type bookmarkSavedMsg struct {
+type savedMsg struct {
 	name     string
 	observed string
 	refresh  bool
@@ -73,7 +73,7 @@ type bookmarkSavedMsg struct {
 	err      error
 }
 
-func newBookmarkInput(value string) textinput.Model {
+func newInput(value string) textinput.Model {
 	in := textinput.New()
 	in.Prompt = ""
 	in.KeyMap.Paste.SetEnabled(false)
@@ -84,27 +84,27 @@ func newBookmarkInput(value string) textinput.Model {
 	return in
 }
 
-func (b *bookmarksModel) openModal(s *jj.Bookmark, env bookmarkEnv) tea.Cmd {
-	mo := &bookmarkModal{}
+func (b *Model) openModal(s *jj.Bookmark, env Env) tea.Cmd {
+	mo := &dialog{}
 	if s == nil {
 		target := ""
-		if env.head != "" {
-			target = jj.CommitRevset(env.head)
+		if env.Head != "" {
+			target = jj.CommitRevset(env.Head)
 		}
-		mo.inputs = [2]textinput.Model{newBookmarkInput(""), newBookmarkInput(target)}
+		mo.inputs = [2]textinput.Model{newInput(""), newInput(target)}
 	} else {
 		mo.editing, mo.oldName, mo.oldRef, mo.from = true, s.Name, refOf(*s), []string{s.CommitID}
 		if s.CommitID != "" {
 			mo.oldTarget = jj.CommitRevset(s.CommitID)
 		}
-		mo.inputs = [2]textinput.Model{newBookmarkInput(s.Name), newBookmarkInput(mo.oldTarget)}
+		mo.inputs = [2]textinput.Model{newInput(s.Name), newInput(mo.oldTarget)}
 	}
 	b.modal = mo
-	b.resize(env)
+	b.Resize(env)
 	return mo.inputs[0].Focus()
 }
 
-func (b *bookmarksModel) modalKey(msg tea.KeyPressMsg) tea.Cmd {
+func (b *Model) modalKey(msg tea.KeyPressMsg) tea.Cmd {
 	mo := b.modal
 	if mo.saving {
 		return nil
@@ -130,7 +130,11 @@ func (b *bookmarksModel) modalKey(msg tea.KeyPressMsg) tea.Cmd {
 	return b.input(msg)
 }
 
-func (b *bookmarksModel) input(msg tea.Msg) tea.Cmd {
+func (b *Model) Paste(msg tea.PasteMsg) tea.Cmd {
+	return b.input(msg)
+}
+
+func (b *Model) input(msg tea.Msg) tea.Cmd {
 	mo := b.modal
 	if mo == nil || mo.saving || mo.done {
 		return nil
@@ -146,7 +150,7 @@ func (b *bookmarksModel) input(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (b *bookmarksModel) save() tea.Cmd {
+func (b *Model) save() tea.Cmd {
 	mo := b.modal
 	r := bookmarkRequest{
 		editing:  mo.editing,
@@ -182,7 +186,7 @@ func (b *bookmarksModel) save() tea.Cmd {
 	}
 }
 
-func resolveTarget(ctx context.Context, src bookmarkSource, target string) (string, error) {
+func resolveTarget(ctx context.Context, src Source, target string) (string, error) {
 	c, err := src.Change(ctx, jj.VisibleRevset(target))
 	if errors.Is(err, jj.ErrNoRevision) {
 		return "", fmt.Errorf("%s is no longer visible; press R in the review or choose another revision", target)
@@ -193,27 +197,27 @@ func resolveTarget(ctx context.Context, src bookmarkSource, target string) (stri
 	return c.CommitID, nil
 }
 
-func storeBookmark(ctx context.Context, src bookmarkSource, r bookmarkRequest) bookmarkSavedMsg {
+func storeBookmark(ctx context.Context, src Source, r bookmarkRequest) savedMsg {
 	var to string
 	if r.move {
 		var err error
 		if to, err = resolveTarget(ctx, src, r.target); err != nil {
-			return bookmarkSavedMsg{err: err}
+			return savedMsg{err: err}
 		}
 	}
 	if !r.editing {
 		warnings, err := src.CreateBookmark(ctx, r.name, jj.CommitRevset(to))
 		if err != nil {
-			return bookmarkSavedMsg{name: r.name, refresh: true, observed: observe(ctx, src, r.name), err: err}
+			return savedMsg{name: r.name, refresh: true, observed: observe(ctx, src, r.name), err: err}
 		}
-		return bookmarkSavedMsg{name: r.name, refresh: true, warnings: warnings}
+		return savedMsg{name: r.name, refresh: true, warnings: warnings}
 	}
 	items, err := checkBookmark(ctx, src, r.oldRef, "the dialog opened")
 	if err != nil {
-		return bookmarkSavedMsg{refresh: true, err: err}
+		return savedMsg{refresh: true, err: err}
 	}
 	if r.rename && slices.ContainsFunc(items, func(b jj.Bookmark) bool { return b.Name == r.name }) {
-		return bookmarkSavedMsg{err: fmt.Errorf("%s already exists", r.name)}
+		return savedMsg{err: fmt.Errorf("%s already exists", r.name)}
 	}
 	var warnings []string
 	var moved string
@@ -222,11 +226,11 @@ func storeBookmark(ctx context.Context, src bookmarkSource, r bookmarkRequest) b
 		w, err := src.MoveBookmark(ctx, r.oldName, r.from, to, mv == r.approved)
 		switch {
 		case errors.Is(err, jj.ErrBookmarkBackwards):
-			return bookmarkSavedMsg{refused: mv}
+			return savedMsg{refused: mv}
 		case errors.Is(err, jj.ErrBookmarkChanged):
-			return bookmarkSavedMsg{refresh: true, observed: observe(ctx, src, r.oldName), err: fmt.Errorf("%s changed since the dialog opened", r.oldName)}
+			return savedMsg{refresh: true, observed: observe(ctx, src, r.oldName), err: fmt.Errorf("%s changed since the dialog opened", r.oldName)}
 		case err != nil:
-			return bookmarkSavedMsg{refresh: true, observed: observe(ctx, src, r.oldName), err: err}
+			return savedMsg{refresh: true, observed: observe(ctx, src, r.oldName), err: err}
 		}
 		warnings = append(warnings, w)
 		moved = to
@@ -238,26 +242,26 @@ func storeBookmark(ctx context.Context, src bookmarkSource, r bookmarkRequest) b
 			if moved != "" {
 				err = fmt.Errorf("moved %s to %s, but the rename failed: %w", r.oldName, ui.ShortID(moved), err)
 			}
-			return bookmarkSavedMsg{name: r.oldName, refresh: true, moved: moved, observed: observed, warnings: joinWarnings(warnings), err: err}
+			return savedMsg{name: r.oldName, refresh: true, moved: moved, observed: observed, warnings: joinWarnings(warnings), err: err}
 		}
 		warnings = append(warnings, w)
 	}
-	return bookmarkSavedMsg{name: r.name, refresh: true, warnings: joinWarnings(warnings)}
+	return savedMsg{name: r.name, refresh: true, warnings: joinWarnings(warnings)}
 }
 
 func joinWarnings(warnings []string) string {
 	return strings.Join(slices.DeleteFunc(warnings, func(w string) bool { return w == "" }), "\n")
 }
 
-func (b *bookmarksModel) applySaved(msg bookmarkSavedMsg) bookmarkIntent {
-	var in bookmarkIntent
+func (b *Model) applySaved(msg savedMsg) Intent {
+	var in Intent
 	if msg.refresh {
 		b.want = msg.name
-		in.refresh = true
+		in.Refresh = true
 	}
 	refused := msg.refused != bookmarkMove{}
 	if msg.err == nil && !refused {
-		in.status = "✓ saved " + msg.name
+		in.Status = "✓ saved " + msg.name
 	}
 	mo := b.modal
 	if mo == nil {
@@ -283,14 +287,14 @@ func (b *bookmarksModel) applySaved(msg bookmarkSavedMsg) bookmarkIntent {
 	return in
 }
 
-func (b *bookmarksModel) resize(env bookmarkEnv) {
+func (b *Model) Resize(env Env) {
 	if b.modal == nil {
 		return
 	}
-	inner := env.modal
-	w := inner - bookmarkLabelWidth
-	if bookmarkChrome(env.height, len(b.noteLines(env.pal, inner))) == bookmarkFullChrome {
-		w = boxInner(inner)
+	inner := env.ModalWidth
+	w := inner - labelWidth
+	if chromeRows(env.Height, len(b.noteLines(env.Theme, inner))) == fullChrome {
+		w = ui.InputBoxInner(inner)
 	}
 	w = max(w-1, 1)
 	for i := range b.modal.inputs {
@@ -306,7 +310,7 @@ func (b *bookmarksModel) resize(env bookmarkEnv) {
 	}
 }
 
-func bookmarkInputStyles(p theme.Theme) textinput.Styles {
+func inputStyles(p theme.Theme) textinput.Styles {
 	base := lipgloss.NewStyle().Background(p.Input)
 	state := textinput.StyleState{
 		Text:        base.Foreground(p.Strong),
@@ -321,27 +325,27 @@ func bookmarkInputStyles(p theme.Theme) textinput.Styles {
 	}
 }
 
-func bookmarkChrome(height, notes int) int {
-	for _, c := range []int{bookmarkFullChrome, bookmarkCompactChrome} {
+func chromeRows(height, notes int) int {
+	for _, c := range []int{fullChrome, compactChrome} {
 		if height >= c+min(notes, 1) {
 			return c
 		}
 	}
-	return bookmarkMinimalChrome
+	return minimalChrome
 }
 
-func (b bookmarksModel) modalView(env bookmarkEnv) string {
-	p := env.pal
-	inner := env.modal
-	notes := b.noteLines(env.pal, inner)
-	chrome := bookmarkChrome(env.height, len(notes))
-	if room := max(env.height-chrome, 1); len(notes) > room {
+func (b Model) modalView(env Env) string {
+	p := env.Theme
+	inner := env.ModalWidth
+	notes := b.noteLines(env.Theme, inner)
+	chrome := chromeRows(env.Height, len(notes))
+	if room := max(env.Height-chrome, 1); len(notes) > room {
 		notes = notes[:room]
 		notes[room-1].Text = ansi.Truncate(notes[room-1].Text, inner-1, "") + "…"
 	}
 	var lines []string
 	switch chrome {
-	case bookmarkMinimalChrome:
+	case minimalChrome:
 		lines = append(lines, b.fields(p, inner, chrome)[b.modal.field])
 	default:
 		lines = append(lines, ui.Paint(inner, p.Card, b.title(p), nil))
@@ -360,7 +364,7 @@ func (b bookmarksModel) modalView(env bookmarkEnv) string {
 		Render(strings.Join(lines, "\n"))
 }
 
-func (b bookmarksModel) title(p theme.Theme) []ui.Seg {
+func (b Model) title(p theme.Theme) []ui.Seg {
 	mo := b.modal
 	if mo.editing {
 		return []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "Edit bookmark "), ui.Pill(p.Chip, p.ChipText, mo.oldName)}
@@ -368,31 +372,31 @@ func (b bookmarksModel) title(p theme.Theme) []ui.Seg {
 	return []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "New bookmark")}
 }
 
-func (b bookmarksModel) fields(p theme.Theme, inner, chrome int) []string {
+func (b Model) fields(p theme.Theme, inner, chrome int) []string {
 	mo := b.modal
 	var lines []string
 	for i, label := range []string{"Name", "Target revision"} {
 		in := mo.inputs[i]
-		in.SetStyles(bookmarkInputStyles(p))
+		in.SetStyles(inputStyles(p))
 		focus := ui.Fg(p.Header)
 		border := p.Border
 		if i == mo.field {
 			focus, border = ui.Fg(p.Selection), p.Selection
 		}
-		if chrome != bookmarkFullChrome {
+		if chrome != fullChrome {
 			short, _, _ := strings.Cut(label, " ")
-			lines = append(lines, ui.Paint(inner, p.Input, []ui.Seg{ui.Span(focus, fmt.Sprintf("%-*s", bookmarkLabelWidth, short)), ui.Span(lipgloss.NewStyle(), in.View())}, nil))
+			lines = append(lines, ui.Paint(inner, p.Input, []ui.Seg{ui.Span(focus, fmt.Sprintf("%-*s", labelWidth, short)), ui.Span(lipgloss.NewStyle(), in.View())}, nil))
 			continue
 		}
 		lines = append(lines,
 			ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Header), label)}, nil),
-			inputBox(p, inner, border, in.View()),
+			ui.InputBox(p, inner, border, in.View()),
 		)
 	}
 	return lines
 }
 
-func (b bookmarksModel) noteLines(p theme.Theme, width int) []ui.Seg {
+func (b Model) noteLines(p theme.Theme, width int) []ui.Seg {
 	var lines []ui.Seg
 	for _, note := range b.notes(p) {
 		for text := range strings.SplitSeq(ansi.Wrap(note.Text, width, ""), "\n") {
@@ -402,7 +406,7 @@ func (b bookmarksModel) noteLines(p theme.Theme, width int) []ui.Seg {
 	return lines
 }
 
-func (b bookmarksModel) notes(p theme.Theme) []ui.Seg {
+func (b Model) notes(p theme.Theme) []ui.Seg {
 	mo := b.modal
 	style := ui.Fg(p.Removed)
 	var text string
@@ -429,7 +433,7 @@ func (b bookmarksModel) notes(p theme.Theme) []ui.Seg {
 	return notes
 }
 
-func (b bookmarksModel) footer(p theme.Theme) []ui.Seg {
+func (b Model) footer(p theme.Theme) []ui.Seg {
 	key := ui.Fg(p.Key)
 	text := ui.Fg(p.Muted)
 	mo := b.modal

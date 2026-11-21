@@ -127,7 +127,7 @@ func (m Model) logHints() []ui.KeyHint {
 }
 
 func (m Model) bookmarkHints() []ui.KeyHint {
-	hints := append([]ui.KeyHint{ui.Hint("tabs", m.keys.reviewTab, m.keys.logTab, m.keys.bookmarksTab)}, m.bookmarks.hints()...)
+	hints := append([]ui.KeyHint{ui.Hint("tabs", m.keys.reviewTab, m.keys.logTab, m.keys.bookmarksTab)}, m.bookmarks.Hints()...)
 	return append(hints, ui.Hint("help", m.keys.help))
 }
 
@@ -141,7 +141,7 @@ func (m Model) helpSections() []helpSection {
 	if m.view == bookmarksView {
 		return []helpSection{
 			views,
-			{title: "Bookmarks", hints: m.bookmarks.help()},
+			{title: "Bookmarks", hints: m.bookmarks.Help()},
 			{title: "Other", hints: []ui.KeyHint{ui.Describe(m.keys.help), ui.Describe(m.keys.quit)}},
 		}
 	}

@@ -3,14 +3,12 @@ package tui
 import (
 	"errors"
 	"fmt"
-	"image/color"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
-	"github.com/madalinpopa/jjreview/internal/theme"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -71,7 +69,7 @@ func (m Model) modalView() string {
 	if rows.preview > 0 {
 		lines = append(lines,
 			ui.Blank(inner, p.Card),
-			inputBox(p, inner, p.Border, strings.Join(m.pickLines(boxInner(inner), rows.preview), "\n")),
+			ui.InputBox(p, inner, p.Border, strings.Join(m.pickLines(ui.InputBoxInner(inner), rows.preview), "\n")),
 		)
 	}
 	heading := ui.Paint(inner, p.Card, []ui.Seg{
@@ -82,7 +80,7 @@ func (m Model) modalView() string {
 	if rows.noteInHeading {
 		heading, notes = notes[0], nil
 	}
-	lines = append(lines, heading, inputBox(p, inner, p.Selection, mo.input.View()))
+	lines = append(lines, heading, ui.InputBox(p, inner, p.Selection, mo.input.View()))
 	lines = append(lines, notes...)
 	lines = append(lines, ui.Paint(inner, p.Card, nil, m.modalFooter(inner)))
 	return lipgloss.NewStyle().
@@ -92,21 +90,6 @@ func (m Model) modalView() string {
 		Background(p.Card).
 		Padding(0, 1).
 		Render(strings.Join(lines, "\n"))
-}
-
-func boxInner(width int) int {
-	return max(width-4, 1)
-}
-
-func inputBox(p theme.Theme, width int, border color.Color, content string) string {
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(border).
-		BorderBackground(p.Card).
-		Background(p.Input).
-		Padding(0, 1).
-		Width(width).
-		Render(content)
 }
 
 func (m Model) pickCount() int {

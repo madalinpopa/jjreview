@@ -211,7 +211,7 @@ func (m *Model) resizeModal() {
 		return
 	}
 	in := &m.modal.input
-	if w := boxInner(m.modalInner()); in.Width() != w {
+	if w := ui.InputBoxInner(m.modalInner()); in.Width() != w {
 		in.SetWidth(w)
 	}
 	if h := m.modalLayout().input; in.Height() != h {
