@@ -89,7 +89,12 @@ func newSearchInput() textinput.Model {
 }
 
 func (m *Model) resizeSearch() {
-	m.log.query.SetWidth(max(m.width-6, 1))
+	q := &m.log.query
+	value, pos := q.Value(), q.Position()
+	q.SetWidth(max(m.width-6, 1))
+	q.SetValue("")
+	q.SetValue(value)
+	q.SetCursor(pos)
 }
 
 func searchStyles(p theme.Theme) textinput.Styles {
@@ -240,6 +245,8 @@ func (m *Model) applyLog(msg logMsg) tea.Cmd {
 	m.log.err = msg.err
 	if msg.err != nil {
 		m.log.lines = nil
+		m.log.searching = false
+		m.log.query.Blur()
 	} else {
 		m.log.lines = msg.lines
 	}
@@ -267,6 +274,9 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 	case key.Matches(msg, m.keys.reviewTab):
 		m.view = reviewView
 	case key.Matches(msg, m.keys.search):
+		if !m.log.loaded || m.log.err != nil {
+			return nil
+		}
 		m.log.searching = true
 		return m.log.query.Focus()
 	case key.Matches(msg, m.keys.clearSearch):
@@ -323,7 +333,11 @@ func (m *Model) expandFiles() tea.Cmd {
 		if err != nil {
 			err = fmt.Errorf("load files of %s: %w", shortID(id), err)
 		}
-		return logFilesMsg{commitID: id, files: files, err: err}
+		paths := make([]diff.File, 0, len(files))
+		for _, f := range files {
+			paths = append(paths, diff.File{OldPath: f.OldPath, NewPath: f.NewPath, Status: f.Status})
+		}
+		return logFilesMsg{commitID: id, files: paths, err: err}
 	}
 }
 

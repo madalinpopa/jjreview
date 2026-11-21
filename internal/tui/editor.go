@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"os/exec"
 	"path/filepath"
 	"time"
@@ -9,12 +10,17 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/diff"
+	"github.com/madalinpopa/jjreview/internal/jj"
 )
 
 const editorHoldTimeout = 300 * time.Millisecond
 
 type EditorFinishedMsg struct {
 	Err error
+}
+
+type editCheckedMsg struct {
+	err error
 }
 
 type queryBackgroundMsg struct{}
@@ -44,6 +50,29 @@ func (m *Model) canEdit() bool {
 		return true
 	}
 	return false
+}
+
+func (m *Model) checkEdit() tea.Cmd {
+	m.reloading = true
+	ctx, src, rev := m.ctx, m.src, jj.WorkingCopyRevset(m.target)
+	return func() tea.Msg {
+		_, err := src.Change(ctx, rev)
+		return editCheckedMsg{err: err}
+	}
+}
+
+func (m *Model) editChecked(msg editCheckedMsg) tea.Cmd {
+	m.reloading = false
+	switch {
+	case errors.Is(msg.err, jj.ErrNoRevision):
+		m.change.WorkingCopy = false
+		m.status = movedStatus
+	case msg.err != nil:
+		m.status = "edit: " + msg.err.Error()
+	default:
+		return m.openEditor()
+	}
+	return nil
 }
 
 func (m *Model) openEditor() tea.Cmd {

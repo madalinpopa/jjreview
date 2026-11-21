@@ -265,7 +265,7 @@ func TestCommitStale_failed(t *testing.T) {
 		t.Errorf("splits = %+v, want none", src.splits)
 	}
 	got := view(m)
-	assertContains(t, got, "restart jjr to review it")
+	assertContains(t, got, "revision changed since its diff was loaded", "jjr to review it again")
 	for _, unwanted := range []string{"split done; restart jjr to continue", "▸ ✓ @@ -3,2 +3,2 @@"} {
 		if strings.Contains(got, unwanted) {
 			t.Errorf("View() contains %q:\n%s", unwanted, got)
@@ -390,6 +390,43 @@ func TestModalErrors_success(t *testing.T) {
 
 		assertContains(t, view(m), "endword")
 	})
+}
+
+func TestModalErrors_footerVisible(t *testing.T) {
+	diagnostic := "jj split: exit status 1: Error: " + strings.Repeat("diagnostic detail ", 16) + "tailword"
+	tests := map[string]struct {
+		err      error
+		want     string
+		wantGone string
+	}{
+		"stale revision shows a short recovery message": {
+			err:      fmt.Errorf("split %q: %w: %w", "kxyzabcdefgh", jj.ErrStaleRevision, errors.New(diagnostic)),
+			want:     "revision changed since its diff was loaded",
+			wantGone: "tailword",
+		},
+		"a long error is cut to the room left": {
+			err:  errors.New(strings.Repeat(diagnostic+" ", 3)),
+			want: "diagnostic detail",
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			src := newSource()
+			src.splitErr = tt.err
+			m := start(t, src, &fakeGenerator{text: "msg"}, 80, 22)
+
+			m = press(t, m, "tab", "j", "tab", "space", "c", "ctrl+s")
+
+			got := view(m)
+			if !m.ModalOpen() {
+				t.Fatal("ModalOpen() = false, want true")
+			}
+			assertContains(t, got, tt.want, "esc cancel", "ctrl+s commit")
+			if tt.wantGone != "" {
+				assertMissing(t, got, tt.wantGone)
+			}
+		})
+	}
 }
 
 func equalSplit(a, b splitCall) bool {

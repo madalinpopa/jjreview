@@ -3,10 +3,13 @@ package tui_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os/exec"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/diff"
+	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/tui"
 )
 
@@ -17,15 +20,24 @@ func withEditor(m tui.Model, opened *[]string) tui.Model {
 	})
 }
 
+func edit(t *testing.T, m tui.Model) (tui.Model, tea.Cmd) {
+	t.Helper()
+	m, check := update(t, m, keyMsg("e"))
+	if check == nil {
+		return m, nil
+	}
+	return update(t, m, check())
+}
+
 func TestEditor_success(t *testing.T) {
 	t.Run("e opens the current file from the workspace root", func(t *testing.T) {
 		var opened []string
 		m := withEditor(press(t, loaded(t, newSource()), "tab", "j", "tab"), &opened)
 
-		_, cmd := update(t, m, keyMsg("e"))
+		_, cmd := edit(t, m)
 
 		if cmd == nil {
-			t.Fatal("Update(e) cmd = nil, want an editor command")
+			t.Fatal("edit cmd = nil, want an editor command")
 		}
 		if len(opened) != 1 || opened[0] != "/repo/src/main.go" {
 			t.Errorf("opened = %v, want [/repo/src/main.go]", opened)
@@ -82,6 +94,42 @@ func TestEditor_failed(t *testing.T) {
 			t.Errorf("opened = %v, want nothing", opened)
 		}
 		assertContains(t, view(m), "not the working copy; press @ to edit files")
+	})
+
+	t.Run("the working copy moved since the last load", func(t *testing.T) {
+		var opened []string
+		src := newSource()
+		m := withEditor(press(t, loaded(t, src), "tab", "j", "tab"), &opened)
+		src.revErrs = map[string]error{jj.WorkingCopyRevset("kxyzabcdefgh"): fmt.Errorf("jj log: %w", jj.ErrNoRevision)}
+
+		m = press(t, m, "e")
+
+		if len(opened) != 0 {
+			t.Errorf("opened = %v, want nothing", opened)
+		}
+		assertContains(t, view(m), "working copy moved; press @ to review it")
+		assertContains(t, view(press(t, m, "e")), "not the working copy; press @ to edit files")
+	})
+
+	t.Run("the working-copy check fails", func(t *testing.T) {
+		var opened []string
+		src := newSource()
+		m := withEditor(press(t, loaded(t, src), "tab", "j", "tab"), &opened)
+		src.revErrs = map[string]error{jj.WorkingCopyRevset("kxyzabcdefgh"): errors.New("jj exploded")}
+
+		m = press(t, m, "e")
+
+		if len(opened) != 0 {
+			t.Errorf("opened = %v, want nothing", opened)
+		}
+		assertContains(t, view(m), "jj exploded")
+
+		src.revErrs = nil
+		press(t, m, "e")
+
+		if len(opened) != 1 {
+			t.Errorf("opened = %v after retrying, want one file", opened)
+		}
 	})
 
 	t.Run("shows the editor error", func(t *testing.T) {

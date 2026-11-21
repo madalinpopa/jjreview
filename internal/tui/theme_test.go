@@ -364,7 +364,7 @@ func TestThemeEditor_success(t *testing.T) {
 		var opened []string
 		m := withEditor(answered(t, press(t, themed(t, newSource(), nil, theme.ModeAuto), "tab", "j", "tab")), &opened)
 
-		_, cmd := update(t, m, keyMsg("e"))
+		_, cmd := edit(t, m)
 
 		if top := cmd(); reflect.TypeOf(top) == reflect.TypeFor[tea.BatchMsg]() {
 			t.Fatalf("Update(e) returned a batch, want an ordered sequence")
@@ -381,7 +381,7 @@ func TestThemeEditor_success(t *testing.T) {
 		var opened []string
 		m := withEditor(answered(t, press(t, themed(t, newSource(), nil, theme.ModeDark), "tab", "j", "tab")), &opened)
 
-		_, cmd := update(t, m, keyMsg("e"))
+		_, cmd := edit(t, m)
 
 		got := messages(t, cmd)
 		if len(got) != 1 || !isExec(t)(got[0]) {
@@ -433,7 +433,7 @@ func TestThemeEditorHold_success(t *testing.T) {
 		var opened []string
 		m := pendingEditor(t, &opened)
 
-		_, cmd := update(t, m, keyMsg("e"))
+		_, cmd := edit(t, m)
 
 		if got := messages(t, cmd); slices.ContainsFunc(got, isExec(t)) {
 			t.Errorf("Update(e) messages = %v, want the editor held", got)
@@ -451,7 +451,7 @@ func TestThemeEditorHold_success(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				t.Parallel()
 				var opened []string
-				m, _ := update(t, pendingEditor(t, &opened), keyMsg("e"))
+				m, _ := edit(t, pendingEditor(t, &opened))
 
 				_, cmd := update(t, m, reply)
 
@@ -465,7 +465,7 @@ func TestThemeEditorHold_success(t *testing.T) {
 	t.Run("runs the held editor when the reply times out", func(t *testing.T) {
 		t.Parallel()
 		var opened []string
-		m, hold := update(t, pendingEditor(t, &opened), keyMsg("e"))
+		m, hold := edit(t, pendingEditor(t, &opened))
 
 		var got []tea.Msg
 		for _, msg := range messages(t, hold) {
@@ -482,10 +482,10 @@ func TestThemeEditorHold_success(t *testing.T) {
 	t.Run("a stale timeout does not release a later hold", func(t *testing.T) {
 		t.Parallel()
 		var opened []string
-		m, stale := update(t, pendingEditor(t, &opened), keyMsg("e"))
+		m, stale := edit(t, pendingEditor(t, &opened))
 		m, _ = update(t, m, darkBg())
 		m, _ = update(t, m, tui.EditorFinishedMsg{Err: exec.ErrNotFound})
-		m, _ = update(t, m, keyMsg("e"))
+		m, _ = edit(t, m)
 
 		var got []tea.Msg
 		for _, msg := range messages(t, stale) {
@@ -501,14 +501,14 @@ func TestThemeEditorHold_success(t *testing.T) {
 	t.Run("a timeout after the reply keeps later queries pending", func(t *testing.T) {
 		t.Parallel()
 		var opened []string
-		m, stale := update(t, pendingEditor(t, &opened), keyMsg("e"))
+		m, stale := edit(t, pendingEditor(t, &opened))
 		m, _ = update(t, m, darkBg())
 		m, _ = update(t, m, tui.EditorFinishedMsg{Err: exec.ErrNotFound})
 		for _, msg := range messages(t, stale) {
 			m, _ = update(t, m, msg)
 		}
 
-		_, cmd := update(t, m, keyMsg("e"))
+		_, cmd := edit(t, m)
 
 		if got := messages(t, cmd); slices.ContainsFunc(got, isExec(t)) {
 			t.Errorf("Update(e) messages = %v, want the editor held", got)

@@ -154,6 +154,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = m.applyLog(msg)
 	case committedMsg:
 		m.applyCommitted(msg)
+	case editCheckedMsg:
+		cmd = m.editChecked(msg)
 	case EditorFinishedMsg:
 		cmd = m.editorFinished(msg)
 	case tea.KeyPressMsg:
@@ -243,6 +245,13 @@ func (m *Model) setProfile(dark bool) {
 func (m *Model) applyLoad(msg loadedMsg) tea.Cmd {
 	m.loaded = true
 	m.reloading = false
+	if m.target != "" && msg.moved {
+		m.reloadPath = ""
+		m.err = nil
+		m.change.WorkingCopy = false
+		m.status = movedStatus
+		return nil
+	}
 	m.err = msg.err
 	if msg.err != nil {
 		return nil

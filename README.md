@@ -111,8 +111,8 @@ hunk in the file.
 | `d` | Show or hide the removed lines of the hunk under the cursor |
 | `D` | Show or hide the removed lines of every hunk in the file |
 | `c` | Commit the selected hunks |
-| `R` | Reload to pick up edits made outside jjr; working-copy revision only |
-| `e` | Edit the current file in `$VISUAL` / `$EDITOR` (default `vi`); working-copy revision only |
+| `R` | Reload to pick up edits made outside jjr; working-copy revision only, and only while it is still `@` (press `@` after `jj new`) |
+| `e` | Edit the current file in `$VISUAL` / `$EDITOR` (default `vi`); working-copy revision only, and only while it is still `@` |
 | `f` | Switch between changes only and the full file |
 | `?` | Show all keys |
 | `q` | Quit |

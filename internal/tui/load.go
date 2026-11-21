@@ -1,8 +1,8 @@
 package tui
 
 import (
-	"cmp"
 	"context"
+	"errors"
 	"fmt"
 
 	tea "charm.land/bubbletea/v2"
@@ -10,10 +10,13 @@ import (
 	"github.com/madalinpopa/jjreview/internal/jj"
 )
 
+const movedStatus = "working copy moved; press @ to review it"
+
 type loadedMsg struct {
 	change jj.Change
 	files  []diff.File
 	root   string
+	moved  bool
 	err    error
 }
 
@@ -46,13 +49,17 @@ func (m *Model) reload() tea.Cmd {
 	}
 	m.reloading = true
 	m.log.stale = true
-	return load(m.ctx, m.src, cmp.Or(m.target, m.rev))
+	rev := m.rev
+	if m.target != "" {
+		rev = jj.WorkingCopyRevset(m.target)
+	}
+	return load(m.ctx, m.src, rev)
 }
 
 func fetch(ctx context.Context, src Source, rev string) loadedMsg {
 	change, err := src.Change(ctx, rev)
 	if err != nil {
-		return loadedMsg{err: fmt.Errorf("load change %s: %w", rev, err)}
+		return loadedMsg{err: fmt.Errorf("load change %s: %w", rev, err), moved: errors.Is(err, jj.ErrNoRevision)}
 	}
 	files, err := src.Diff(ctx, change.CommitID)
 	if err != nil {

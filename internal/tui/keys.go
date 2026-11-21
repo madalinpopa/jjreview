@@ -61,7 +61,7 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.openModal()
 	case key.Matches(msg, m.keys.edit):
 		if m.canEdit() && m.confirmDrop(msg, armed) {
-			return m.openEditor()
+			return m.checkEdit()
 		}
 	case key.Matches(msg, m.keys.help):
 		m.help = true

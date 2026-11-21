@@ -1,12 +1,16 @@
 package tui
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/diff"
+	"github.com/madalinpopa/jjreview/internal/jj"
 )
 
 const modalListRows = 4
@@ -29,10 +33,9 @@ func (m Model) modalView() string {
 		}, nil),
 		m.box(inner, p.Selection, mo.input.View()),
 	}
-	for _, note := range m.modalNotes() {
-		lines = append(lines, note.style.Background(p.Card).Width(inner).Render(note.text))
-	}
 	lines = append(lines, paint(inner, p.Card, nil, m.modalFooter()))
+	room := m.height - lipgloss.Height(strings.Join(lines, "\n")) - 2
+	lines = slices.Insert(lines, len(lines)-1, m.noteLines(inner, max(room, 1))...)
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(p.ModalBorder).
@@ -107,6 +110,24 @@ func (m Model) generatorNote() seg {
 	return span(fg(p.Status), "")
 }
 
+func (m Model) noteLines(width, room int) []string {
+	var segs []seg
+	for _, note := range m.modalNotes() {
+		for text := range strings.SplitSeq(ansi.Wrap(note.text, width, ""), "\n") {
+			segs = append(segs, span(note.style, text))
+		}
+	}
+	if len(segs) > room {
+		segs = segs[:room]
+		segs[room-1].text = ansi.Truncate(segs[room-1].text, width-1, "") + "…"
+	}
+	lines := make([]string, len(segs))
+	for i, s := range segs {
+		lines[i] = paint(width, m.pal.Card, []seg{s}, nil)
+	}
+	return lines
+}
+
 func (m Model) modalNotes() []seg {
 	mo := m.modal
 	var notes []seg
@@ -116,6 +137,8 @@ func (m Model) modalNotes() []seg {
 	switch {
 	case mo.committing:
 		notes = append(notes, span(fg(m.pal.Status), "committing…"))
+	case errors.Is(mo.err, jj.ErrStaleRevision):
+		notes = append(notes, span(fg(m.pal.Removed), "error: "+jj.ErrStaleRevision.Error()))
 	case mo.err != nil:
 		notes = append(notes, span(fg(m.pal.Removed), "error: "+mo.err.Error()))
 	}

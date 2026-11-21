@@ -873,6 +873,57 @@ func TestLogSearch_longQuery(t *testing.T) {
 	assertContains(t, lineWith(t, view(m), "/ "), "456789")
 }
 
+func TestLogSearch_resizeKeepsTheCaretVisible(t *testing.T) {
+	query := "abcdefghijklmnopqrstuvwxyz0123456789"
+
+	t.Run("caret at the end", func(t *testing.T) {
+		m := press(t, start(t, revisionSource(), nil, 80, 20), search(query)...)
+
+		m, _ = update(t, m, tea.WindowSizeMsg{Width: 30, Height: 20})
+
+		assertContains(t, lineWith(t, view(m), "/ "), "456789")
+	})
+
+	t.Run("caret inside the query", func(t *testing.T) {
+		m := press(t, start(t, revisionSource(), nil, 80, 20), search(query)...)
+		m = press(t, m, slices.Repeat([]string{"left"}, 10)...)
+
+		m, _ = update(t, m, tea.WindowSizeMsg{Width: 30, Height: 20})
+
+		assertContains(t, lineWith(t, view(m), "/ "), "xyz0")
+	})
+}
+
+func TestLogSearch_notLoaded(t *testing.T) {
+	t.Run("/ while the log loads does not capture keys", func(t *testing.T) {
+		src := revisionSource()
+		m, showLog := update(t, loaded(t, src), keyMsg("2"))
+
+		m = press(t, m, "/", "x")
+		m = run(t, m, showLog)
+
+		got := view(m)
+		assertMissing(t, got, "/ x")
+		assertContains(t, got, "child feature", "parent")
+	})
+
+	t.Run("/ after a failed load does not capture keys", func(t *testing.T) {
+		src := revisionSource()
+		src.logErr = errors.New("jj exploded")
+		m := press(t, loaded(t, src), "2")
+		src.logErr = nil
+
+		m = press(t, m, "/", "R")
+
+		if src.logCalls != 2 {
+			t.Errorf("Log() calls = %d, want 2", src.logCalls)
+		}
+		got := view(m)
+		assertMissing(t, got, "jj exploded", "/ R")
+		assertContains(t, got, "child feature")
+	})
+}
+
 func TestLogSearch_ctrlVReadsTheClipboard(t *testing.T) {
 	m := press(t, loaded(t, revisionSource()), search("")...)
 
@@ -905,5 +956,40 @@ func TestLogExpand_jumpShowsTheHeader(t *testing.T) {
 		m = press(t, m, "G")
 
 		assertContains(t, view(m), "zzzzroot")
+	})
+}
+
+func TestLogSearch_failedRefresh(t *testing.T) {
+	searchDuringFailedRefresh := func(t *testing.T, src *fakeSource) tui.Model {
+		t.Helper()
+		m := press(t, loaded(t, src), "2")
+		m, refresh := update(t, m, keyMsg("R"))
+		m = press(t, m, "/", "c", "h", "i", "l", "d")
+		src.logErr = errors.New("jj exploded")
+		m = run(t, m, refresh)
+		src.logErr = nil
+		return m
+	}
+
+	t.Run("R retries and keeps the query", func(t *testing.T) {
+		src := revisionSource()
+		m := searchDuringFailedRefresh(t, src)
+
+		m = press(t, m, "R")
+
+		if src.logCalls != 3 {
+			t.Errorf("Log() calls = %d, want 3", src.logCalls)
+		}
+		got := view(m)
+		assertMissing(t, got, "jj exploded", "parent")
+		assertContains(t, got, "child feature")
+	})
+
+	t.Run("1 switches to the review tab", func(t *testing.T) {
+		m := searchDuringFailedRefresh(t, revisionSource())
+
+		m = press(t, m, "1")
+
+		assertReviewTab(t, m)
 	})
 }
