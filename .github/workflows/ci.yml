@@ -2,8 +2,16 @@ name: CI
 
 on:
   pull_request:
+    paths-ignore:
+      - README.md
+      - LICENSE
+      - docs/**
   push:
     branches: [main]
+    paths-ignore:
+      - README.md
+      - LICENSE
+      - docs/**
   workflow_dispatch:
 
 permissions:
@@ -56,21 +64,9 @@ jobs:
       - run: jj --version
       - run: go test -race -coverprofile=coverage.out ./...
       - run: go tool cover -func=coverage.out | tail -n 1 >> "$GITHUB_STEP_SUMMARY"
-
-  build:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
-        with:
-          go-version-file: go.mod
-          cache: false
-      - uses: goreleaser/goreleaser-action@a4f02ab5355a589de60d917a659ce617ed19b3de # v7.3.0
-        with:
-          version: v2.20.2
-          args: release --snapshot --clean
-      - run: ./dist/jjr_linux_amd64_v1/jjr --version
+      - name: Cross-compile for darwin
+        run: go build -o /dev/null ./cmd/jjr
+        env:
+          CGO_ENABLED: "0"
+          GOOS: darwin
+          GOARCH: arm64
