@@ -42,7 +42,7 @@ func (m Model) screen() string {
 	var body string
 	switch m.view {
 	case logView:
-		body = m.logCard()
+		body = m.log.view(m.logEnv())
 	case bookmarksView:
 		body = m.bookmarks.View(m.bookmarkEnv())
 	case reviewView:

@@ -28,6 +28,14 @@ type contentKey struct {
 	path string
 }
 
+type view int
+
+const (
+	reviewView view = iota
+	logView
+	bookmarksView
+)
+
 type Model struct {
 	ctx         context.Context
 	src         Source
@@ -76,7 +84,7 @@ type Model struct {
 	root        string
 	reloadPath  string
 	view        view
-	log         logState
+	log         logModel
 	bookmarks   bookmarks.Model
 }
 
@@ -93,13 +101,13 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		contents:    map[contentKey]string{},
 		contentErrs: map[contentKey]error{},
 		highlights:  map[highlightKey]fileHighlight{},
-		log:         newLogState(),
+		log:         newLogModel(ctx, src),
 		bookmarks:   bookmarks.New(ctx, src),
 		width:       defaultWidth,
 		height:      defaultHeight,
 	}
 	m.treeWidth = m.measureTree()
-	m.resizeSearch()
+	m.log.resize(m.width)
 	return m
 }
 
@@ -123,7 +131,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.resizeSearch()
+		m.log.resize(m.width)
 	case queryBackgroundMsg:
 		cmd = m.requestBackground()
 	case tea.BackgroundColorMsg:
@@ -158,10 +166,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyContent(msg)
 	case generatedMsg:
 		m.applyGenerated(msg)
-	case logFilesMsg:
-		m.applyLogFiles(msg)
-	case logMsg:
-		cmd = m.applyLog(msg)
+	case logMsg, logFilesMsg:
+		cmd = m.logEffects(m.log.update(msg, m.logEnv()))
 	case committedMsg:
 		m.applyCommitted(msg)
 	case editCheckedMsg:
@@ -176,14 +182,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.modalInput(msg)
 		case m.bookmarks.OverlayOpen():
 			cmd = m.bookmarks.Paste(msg)
-		case m.view == logView && m.log.searching:
-			cmd = m.updateQuery(msg)
+		case m.view == logView:
+			cmd = m.log.input(msg)
 		}
 	default:
 		if c, in, ok := m.bookmarks.Update(msg, m.bookmarkEnv()); ok {
 			cmd = m.bookmarkEffects(c, in)
-		} else if m.view == logView && m.log.searching {
-			cmd = m.updateQuery(msg)
+		} else if m.view == logView {
+			cmd = m.log.input(msg)
 		}
 	}
 	m.resizeModal()
@@ -360,7 +366,7 @@ func (m Model) requestContent() tea.Cmd {
 func (m *Model) scroll() {
 	switch m.view {
 	case logView:
-		m.log.keepVisible(m.logHeight())
+		m.log.keepVisible(m.logEnv())
 		return
 	case bookmarksView:
 		m.bookmarks.KeepVisible(m.diffHeight())

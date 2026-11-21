@@ -30,8 +30,8 @@ func (m Model) overlay() string {
 		return m.bookmarks.Overlay(m.bookmarkEnv())
 	case m.help:
 		return m.helpView()
-	case m.view == logView && m.log.confirm != nil:
-		return m.abandonView()
+	case m.view == logView && m.log.confirming():
+		return m.log.confirmView(m.logEnv())
 	}
 	return ""
 }

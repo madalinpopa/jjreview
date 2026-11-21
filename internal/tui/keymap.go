@@ -35,12 +35,6 @@ type keyMap struct {
 	logTab       key.Binding
 	bookmarksTab key.Binding
 	open         key.Binding
-	search       key.Binding
-	clearSearch  key.Binding
-	expand       key.Binding
-	collapse     key.Binding
-	abandon      key.Binding
-	confirm      key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -74,12 +68,6 @@ func newKeyMap() keyMap {
 		logTab:       key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "log tab")),
 		bookmarksTab: key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "bookmarks tab")),
 		open:         key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "review the revision")),
-		search:       key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search by ID or description")),
-		expand:       key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "show the files of the revision")),
-		collapse:     key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "hide the files of the revision")),
-		clearSearch:  key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear the search")),
-		abandon:      key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "abandon the revision (y confirms)")),
-		confirm:      key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "confirm")),
 	}
 }
 
@@ -110,20 +98,7 @@ func (m Model) keyHints() []ui.KeyHint {
 }
 
 func (m Model) logHints() []ui.KeyHint {
-	if m.log.searching {
-		return []ui.KeyHint{ui.Hint("apply", m.keys.open), ui.Hint("clear", m.keys.clearSearch)}
-	}
-	hints := []ui.KeyHint{
-		ui.Hint("tabs", m.keys.reviewTab, m.keys.logTab, m.keys.bookmarksTab),
-		ui.Hint("revision", m.keys.down, m.keys.up),
-		ui.Hint("review", m.keys.open),
-		ui.Hint("files", m.keys.expand, m.keys.collapse),
-		ui.Hint("search", m.keys.search),
-	}
-	if m.log.filtered() {
-		hints = append(hints, ui.Hint("clear", m.keys.clearSearch))
-	}
-	return append(hints, ui.Hint("refresh", m.keys.reload), ui.Hint("help", m.keys.help))
+	return m.log.hints(ui.Hint("tabs", m.keys.reviewTab, m.keys.logTab, m.keys.bookmarksTab), ui.Hint("help", m.keys.help))
 }
 
 func (m Model) bookmarkHints() []ui.KeyHint {
@@ -148,18 +123,7 @@ func (m Model) helpSections() []helpSection {
 	if m.view == logView {
 		return []helpSection{
 			views,
-			{title: "Log", hints: []ui.KeyHint{
-				ui.Hint("next / previous revision", m.keys.down, m.keys.up),
-				ui.Hint("half page down / up", m.keys.halfDown, m.keys.halfUp),
-				ui.Hint("first / last revision", m.keys.top, m.keys.bottom),
-				ui.Describe(m.keys.open),
-				ui.Describe(m.keys.expand),
-				ui.Describe(m.keys.collapse),
-				ui.Describe(m.keys.abandon),
-				ui.Describe(m.keys.search),
-				ui.Describe(m.keys.clearSearch),
-				ui.Hint("refresh the log", m.keys.reload),
-			}},
+			{title: "Log", hints: m.log.help()},
 			{title: "Other", hints: []ui.KeyHint{ui.Describe(m.keys.help), ui.Describe(m.keys.quit)}},
 		}
 	}
