@@ -131,6 +131,9 @@ model = "claude-haiku-5-5"
 [providers.copilot]
 model = "auto"
 
+[theme]
+mode = "auto"
+
 [theme.base]
 page = "none"
 text = "none"
@@ -184,6 +187,26 @@ comment = "bright-black"
 ```
 
 A colour is `none` (the terminal default), one of the 16 ANSI names (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white` and their `bright-` forms), a number from 0 to 255, `#rgb` or `#rrggbb`. ANSI names and 0-15 follow the terminal theme. Unknown keys and invalid colours stop `jjr` with an error naming the key; a colour set directly under `[theme]` names the section it now belongs to. When neither `base.cursor_bg` nor `base.page` is set and the terminal reports its background colour, `jjr` shades the cursor line slightly from that background instead of using `bright-black`. Likewise, on a light terminal background with none of `diff.hunk_bg`, `base.card` or `base.page` set, hunk headers get a slightly darker shade of that background.
+
+### Light and dark profiles
+
+Colours under `[theme.<section>]` apply to both profiles. `[theme.light.<section>]` and `[theme.dark.<section>]` override them for one profile, so each colour comes from the defaults, then the shared section, then the profile:
+
+```toml
+[theme]
+mode = "auto"
+
+[theme.diff]
+added = "green"
+
+[theme.light.base]
+cursor_bg = "#e8e4df"
+
+[theme.dark.syntax]
+comment = "#6e6a86"
+```
+
+`mode = "light"` or `"dark"` always uses that profile. With `auto`, `jjr` picks the profile from the background colour the terminal reports, and uses the dark profile until it answers or when it never does. It checks again whenever the terminal reports a colour scheme change (mode 2031) or regains focus, if the terminal reports focus, and after the external editor closes; the reported background decides the profile, and a scheme change switches immediately only in terminals that have never answered. Opening the editor waits up to 300 ms for an outstanding answer. In rare cases an answer arrives later than that and reaches the editor, or arrives after `jjr` has exited and shows up as stray text in the shell.
 
 ### GitHub Copilot
 
