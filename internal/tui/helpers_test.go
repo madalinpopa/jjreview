@@ -62,6 +62,12 @@ type fakeSource struct {
 	squashes        []squashCall
 	squashErr       error
 	squashWarnings  string
+	pushes          []jj.LogEntry
+	pushResult      []jj.PushResult
+	pushErr         error
+	fetches         int
+	fetchChanged    bool
+	fetchErr        error
 }
 
 type squashCall struct {
@@ -173,6 +179,19 @@ func (s *fakeSource) Squash(_ context.Context, from []jj.LogEntry, into jj.LogEn
 		return "", s.squashErr
 	}
 	return s.squashWarnings, nil
+}
+
+func (s *fakeSource) Push(_ context.Context, e jj.LogEntry) ([]jj.PushResult, error) {
+	s.pushes = append(s.pushes, e)
+	if s.pushErr != nil {
+		return nil, s.pushErr
+	}
+	return s.pushResult, nil
+}
+
+func (s *fakeSource) Fetch(context.Context) (bool, error) {
+	s.fetches++
+	return s.fetchChanged, s.fetchErr
 }
 
 func (s *fakeSource) Successor(_ context.Context, changeID, commitID string) (jj.Change, error) {
