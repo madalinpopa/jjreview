@@ -59,6 +59,14 @@ type fakeSource struct {
 	wcCommit        string
 	successors      map[string]jj.Change
 	succErrs        map[string]error
+	squashes        []squashCall
+	squashErr       error
+	squashWarnings  string
+}
+
+type squashCall struct {
+	from []string
+	into string
 }
 
 func (s *fakeSource) Bookmarks(context.Context) ([]jj.Bookmark, error) {
@@ -153,6 +161,18 @@ func (s *fakeSource) Abandon(_ context.Context, commitID string, bookmarks []str
 		return false, fmt.Errorf("abandon %s: %w", commitID, jj.ErrBookmarksChanged)
 	}
 	return commitID == s.wcCommit, s.abandonErr
+}
+
+func (s *fakeSource) Squash(_ context.Context, from []jj.LogEntry, into jj.LogEntry) (string, error) {
+	call := squashCall{into: into.CommitID}
+	for _, e := range from {
+		call.from = append(call.from, e.CommitID)
+	}
+	s.squashes = append(s.squashes, call)
+	if s.squashErr != nil {
+		return "", s.squashErr
+	}
+	return s.squashWarnings, nil
 }
 
 func (s *fakeSource) Successor(_ context.Context, changeID, commitID string) (jj.Change, error) {
