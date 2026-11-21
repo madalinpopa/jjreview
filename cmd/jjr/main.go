@@ -14,11 +14,13 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/anthropics/anthropic-sdk-go/v2/option"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/madalinpopa/jjreview/internal/config"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/llm"
 	"github.com/madalinpopa/jjreview/internal/splittool"
+	"github.com/madalinpopa/jjreview/internal/theme"
 	"github.com/madalinpopa/jjreview/internal/tui"
 )
 
@@ -96,10 +98,29 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 	model := tui.New(ctx, jj.New(opts.repo, exe), gen, opts.rev).
 		WithTheme(cfg.Theme).
 		WithEditor(editorCommand(os.Getenv("VISUAL"), os.Getenv("EDITOR")))
-	if _, err := tea.NewProgram(model, tea.WithContext(ctx)).Run(); err != nil && !errors.Is(err, tea.ErrProgramKilled) {
+	_, err = tea.NewProgram(model, tea.WithContext(ctx), tea.WithOutput(stdout)).Run()
+	return finishProgram(stdout, cfg.Theme.Mode, err)
+}
+
+func finishProgram(w io.Writer, mode theme.Mode, err error) error {
+	if err != nil && !errors.Is(err, tea.ErrProgramKilled) {
 		return err
 	}
-	return nil
+	if resetErr := resetColorScheme(w, mode); resetErr != nil {
+		fmt.Fprintln(os.Stderr, "jjr: warning:", resetErr)
+	}
+	if err == nil || err == tea.ErrProgramKilled || errors.Is(err, tea.ErrInterrupted) || errors.Is(err, context.Canceled) { //nolint:errorlint
+		return nil
+	}
+	return err
+}
+
+func resetColorScheme(w io.Writer, mode theme.Mode) error {
+	if mode != theme.ModeAuto {
+		return nil
+	}
+	_, err := io.WriteString(w, ansi.ResetModeLightDark)
+	return err
 }
 
 func provider(cfg config.Config) (llm.Provider, error) {
