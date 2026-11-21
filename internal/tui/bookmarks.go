@@ -12,6 +12,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type bookmarkState struct {
@@ -84,14 +85,7 @@ func (b *bookmarkState) move(delta int) {
 }
 
 func (b *bookmarkState) keepVisible(height int) {
-	top := min(b.top, max(len(b.items)-height, 0))
-	switch {
-	case b.cursor < top:
-		top = b.cursor
-	case b.cursor >= top+height:
-		top = b.cursor - height + 1
-	}
-	b.top = max(top, 0)
+	b.top = ui.ScrollTop(b.top, b.cursor, height, len(b.items))
 }
 
 func (b *bookmarkState) scrollPage(delta, height int) {
@@ -262,18 +256,18 @@ func (m Model) bookmarkDeleteView() string {
 	p := m.pal
 	b := m.bmDelete
 	inner := m.modalInner()
-	lines := []string{paint(inner, p.Card, []seg{span(fg(p.Title).Bold(true), "Delete bookmark")}, nil)}
-	for line := range strings.SplitSeq(ansi.Hardwrap(escapePath(b.Name), inner, true), "\n") {
-		lines = append(lines, paint(inner, p.Card, []seg{span(fg(p.Key).Bold(true), line)}, nil))
+	lines := []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "Delete bookmark")}, nil)}
+	for line := range strings.SplitSeq(ansi.Hardwrap(ui.EscapePath(b.Name), inner, true), "\n") {
+		lines = append(lines, ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Key).Bold(true), line)}, nil))
 	}
-	target := []seg{span(fg(p.Removed), "conflicted")}
+	target := []ui.Seg{ui.Span(ui.Fg(p.Removed), "conflicted")}
 	if !b.Conflict {
-		gap := span(lipgloss.NewStyle(), " ")
-		target = []seg{span(fg(p.Title), shortID(b.ChangeID)), gap, span(fg(p.Muted), shortID(b.CommitID)), gap, m.logDescription(jj.LogEntry{Description: b.Description})}
+		gap := ui.Span(lipgloss.NewStyle(), " ")
+		target = []ui.Seg{ui.Span(ui.Fg(p.Title), ui.ShortID(b.ChangeID)), gap, ui.Span(ui.Fg(p.Muted), ui.ShortID(b.CommitID)), gap, ui.Description(p, b.Description, false)}
 	}
 	lines = append(lines,
-		paint(inner, p.Card, target, nil),
-		paint(inner, p.Card, nil, []seg{span(fg(p.Key), "y"), span(fg(p.Muted), " delete · any other key cancels")}),
+		ui.Paint(inner, p.Card, target, nil),
+		ui.Paint(inner, p.Card, nil, []ui.Seg{ui.Span(ui.Fg(p.Key), "y"), ui.Span(ui.Fg(p.Muted), " delete · any other key cancels")}),
 	)
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -324,7 +318,7 @@ func observe(ctx context.Context, src Source, names ...string) string {
 		case items[j].Conflict:
 			parts[i] = name + " is conflicted"
 		default:
-			parts[i] = name + " → " + shortID(items[j].CommitID)
+			parts[i] = name + " → " + ui.ShortID(items[j].CommitID)
 		}
 	}
 	return "now: " + strings.Join(parts, ", ")
@@ -347,17 +341,17 @@ func (m Model) bookmarksCard() string {
 	p := m.pal
 	inner := max(m.width-2, 0)
 	var body []string
-	var value []seg
+	var value []ui.Seg
 	b := m.bookmarks
 	switch {
 	case b.err != nil:
-		body = []string{paint(inner, p.Card, []seg{span(fg(p.Removed), "  error: "+b.err.Error())}, nil)}
+		body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  error: "+b.err.Error())}, nil)}
 	case !b.loaded:
-		body = []string{m.logMessage("loading…", inner)}
+		body = []string{ui.Message(m.pal, "loading…", inner)}
 	case len(b.items) == 0:
-		body = []string{m.logMessage("no bookmarks", inner)}
+		body = []string{ui.Message(m.pal, "no bookmarks", inner)}
 	default:
-		value = []seg{span(fg(p.Title), fmt.Sprintf("bookmark %d/%d", b.cursor+1, len(b.items)))}
+		value = []ui.Seg{ui.Span(ui.Fg(p.Title), fmt.Sprintf("bookmark %d/%d", b.cursor+1, len(b.items)))}
 		names := 0
 		for _, item := range b.items {
 			names = max(names, min(lipgloss.Width(item.Name), bookmarkNameWidth))
@@ -366,7 +360,7 @@ func (m Model) bookmarksCard() string {
 			body = append(body, m.bookmarkLine(i, names, inner))
 		}
 	}
-	return m.card(m.width, "Bookmarks", true, value, body)
+	return ui.Card(m.pal, m.width, m.bodyHeight(), "Bookmarks", true, value, body)
 }
 
 func (m Model) bookmarkLine(i, names, width int) string {
@@ -380,30 +374,30 @@ func (m Model) bookmarkLine(i, names, width int) string {
 	if b.CommitID != "" && b.CommitID == m.targetHead {
 		bar = p.Selection
 	}
-	gap := span(lipgloss.NewStyle(), " ")
+	gap := ui.Span(lipgloss.NewStyle(), " ")
 	pad := strings.Repeat(" ", max(names-lipgloss.Width(b.Name), 0)+1)
-	left := []seg{span(fg(bar), barGlyph(bar)), m.pill(p.Chip, p.Key, b.Name), span(lipgloss.NewStyle(), pad)}
-	right := clipSegs(m.bookmarkMarkers(b), width-segsWidth(left[:2])-1)
+	left := []ui.Seg{ui.Span(ui.Fg(bar), ui.BarGlyph(bar)), ui.Pill(p.Chip, p.Key, b.Name), ui.Span(lipgloss.NewStyle(), pad)}
+	right := clipSegs(m.bookmarkMarkers(b), width-ui.Width(left[:2])-1)
 	if b.CommitID != "" {
 		left = append(left,
-			span(fg(p.Title), shortID(b.ChangeID)), gap,
-			span(fg(p.Muted), shortID(b.CommitID)), gap,
-			m.logDescription(jj.LogEntry{Description: b.Description}),
+			ui.Span(ui.Fg(p.Title), ui.ShortID(b.ChangeID)), gap,
+			ui.Span(ui.Fg(p.Muted), ui.ShortID(b.CommitID)), gap,
+			ui.Description(p, b.Description, false),
 		)
 	}
-	return paint(width, bg, left, right)
+	return ui.Paint(width, bg, left, right)
 }
 
-func (m Model) bookmarkMarkers(b jj.Bookmark) []seg {
+func (m Model) bookmarkMarkers(b jj.Bookmark) []ui.Seg {
 	p := m.pal
-	gap := span(lipgloss.NewStyle(), " ")
-	var segs []seg
+	gap := ui.Span(lipgloss.NewStyle(), " ")
+	var segs []ui.Seg
 	if b.Conflict {
-		segs = append(segs, span(fg(p.Removed), "conflicted"), gap)
+		segs = append(segs, ui.Span(ui.Fg(p.Removed), "conflicted"), gap)
 	}
 	for _, r := range b.Remotes {
 		if r.Synced {
-			segs = append(segs, span(fg(p.Added), r.Remote+" ✓"), gap)
+			segs = append(segs, ui.Span(ui.Fg(p.Added), r.Remote+" ✓"), gap)
 			continue
 		}
 		var parts []string
@@ -416,7 +410,7 @@ func (m Model) bookmarkMarkers(b jj.Bookmark) []seg {
 		if len(parts) == 0 {
 			parts = append(parts, "≠")
 		}
-		segs = append(segs, span(fg(p.Picked), r.Remote+" "+strings.Join(parts, " ")), gap)
+		segs = append(segs, ui.Span(ui.Fg(p.Picked), r.Remote+" "+strings.Join(parts, " ")), gap)
 	}
 	return segs
 }
@@ -428,14 +422,14 @@ func countLabel(arrow string, n int, atLeast bool) string {
 	return fmt.Sprintf("%s%d", arrow, n)
 }
 
-func clipSegs(segs []seg, width int) []seg {
-	var out []seg
+func clipSegs(segs []ui.Seg, width int) []ui.Seg {
+	var out []ui.Seg
 	used := 0
 	for _, s := range segs {
-		w := lipgloss.Width(s.text)
+		w := lipgloss.Width(s.Text)
 		if used+w > width {
 			if rest := width - used; rest > 1 {
-				out = append(out, span(s.style, ansi.Truncate(s.text, rest-1, "")+"…"))
+				out = append(out, ui.Span(s.Style, ansi.Truncate(s.Text, rest-1, "")+"…"))
 			}
 			return out
 		}

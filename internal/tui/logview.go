@@ -12,6 +12,7 @@ import (
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type view int
@@ -372,7 +373,7 @@ func (m *Model) expandFiles() tea.Cmd {
 	return func() tea.Msg {
 		files, err := src.Diff(ctx, id)
 		if err != nil {
-			err = fmt.Errorf("load files of %s: %w", shortID(id), err)
+			err = fmt.Errorf("load files of %s: %w", ui.ShortID(id), err)
 		}
 		paths := make([]diff.File, 0, len(files))
 		for _, f := range files {
@@ -501,17 +502,17 @@ func (m Model) logCard() string {
 	p := m.pal
 	inner := max(m.width-2, 0)
 	var body []string
-	var value []seg
+	var value []ui.Seg
 	switch {
 	case m.log.err != nil:
-		body = []string{paint(inner, p.Card, []seg{span(fg(p.Removed), "  error: "+m.log.err.Error())}, nil)}
+		body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  error: "+m.log.err.Error())}, nil)}
 	case !m.log.loaded:
-		body = []string{m.logMessage("loading…", inner)}
+		body = []string{ui.Message(m.pal, "loading…", inner)}
 	default:
 		if m.log.filtered() {
 			q := m.log.query
 			q.SetStyles(searchStyles(p))
-			body = []string{paint(inner, p.Card, []seg{span(lipgloss.NewStyle(), " "), span(lipgloss.NewStyle(), q.View())}, nil)}
+			body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(lipgloss.NewStyle(), " "), ui.Span(lipgloss.NewStyle(), q.View())}, nil)}
 		}
 		at, total := m.log.position()
 		if total == 0 {
@@ -519,10 +520,10 @@ func (m Model) logCard() string {
 			if m.log.filtered() {
 				empty = "no matching revisions"
 			}
-			body = append(body, m.logMessage(empty, inner))
+			body = append(body, ui.Message(m.pal, empty, inner))
 			break
 		}
-		value = []seg{span(fg(p.Title), fmt.Sprintf("rev %d/%d", at, total))}
+		value = []ui.Seg{ui.Span(ui.Fg(p.Title), fmt.Sprintf("rev %d/%d", at, total))}
 		rows := m.log.rows()
 		for i := m.log.top; i < len(rows) && len(body) < m.diffHeight(); i++ {
 			if rows[i].file == logEntryRow {
@@ -532,7 +533,7 @@ func (m Model) logCard() string {
 			}
 		}
 	}
-	return m.card(m.width, "Log", true, value, body)
+	return ui.Card(m.pal, m.width, m.bodyHeight(), "Log", true, value, body)
 }
 
 func (m Model) logHeight() int {
@@ -540,10 +541,6 @@ func (m Model) logHeight() int {
 		return max(m.diffHeight()-1, 1)
 	}
 	return m.diffHeight()
-}
-
-func (m Model) logMessage(text string, width int) string {
-	return paint(width, m.pal.Card, []seg{span(fg(m.pal.Muted).Italic(true), "  "+text)}, nil)
 }
 
 func (m Model) logLine(i, width int) string {
@@ -558,62 +555,62 @@ func (m Model) logLine(i, width int) string {
 	if e != nil && e.CommitID == m.targetHead {
 		bar = p.Selection
 	}
-	left := []seg{span(fg(bar), barGlyph(bar)), span(fg(p.Muted), line.Graph)}
+	left := []ui.Seg{ui.Span(ui.Fg(bar), ui.BarGlyph(bar)), ui.Span(ui.Fg(p.Muted), line.Graph)}
 	if e == nil {
-		return paint(width, bg, left, nil)
+		return ui.Paint(width, bg, left, nil)
 	}
-	id := fg(p.Title)
+	id := ui.Fg(p.Title)
 	if e.WorkingCopy {
 		id = id.Bold(true)
 	}
-	left = append(left, span(id, shortID(e.ChangeID)), span(lipgloss.NewStyle(), " "))
+	left = append(left, ui.Span(id, ui.ShortID(e.ChangeID)), ui.Span(lipgloss.NewStyle(), " "))
 	for _, b := range e.Bookmarks {
-		left = append(left, m.pill(p.Chip, p.Key, b), span(lipgloss.NewStyle(), " "))
+		left = append(left, ui.Pill(p.Chip, p.Key, b), ui.Span(lipgloss.NewStyle(), " "))
 	}
-	desc := m.logDescription(*e)
-	right := []seg{span(fg(p.Muted), strings.Join(slices.DeleteFunc([]string{e.Author, e.Timestamp}, func(s string) bool { return s == "" }), " · ")), span(lipgloss.NewStyle(), " ")}
-	if rowWidth(left, right)+min(lipgloss.Width(desc.text), logMinDescription) > width {
+	desc := ui.Description(p, e.Description, e.Immutable)
+	right := []ui.Seg{ui.Span(ui.Fg(p.Muted), strings.Join(slices.DeleteFunc([]string{e.Author, e.Timestamp}, func(s string) bool { return s == "" }), " · ")), ui.Span(lipgloss.NewStyle(), " ")}
+	if ui.RowWidth(left, right)+min(lipgloss.Width(desc.Text), logMinDescription) > width {
 		right = nil
 	}
-	return paint(width, bg, append(left, desc), right)
+	return ui.Paint(width, bg, append(left, desc), right)
 }
 
 func (m Model) logFileLine(r logRow, width int) string {
 	p := m.pal
 	e := m.log.shown[r.line].Entry
-	left := []seg{span(fg(p.Card), barGlyph(p.Card)), span(fg(p.Muted), continuation(m.log.shown[r.line].Graph, r.line == len(m.log.shown)-1)), span(lipgloss.NewStyle(), "  ")}
+	left := []ui.Seg{ui.Span(ui.Fg(p.Card), ui.BarGlyph(p.Card)), ui.Span(ui.Fg(p.Muted), continuation(m.log.shown[r.line].Graph, r.line == len(m.log.shown)-1)), ui.Span(lipgloss.NewStyle(), "  ")}
 	f := m.log.files[e.CommitID]
 	switch {
 	case !f.loaded:
-		left = append(left, span(fg(p.Muted).Italic(true), "loading…"))
+		left = append(left, ui.Span(ui.Fg(p.Muted).Italic(true), "loading…"))
 	case f.err != nil:
-		left = append(left, span(fg(p.Removed), "error: "+f.err.Error()))
+		left = append(left, ui.Span(ui.Fg(p.Removed), "error: "+f.err.Error()))
 	case len(f.files) == 0:
-		left = append(left, span(fg(p.Muted).Italic(true), "no changes"))
+		left = append(left, ui.Span(ui.Fg(p.Muted).Italic(true), "no changes"))
 	default:
 		file := f.files[r.file]
 		letter, style := m.fileStatus(file.Status)
-		name := escapePath(file.Path())
+		name := ui.EscapePath(file.Path())
 		if file.Status == diff.StatusRenamed || file.Status == diff.StatusCopied {
-			name = escapePath(file.OldPath) + " → " + escapePath(file.NewPath)
+			name = ui.EscapePath(file.OldPath) + " → " + ui.EscapePath(file.NewPath)
 		}
-		left = append(left, span(style, letter), span(lipgloss.NewStyle(), " "), span(fg(p.Strong), name))
+		left = append(left, ui.Span(style, letter), ui.Span(lipgloss.NewStyle(), " "), ui.Span(ui.Fg(p.Strong), name))
 	}
-	return paint(width, p.Card, left, nil)
+	return ui.Paint(width, p.Card, left, nil)
 }
 
 func (m Model) fileStatus(s diff.Status) (string, lipgloss.Style) {
 	switch s {
 	case diff.StatusAdded:
-		return "A", fg(m.pal.Added)
+		return "A", ui.Fg(m.pal.Added)
 	case diff.StatusDeleted:
-		return "D", fg(m.pal.Removed)
+		return "D", ui.Fg(m.pal.Removed)
 	case diff.StatusRenamed:
-		return "R", fg(m.pal.Key)
+		return "R", ui.Fg(m.pal.Key)
 	case diff.StatusCopied:
-		return "C", fg(m.pal.Key)
+		return "C", ui.Fg(m.pal.Key)
 	}
-	return "M", fg(m.pal.Picked)
+	return "M", ui.Fg(m.pal.Picked)
 }
 
 func continuation(graph string, last bool) string {
@@ -629,15 +626,4 @@ func continuation(graph string, last bool) string {
 		}
 	}
 	return b.String()
-}
-
-func (m Model) logDescription(e jj.LogEntry) seg {
-	title, _, _ := strings.Cut(e.Description, "\n")
-	switch {
-	case e.Description == "":
-		return span(fg(m.pal.Muted).Italic(true), "(no description set)")
-	case e.Immutable:
-		return span(fg(m.pal.Muted), title)
-	}
-	return span(fg(m.pal.Strong), title)
 }

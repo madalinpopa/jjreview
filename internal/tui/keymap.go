@@ -1,9 +1,8 @@
 package tui
 
 import (
-	"strings"
-
 	"charm.land/bubbles/v2/key"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type keyMap struct {
@@ -90,145 +89,128 @@ func newKeyMap() keyMap {
 	}
 }
 
-type keyHint struct {
-	keys  []string
-	label string
-}
-
-func hint(label string, bindings ...key.Binding) keyHint {
-	h := keyHint{label: label}
-	for _, b := range bindings {
-		h.keys = append(h.keys, strings.Fields(b.Help().Key)...)
-	}
-	return h
-}
-
-func describe(b key.Binding) keyHint {
-	return hint(b.Help().Desc, b)
-}
-
-func (m Model) keyHints() []keyHint {
+func (m Model) keyHints() []ui.KeyHint {
 	switch m.view {
 	case logView:
 		return m.logHints()
 	case bookmarksView:
 		return m.bookmarkHints()
 	}
-	move := hint("line", m.keys.down, m.keys.up)
+	move := ui.Hint("line", m.keys.down, m.keys.up)
 	if m.filesFocus {
-		move.label = "file"
+		move.Label = "file"
 	}
-	hints := []keyHint{hint("pane", m.keys.switchPane), move}
+	hints := []ui.KeyHint{ui.Hint("pane", m.keys.switchPane), move}
 	if !m.change.Immutable {
-		hints = append(hints, hint("select", m.keys.selectHunk), hint("commit", m.keys.commit))
+		hints = append(hints, ui.Hint("select", m.keys.selectHunk), ui.Hint("commit", m.keys.commit))
 	}
 	if m.filesFocus {
-		hints = append(hints, hint("diff", m.keys.removedAll))
+		hints = append(hints, ui.Hint("diff", m.keys.removedAll))
 	} else {
-		hints = append(hints, hint("diff", m.keys.removed))
+		hints = append(hints, ui.Hint("diff", m.keys.removed))
 	}
 	if m.change.WorkingCopy {
-		hints = append(hints, hint("edit", m.keys.edit))
+		hints = append(hints, ui.Hint("edit", m.keys.edit))
 	}
-	return append(hints, hint("help", m.keys.help))
+	return append(hints, ui.Hint("help", m.keys.help))
 }
 
-func (m Model) logHints() []keyHint {
+func (m Model) logHints() []ui.KeyHint {
 	if m.log.searching {
-		return []keyHint{hint("apply", m.keys.open), hint("clear", m.keys.clearSearch)}
+		return []ui.KeyHint{ui.Hint("apply", m.keys.open), ui.Hint("clear", m.keys.clearSearch)}
 	}
-	hints := []keyHint{
-		hint("tabs", m.keys.reviewTab, m.keys.logTab, m.keys.bookmarksTab),
-		hint("revision", m.keys.down, m.keys.up),
-		hint("review", m.keys.open),
-		hint("files", m.keys.expand, m.keys.collapse),
-		hint("search", m.keys.search),
+	hints := []ui.KeyHint{
+		ui.Hint("tabs", m.keys.reviewTab, m.keys.logTab, m.keys.bookmarksTab),
+		ui.Hint("revision", m.keys.down, m.keys.up),
+		ui.Hint("review", m.keys.open),
+		ui.Hint("files", m.keys.expand, m.keys.collapse),
+		ui.Hint("search", m.keys.search),
 	}
 	if m.log.filtered() {
-		hints = append(hints, hint("clear", m.keys.clearSearch))
+		hints = append(hints, ui.Hint("clear", m.keys.clearSearch))
 	}
-	return append(hints, hint("refresh", m.keys.reload), hint("help", m.keys.help))
+	return append(hints, ui.Hint("refresh", m.keys.reload), ui.Hint("help", m.keys.help))
 }
 
-func (m Model) bookmarkHints() []keyHint {
-	return []keyHint{
-		hint("tabs", m.keys.reviewTab, m.keys.logTab, m.keys.bookmarksTab),
-		hint("bookmark", m.keys.down, m.keys.up),
-		hint("review", m.keys.open),
-		hint("new", m.keys.newBookmark),
-		hint("edit", m.keys.editBookmark),
-		hint("delete", m.keys.deleteBookmark),
-		hint("refresh", m.keys.reload),
-		hint("help", m.keys.help),
+func (m Model) bookmarkHints() []ui.KeyHint {
+	return []ui.KeyHint{
+		ui.Hint("tabs", m.keys.reviewTab, m.keys.logTab, m.keys.bookmarksTab),
+		ui.Hint("bookmark", m.keys.down, m.keys.up),
+		ui.Hint("review", m.keys.open),
+		ui.Hint("new", m.keys.newBookmark),
+		ui.Hint("edit", m.keys.editBookmark),
+		ui.Hint("delete", m.keys.deleteBookmark),
+		ui.Hint("refresh", m.keys.reload),
+		ui.Hint("help", m.keys.help),
 	}
 }
 
 type helpSection struct {
 	title string
-	hints []keyHint
+	hints []ui.KeyHint
 }
 
 func (m Model) helpSections() []helpSection {
-	views := helpSection{title: "Views", hints: []keyHint{describe(m.keys.reviewTab), describe(m.keys.logTab), describe(m.keys.bookmarksTab)}}
+	views := helpSection{title: "Views", hints: []ui.KeyHint{ui.Describe(m.keys.reviewTab), ui.Describe(m.keys.logTab), ui.Describe(m.keys.bookmarksTab)}}
 	if m.view == bookmarksView {
 		return []helpSection{
 			views,
-			{title: "Bookmarks", hints: []keyHint{
-				hint("next / previous bookmark", m.keys.down, m.keys.up),
-				hint("half page down / up", m.keys.halfDown, m.keys.halfUp),
-				hint("first / last bookmark", m.keys.top, m.keys.bottom),
-				hint("review the target revision", m.keys.open),
-				describe(m.keys.newBookmark),
-				describe(m.keys.editBookmark),
-				hint("delete the bookmark (y confirms)", m.keys.deleteBookmark),
-				hint("refresh the bookmarks", m.keys.reload),
+			{title: "Bookmarks", hints: []ui.KeyHint{
+				ui.Hint("next / previous bookmark", m.keys.down, m.keys.up),
+				ui.Hint("half page down / up", m.keys.halfDown, m.keys.halfUp),
+				ui.Hint("first / last bookmark", m.keys.top, m.keys.bottom),
+				ui.Hint("review the target revision", m.keys.open),
+				ui.Describe(m.keys.newBookmark),
+				ui.Describe(m.keys.editBookmark),
+				ui.Hint("delete the bookmark (y confirms)", m.keys.deleteBookmark),
+				ui.Hint("refresh the bookmarks", m.keys.reload),
 			}},
-			{title: "Other", hints: []keyHint{describe(m.keys.help), describe(m.keys.quit)}},
+			{title: "Other", hints: []ui.KeyHint{ui.Describe(m.keys.help), ui.Describe(m.keys.quit)}},
 		}
 	}
 	if m.view == logView {
 		return []helpSection{
 			views,
-			{title: "Log", hints: []keyHint{
-				hint("next / previous revision", m.keys.down, m.keys.up),
-				hint("half page down / up", m.keys.halfDown, m.keys.halfUp),
-				hint("first / last revision", m.keys.top, m.keys.bottom),
-				describe(m.keys.open),
-				describe(m.keys.expand),
-				describe(m.keys.collapse),
-				describe(m.keys.abandon),
-				describe(m.keys.search),
-				describe(m.keys.clearSearch),
-				hint("refresh the log", m.keys.reload),
+			{title: "Log", hints: []ui.KeyHint{
+				ui.Hint("next / previous revision", m.keys.down, m.keys.up),
+				ui.Hint("half page down / up", m.keys.halfDown, m.keys.halfUp),
+				ui.Hint("first / last revision", m.keys.top, m.keys.bottom),
+				ui.Describe(m.keys.open),
+				ui.Describe(m.keys.expand),
+				ui.Describe(m.keys.collapse),
+				ui.Describe(m.keys.abandon),
+				ui.Describe(m.keys.search),
+				ui.Describe(m.keys.clearSearch),
+				ui.Hint("refresh the log", m.keys.reload),
 			}},
-			{title: "Other", hints: []keyHint{describe(m.keys.help), describe(m.keys.quit)}},
+			{title: "Other", hints: []ui.KeyHint{ui.Describe(m.keys.help), ui.Describe(m.keys.quit)}},
 		}
 	}
-	var review []keyHint
+	var review []ui.KeyHint
 	if !m.change.Immutable {
-		review = []keyHint{describe(m.keys.selectHunk), describe(m.keys.selectFile), describe(m.keys.commit)}
+		review = []ui.KeyHint{ui.Describe(m.keys.selectHunk), ui.Describe(m.keys.selectFile), ui.Describe(m.keys.commit)}
 	}
-	review = append(review, describe(m.keys.fold), describe(m.keys.foldAll), describe(m.keys.removed), describe(m.keys.removedAll))
+	review = append(review, ui.Describe(m.keys.fold), ui.Describe(m.keys.foldAll), ui.Describe(m.keys.removed), ui.Describe(m.keys.removedAll))
 	return []helpSection{
 		views,
-		{title: "Navigation", hints: []keyHint{
-			describe(m.keys.switchPane),
-			hint("next / previous line or file", m.keys.down, m.keys.up),
-			hint("half page down / up", m.keys.halfDown, m.keys.halfUp),
-			hint("first / last line or file", m.keys.top, m.keys.bottom),
-			hint("next / previous hunk", m.keys.nextHunk, m.keys.prevHunk),
-			hint("next / previous file", m.keys.nextFile, m.keys.prevFile),
-			describe(m.keys.workingCopy),
+		{title: "Navigation", hints: []ui.KeyHint{
+			ui.Describe(m.keys.switchPane),
+			ui.Hint("next / previous line or file", m.keys.down, m.keys.up),
+			ui.Hint("half page down / up", m.keys.halfDown, m.keys.halfUp),
+			ui.Hint("first / last line or file", m.keys.top, m.keys.bottom),
+			ui.Hint("next / previous hunk", m.keys.nextHunk, m.keys.prevHunk),
+			ui.Hint("next / previous file", m.keys.nextFile, m.keys.prevFile),
+			ui.Describe(m.keys.workingCopy),
 		}},
 		{title: "Review", hints: review},
 		{title: "Other", hints: m.otherHints()},
 	}
 }
 
-func (m Model) otherHints() []keyHint {
-	var hints []keyHint
+func (m Model) otherHints() []ui.KeyHint {
+	var hints []ui.KeyHint
 	if m.change.WorkingCopy {
-		hints = append(hints, describe(m.keys.reload), describe(m.keys.edit))
+		hints = append(hints, ui.Describe(m.keys.reload), ui.Describe(m.keys.edit))
 	}
-	return append(hints, describe(m.keys.full), describe(m.keys.help), describe(m.keys.quit))
+	return append(hints, ui.Describe(m.keys.full), ui.Describe(m.keys.help), ui.Describe(m.keys.quit))
 }

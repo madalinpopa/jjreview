@@ -6,6 +6,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 const helpChrome = 4
@@ -54,16 +55,16 @@ func (m Model) helpLines() []string {
 	keyWidth := 0
 	for _, s := range sections {
 		for _, h := range s.hints {
-			keyWidth = max(keyWidth, lipgloss.Width(strings.Join(h.keys, " ")))
+			keyWidth = max(keyWidth, lipgloss.Width(strings.Join(h.Keys, " ")))
 		}
 	}
-	lines := []string{render(p.Card, []seg{span(fg(p.Title).Bold(true), "Keys")})}
+	lines := []string{ui.Render(p.Card, []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "Keys")})}
 	for _, s := range sections {
-		lines = append(lines, "", render(p.Card, []seg{span(fg(p.Header), strings.ToUpper(s.title))}))
+		lines = append(lines, "", ui.Render(p.Card, []ui.Seg{ui.Span(ui.Fg(p.Header), strings.ToUpper(s.title))}))
 		for _, h := range s.hints {
-			pad := keyWidth - lipgloss.Width(strings.Join(h.keys, " "))
-			label := strings.Repeat(" ", pad+1) + h.label
-			lines = append(lines, render(p.Card, m.hintSegs(keyHint{keys: h.keys, label: label})))
+			pad := keyWidth - lipgloss.Width(strings.Join(h.Keys, " "))
+			label := strings.Repeat(" ", pad+1) + h.Label
+			lines = append(lines, ui.Render(p.Card, ui.HintSegs(m.pal, ui.KeyHint{Keys: h.Keys, Label: label})))
 		}
 	}
 	return lines
@@ -76,10 +77,10 @@ func (m Model) helpView() string {
 	if overflow := m.helpOverflow(); overflow > 0 {
 		top := min(m.helpTop, overflow)
 		lines = lines[top : top+m.helpRows()]
-		footer = strings.Join(hint("scroll", m.keys.down, m.keys.up).keys, " ") + " scroll · " + footer
+		footer = strings.Join(ui.Hint("scroll", m.keys.down, m.keys.up).Keys, " ") + " scroll · " + footer
 	}
 	if m.height > helpChrome {
-		lines = append(lines, "", render(p.Card, []seg{span(fg(p.Muted), footer)}))
+		lines = append(lines, "", ui.Render(p.Card, []ui.Seg{ui.Span(ui.Fg(p.Muted), footer)}))
 	}
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).

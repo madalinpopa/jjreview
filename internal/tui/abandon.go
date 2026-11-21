@@ -11,6 +11,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 const outdatedStatus = "review out of date; press @ to review the working copy"
@@ -40,7 +41,7 @@ func (m *Model) abandonPicked() tea.Cmd {
 		return nil
 	}
 	if e.Immutable {
-		m.status = shortID(e.ChangeID) + " is immutable"
+		m.status = ui.ShortID(e.ChangeID) + " is immutable"
 		return nil
 	}
 	m.armAbandon(*e)
@@ -68,25 +69,25 @@ func (m Model) abandonView() string {
 	wrap := func(style lipgloss.Style, text string) []string {
 		var out []string
 		for line := range strings.SplitSeq(ansi.Wrap(text, inner, ""), "\n") {
-			out = append(out, paint(inner, p.Card, []seg{span(style, line)}, nil))
+			out = append(out, ui.Paint(inner, p.Card, []ui.Seg{ui.Span(style, line)}, nil))
 		}
 		return out
 	}
-	lines := wrap(fg(p.Title).Bold(true), "Abandon "+shortID(e.ChangeID)+" "+shortID(e.CommitID))
+	lines := wrap(ui.Fg(p.Title).Bold(true), "Abandon "+ui.ShortID(e.ChangeID)+" "+ui.ShortID(e.CommitID))
 	if title, _, _ := strings.Cut(e.Description, "\n"); title != "" {
-		lines = append(lines, wrap(fg(p.Strong), title)...)
+		lines = append(lines, wrap(ui.Fg(p.Strong), title)...)
 	}
 	if n := len(e.Bookmarks); n > 0 {
-		lines = append(lines, wrap(fg(p.Removed), "Deletes "+plural(n, "bookmark")+" "+strings.Join(e.Bookmarks, ", "))...)
+		lines = append(lines, wrap(ui.Fg(p.Removed), "Deletes "+ui.Plural(n, "bookmark")+" "+strings.Join(e.Bookmarks, ", "))...)
 	}
 	if n := pickedUnits(m.picks()); n > 0 {
-		lines = append(lines, wrap(fg(p.Removed), fmt.Sprintf("Drops %d selected %s", n, plural(n, "hunk")))...)
+		lines = append(lines, wrap(ui.Fg(p.Removed), fmt.Sprintf("Drops %d selected %s", n, ui.Plural(n, "hunk")))...)
 	}
-	footer := wrap(fg(p.Muted), m.keys.confirm.Help().Key+" abandon · any other key cancels")
+	footer := wrap(ui.Fg(p.Muted), m.keys.confirm.Help().Key+" abandon · any other key cancels")
 	if room := max(m.height-2-len(footer), 0); len(lines) > room {
 		lines = lines[:room]
 		if room > 0 {
-			lines[room-1] = paint(inner, p.Card, []seg{span(fg(p.Muted), "…")}, nil)
+			lines[room-1] = ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Muted), "…")}, nil)
 		}
 	}
 	return lipgloss.NewStyle().
@@ -108,7 +109,7 @@ func (m *Model) abandon(e jj.LogEntry) tea.Cmd {
 		msg := abandonedMsg{changeID: e.ChangeID, keep: keep}
 		workingCopy, err := src.Abandon(ctx, e.CommitID, e.Bookmarks)
 		if err != nil {
-			msg.err = fmt.Errorf("abandon %s: %w", shortID(e.ChangeID), err)
+			msg.err = fmt.Errorf("abandon %s: %w", ui.ShortID(e.ChangeID), err)
 		}
 		if target == "" || err == nil && (workingCopy || e.CommitID == head) {
 			msg.step, msg.loaded = workingCopyStep, fetch(ctx, src, "@")
@@ -129,14 +130,14 @@ func reviewedAfterAbandon(ctx context.Context, src Source, target, head string) 
 	case err == nil:
 		return reviewedStep, fetch(ctx, src, jj.VisibleCommitRevset(next.CommitID)), ""
 	case errors.Is(err, jj.ErrNoRevision) || errors.Is(err, jj.ErrMultipleRevisions):
-		return workingCopyStep, fetch(ctx, src, "@"), shortID(target)
+		return workingCopyStep, fetch(ctx, src, "@"), ui.ShortID(target)
 	}
-	return reviewedStep, loadedMsg{err: fmt.Errorf("find the rewritten %s: %w", shortID(target), err)}, ""
+	return reviewedStep, loadedMsg{err: fmt.Errorf("find the rewritten %s: %w", ui.ShortID(target), err)}, ""
 }
 
 func (m *Model) applyAbandoned(msg abandonedMsg) tea.Cmd {
 	m.log.keep = msg.keep
-	status := "abandoned " + shortID(msg.changeID)
+	status := "abandoned " + ui.ShortID(msg.changeID)
 	switch {
 	case errors.Is(msg.err, jj.ErrBookmarksChanged):
 		status = "bookmarks changed; press " + m.keys.abandon.Help().Key + " to review the abandon again"

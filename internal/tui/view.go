@@ -2,19 +2,16 @@ package tui
 
 import (
 	"fmt"
-	"image/color"
 	"slices"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
-const (
-	maxListWidth = 60
-	cardChrome   = 4
-)
+const maxListWidth = 60
 
 func (m Model) View() tea.View {
 	content := m.screen()
@@ -36,7 +33,7 @@ func fit(content string, width, height int) string {
 	lines := strings.Split(content, "\n")
 	lines = lines[:min(len(lines), max(height, 0))]
 	for i, l := range lines {
-		lines[i] = clip(l, width)
+		lines[i] = ui.Clip(l, width)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -51,7 +48,7 @@ func (m Model) screen() string {
 	case reviewView:
 		body = lipgloss.JoinHorizontal(lipgloss.Top,
 			m.filesCard(),
-			blank(1, m.pal.Page),
+			ui.Blank(1, m.pal.Page),
 			m.diffCard(),
 		)
 	}
@@ -63,9 +60,9 @@ func (m Model) listWidth() int {
 }
 
 func (m Model) measureTree() int {
-	w := rowWidth(m.cardHeader("Files", m.filesValue(len(m.files))))
+	w := ui.RowWidth(ui.CardHeader(m.pal, "Files", m.filesValue(len(m.files))))
 	for _, r := range m.treeRows() {
-		w = max(w, rowWidth(m.treeSegs(r)))
+		w = max(w, ui.RowWidth(m.treeSegs(r)))
 	}
 	return w
 }
@@ -79,11 +76,7 @@ func (m Model) bodyHeight() int {
 }
 
 func (m Model) diffHeight() int {
-	return max(m.bodyHeight()-cardChrome, 1)
-}
-
-func (m Model) pill(bg, fg color.Color, text string) seg {
-	return span(lipgloss.NewStyle().Background(bg).Foreground(fg), " "+text+" ")
+	return max(m.bodyHeight()-ui.CardChrome, 1)
 }
 
 func (m Model) topBar() string {
@@ -92,34 +85,34 @@ func (m Model) topBar() string {
 	if id == "" {
 		id = m.rev
 	}
-	gap := span(lipgloss.NewStyle(), " ")
-	revision := m.pill(p.Chip, p.ChipText, "@ "+shortID(id))
+	gap := ui.Span(lipgloss.NewStyle(), " ")
+	revision := ui.Pill(p.Chip, p.ChipText, "@ "+ui.ShortID(id))
 	n := pickedUnits(m.picks())
-	badge := m.pill(p.BadgeIdle, p.BadgeIdleFg, "nothing selected")
+	badge := ui.Pill(p.BadgeIdle, p.BadgeIdleFg, "nothing selected")
 	if n > 0 {
-		badge = m.pill(p.BadgeSel, p.Picked, fmt.Sprintf("%d %s selected", n, plural(n, "hunk")))
+		badge = ui.Pill(p.BadgeSel, p.Picked, fmt.Sprintf("%d %s selected", n, ui.Plural(n, "hunk")))
 	}
-	badge.style = badge.style.Bold(true)
-	var indicators []seg
+	badge.Style = badge.Style.Bold(true)
+	var indicators []ui.Seg
 	if m.change.Immutable {
-		indicators = append(indicators, m.pill(p.Chip, p.Removed, "read only"))
+		indicators = append(indicators, ui.Pill(p.Chip, p.Removed, "read only"))
 	}
 	if n > 0 {
 		indicators = append(indicators, badge)
 	}
-	optional := []seg{m.pill(p.Chip, p.Key, m.modeLabel())}
+	optional := []ui.Seg{ui.Pill(p.Chip, p.Key, m.modeLabel())}
 	if n == 0 {
 		optional = append(optional, badge)
 	}
-	var title []seg
+	var title []ui.Seg
 	if subject, _, _ := strings.Cut(strings.TrimSpace(m.change.Description), "\n"); subject != "" {
-		title = []seg{gap, span(fg(p.Title).Bold(true), subject)}
+		title = []ui.Seg{gap, ui.Span(ui.Fg(p.Title).Bold(true), subject)}
 	}
-	fits := func(left, right, title []seg) bool {
-		return rowWidth(slices.Concat(left, title), spaced(right))+1 <= m.width
+	fits := func(left, right, title []ui.Seg) bool {
+		return ui.RowWidth(slices.Concat(left, title), spaced(right))+1 <= m.width
 	}
-	bar := func(left, right []seg) string {
-		return paint(m.width, p.Page, slices.Concat(left, title), spaced(right))
+	bar := func(left, right []ui.Seg) string {
+		return ui.Paint(m.width, p.Page, slices.Concat(left, title), spaced(right))
 	}
 	left := spaced(append(m.tabs(false), revision))
 	chips := slices.Concat(optional, indicators)
@@ -140,18 +133,18 @@ func (m Model) topBar() string {
 	return bar(left, nil)
 }
 
-func spaced(segs []seg) []seg {
-	var out []seg
+func spaced(segs []ui.Seg) []ui.Seg {
+	var out []ui.Seg
 	for i, s := range segs {
 		if i > 0 {
-			out = append(out, span(lipgloss.NewStyle(), " "))
+			out = append(out, ui.Span(lipgloss.NewStyle(), " "))
 		}
 		out = append(out, s)
 	}
 	return out
 }
 
-func (m Model) tabs(short bool) []seg {
+func (m Model) tabs(short bool) []ui.Seg {
 	tabs := []struct {
 		view  view
 		key   key.Binding
@@ -161,7 +154,7 @@ func (m Model) tabs(short bool) []seg {
 		{logView, m.keys.logTab, "Log"},
 		{bookmarksView, m.keys.bookmarksTab, "Bookmarks"},
 	}
-	segs := make([]seg, len(tabs))
+	segs := make([]ui.Seg, len(tabs))
 	for i, t := range tabs {
 		label := t.label
 		if short {
@@ -172,14 +165,14 @@ func (m Model) tabs(short bool) []seg {
 	return segs
 }
 
-func (m Model) tab(v view, b key.Binding, label string) seg {
+func (m Model) tab(v view, b key.Binding, label string) ui.Seg {
 	text := strings.TrimSpace(b.Help().Key + " " + label)
 	if v == m.view {
-		s := m.pill(m.pal.Chip, m.pal.Key, text)
-		s.style = s.style.Bold(true)
+		s := ui.Pill(m.pal.Chip, m.pal.Key, text)
+		s.Style = s.Style.Bold(true)
 		return s
 	}
-	return m.pill(m.pal.Chip, m.pal.ChipText, text)
+	return ui.Pill(m.pal.Chip, m.pal.ChipText, text)
 }
 
 func (m Model) modeLabel() string {
@@ -189,32 +182,20 @@ func (m Model) modeLabel() string {
 	return "changes only"
 }
 
-func (m Model) hintSegs(h keyHint) []seg {
-	p := m.pal
-	var segs []seg
-	for j, k := range h.keys {
-		if j > 0 {
-			segs = append(segs, span(fg(p.Stats), " "))
-		}
-		segs = append(segs, span(lipgloss.NewStyle().Background(p.Chip).Foreground(p.Key), k))
-	}
-	return append(segs, span(fg(p.Stats), " "+h.label))
-}
-
 func (m Model) bottomBar() []string {
 	p := m.pal
-	sep := span(fg(p.Faint), " · ")
-	var lines [][]seg
-	var line []seg
+	sep := ui.Span(ui.Fg(p.Faint), " · ")
+	var lines [][]ui.Seg
+	var line []ui.Seg
 	used := 0
 	for _, h := range m.keyHints() {
-		segs := m.hintSegs(h)
-		w := lipgloss.Width(render(p.Page, segs))
+		segs := ui.HintSegs(m.pal, h)
+		w := lipgloss.Width(ui.Render(p.Page, segs))
 		switch {
 		case len(line) == 0:
-		case used+lipgloss.Width(sep.text)+w <= m.width:
+		case used+lipgloss.Width(sep.Text)+w <= m.width:
 			line = append(line, sep)
-			used += lipgloss.Width(sep.text)
+			used += lipgloss.Width(sep.Text)
 		default:
 			lines = append(lines, line)
 			line, used = nil, 0
@@ -222,15 +203,15 @@ func (m Model) bottomBar() []string {
 		line = append(line, segs...)
 		used += w
 	}
-	status := []seg{span(fg(p.Status), m.statusText())}
+	status := []ui.Seg{ui.Span(ui.Fg(p.Status), m.statusText())}
 	out := make([]string, 0, len(lines)+2)
 	for _, l := range lines {
-		out = append(out, paint(m.width, p.Page, l, nil))
+		out = append(out, ui.Paint(m.width, p.Page, l, nil))
 	}
 	if used+1+lipgloss.Width(m.statusText()) <= m.width {
-		return append(out, paint(m.width, p.Page, line, status))
+		return append(out, ui.Paint(m.width, p.Page, line, status))
 	}
-	return append(out, paint(m.width, p.Page, line, nil), paint(m.width, p.Page, nil, status))
+	return append(out, ui.Paint(m.width, p.Page, line, nil), ui.Paint(m.width, p.Page, nil, status))
 }
 
 func (m Model) statusText() string {
@@ -244,45 +225,15 @@ func (m Model) statusText() string {
 		return ""
 	}
 	n := len(m.files[m.fileIdx].Hunks)
-	text := fmt.Sprintf("file %d/%d · %d %s", m.fileIdx+1, len(m.files), n, plural(n, "hunk"))
+	text := fmt.Sprintf("file %d/%d · %d %s", m.fileIdx+1, len(m.files), n, ui.Plural(n, "hunk"))
 	if folded := m.currentReview().foldedCount(); folded > 0 && n > 0 {
 		text += fmt.Sprintf(" (%d folded)", folded)
 	}
 	return text
 }
 
-func (m Model) card(width int, title string, focused bool, value []seg, body []string) string {
-	p := m.pal
-	inner := max(width-2, 0)
-	edge := fg(p.Border)
-	if focused {
-		edge = fg(p.Selection)
-	}
-	side := edge.Background(p.Card).Render("│")
-	header, values := m.cardHeader(title, value)
-	lines := []string{
-		edge.Render("╭" + strings.Repeat("─", inner) + "╮"),
-		side + paint(inner, p.Card, header, values) + side,
-		edge.Background(p.Card).Render("├" + strings.Repeat("─", inner) + "┤"),
-	}
-	for i := range max(m.bodyHeight()-cardChrome, 0) {
-		content := blank(inner, p.Card)
-		if i < len(body) {
-			content = clip(body[i], inner)
-			content += blank(inner-lipgloss.Width(content), p.Card)
-		}
-		lines = append(lines, side+content+side)
-	}
-	lines = append(lines, edge.Render("╰"+strings.Repeat("─", inner)+"╯"))
-	return strings.Join(lines[:min(len(lines), m.bodyHeight())], "\n")
-}
-
-func (m Model) cardHeader(title string, value []seg) ([]seg, []seg) {
-	return []seg{span(fg(m.pal.Header), " "+strings.ToUpper(title))}, slices.Concat(value, []seg{span(lipgloss.NewStyle(), " ")})
-}
-
-func (m Model) filesValue(done int) []seg {
-	return []seg{span(fg(m.pal.Title), fmt.Sprintf("%d/%d ✓", done, len(m.files)))}
+func (m Model) filesValue(done int) []ui.Seg {
+	return []ui.Seg{ui.Span(ui.Fg(m.pal.Title), fmt.Sprintf("%d/%d ✓", done, len(m.files)))}
 }
 
 func (m Model) filesCard() string {
@@ -299,7 +250,7 @@ func (m Model) filesCard() string {
 	for i := m.listTop; i < len(rows) && len(body) < m.diffHeight(); i++ {
 		body = append(body, m.treeLine(rows[i], inner))
 	}
-	return m.card(width, "Files", m.filesFocus, m.filesValue(done), body)
+	return ui.Card(m.pal, width, m.bodyHeight(), "Files", m.filesFocus, m.filesValue(done), body)
 }
 
 func (m Model) treeLine(r treeRow, width int) string {
@@ -308,38 +259,38 @@ func (m Model) treeLine(r treeRow, width int) string {
 		bg = m.pal.CursorBg
 	}
 	left, right := m.treeSegs(r)
-	return paint(width, bg, left, right)
+	return ui.Paint(width, bg, left, right)
 }
 
-func (m Model) treeSegs(r treeRow) ([]seg, []seg) {
+func (m Model) treeSegs(r treeRow) ([]ui.Seg, []ui.Seg) {
 	p := m.pal
 	if r.dir {
-		left := []seg{span(lipgloss.NewStyle(), strings.Repeat(" ", 1+r.depth*2)), span(fg(p.Muted), "▾ "), span(fg(p.DirName), escapePath(r.name))}
-		return left, []seg{span(fg(p.Muted), fmt.Sprint(r.count)), span(lipgloss.NewStyle(), " ")}
+		left := []ui.Seg{ui.Span(lipgloss.NewStyle(), strings.Repeat(" ", 1+r.depth*2)), ui.Span(ui.Fg(p.Muted), "▾ "), ui.Span(ui.Fg(p.DirName), ui.EscapePath(r.name))}
+		return left, []ui.Seg{ui.Span(ui.Fg(p.Muted), fmt.Sprint(r.count)), ui.Span(lipgloss.NewStyle(), " ")}
 	}
-	name, bar := fg(p.Strong), p.Card
+	name, bar := ui.Fg(p.Strong), p.Card
 	if r.file == m.fileIdx {
-		name, bar = fg(p.Selection).Bold(true), p.Selection
+		name, bar = ui.Fg(p.Selection).Bold(true), p.Selection
 	}
 	st := m.reviews[r.file].state()
-	left := []seg{
-		span(fg(bar), barGlyph(bar)),
-		span(lipgloss.NewStyle(), strings.Repeat(" ", r.depth*2)),
-		span(m.glyphStyle(st), st.glyph()),
-		span(lipgloss.NewStyle(), " "),
-		span(name, escapePath(r.name)),
+	left := []ui.Seg{
+		ui.Span(ui.Fg(bar), ui.BarGlyph(bar)),
+		ui.Span(lipgloss.NewStyle(), strings.Repeat(" ", r.depth*2)),
+		ui.Span(m.glyphStyle(st), st.glyph()),
+		ui.Span(lipgloss.NewStyle(), " "),
+		ui.Span(name, ui.EscapePath(r.name)),
 	}
-	return left, []seg{span(fg(p.Muted), m.fileSummary(r.file)), span(lipgloss.NewStyle(), " ")}
+	return left, []ui.Seg{ui.Span(ui.Fg(p.Muted), m.fileSummary(r.file)), ui.Span(lipgloss.NewStyle(), " ")}
 }
 
 func (m Model) glyphStyle(st fileState) lipgloss.Style {
 	switch st {
 	case stateDone:
-		return fg(m.pal.Added)
+		return ui.Fg(m.pal.Added)
 	case stateNone:
-		return fg(m.pal.Muted)
+		return ui.Fg(m.pal.Muted)
 	}
-	return fg(m.pal.Picked)
+	return ui.Fg(m.pal.Picked)
 }
 
 func (m Model) fileSummary(i int) string {
@@ -352,9 +303,9 @@ func (m Model) fileSummary(i int) string {
 }
 
 func (m Model) diffCard() string {
-	var value []seg
+	var value []ui.Seg
 	if file, ok := m.currentFile(); ok {
-		value = []seg{span(fg(m.pal.Title), escapePath(file.Path()))}
+		value = []ui.Seg{ui.Span(ui.Fg(m.pal.Title), ui.EscapePath(file.Path()))}
 	}
 	rows := m.rows()
 	width := m.diffCardWidth()
@@ -363,5 +314,5 @@ func (m Model) diffCard() string {
 	for i := m.diffTop; i < len(rows) && len(body) < m.diffHeight(); i++ {
 		body = append(body, m.diffLine(rows[i], i == m.cursor, inner))
 	}
-	return m.card(width, "Unified diff", !m.filesFocus, value, body)
+	return ui.Card(m.pal, width, m.bodyHeight(), "Unified diff", !m.filesFocus, value, body)
 }

@@ -11,11 +11,12 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type fileHighlight struct {
-	hunks [][][]seg
-	full  [][]seg
+	hunks [][][]ui.Seg
+	full  [][]ui.Seg
 }
 
 type highlightKey struct {
@@ -62,12 +63,12 @@ func pickLexer(f diff.File, content string) chroma.Lexer {
 	return chroma.Coalesce(lexer)
 }
 
-func (m Model) highlightHunks(lexer chroma.Lexer, f diff.File) [][][]seg {
-	out := make([][][]seg, len(f.Hunks))
+func (m Model) highlightHunks(lexer chroma.Lexer, f diff.File) [][][]ui.Seg {
+	out := make([][][]ui.Seg, len(f.Hunks))
 	for k, h := range f.Hunks {
 		newSide := m.highlightText(lexer, sideText(diff.File{Hunks: []diff.Hunk{h}}, diff.LineRemoved))
 		oldSide := m.highlightText(lexer, sideText(diff.File{Hunks: []diff.Hunk{h}}, diff.LineAdded))
-		lines := make([][]seg, len(h.Lines))
+		lines := make([][]ui.Seg, len(h.Lines))
 		n, o := 0, 0
 		for i, l := range h.Lines {
 			if l.Kind == diff.LineRemoved {
@@ -99,19 +100,19 @@ func sideText(f diff.File, skip diff.LineKind) string {
 	return b.String()
 }
 
-func lineAt(lines [][]seg, i int) []seg {
+func lineAt(lines [][]ui.Seg, i int) []ui.Seg {
 	if i < 0 || i >= len(lines) {
 		return nil
 	}
 	return lines[i]
 }
 
-func (m Model) highlightText(lexer chroma.Lexer, text string) [][]seg {
+func (m Model) highlightText(lexer chroma.Lexer, text string) [][]ui.Seg {
 	tokens, err := chroma.Tokenise(lexer, nil, text)
 	if err != nil {
 		return nil
 	}
-	lines := [][]seg{nil}
+	lines := [][]ui.Seg{nil}
 	for _, tok := range tokens {
 		style := m.tokenStyle(tok.Type)
 		for i, part := range strings.Split(tok.Value, "\n") {
@@ -120,7 +121,7 @@ func (m Model) highlightText(lexer chroma.Lexer, text string) [][]seg {
 			}
 			if part != "" {
 				last := len(lines) - 1
-				lines[last] = append(lines[last], span(style, part))
+				lines[last] = append(lines[last], ui.Span(style, part))
 			}
 		}
 	}
@@ -128,7 +129,7 @@ func (m Model) highlightText(lexer chroma.Lexer, text string) [][]seg {
 }
 
 func (m Model) tokenStyle(t chroma.TokenType) lipgloss.Style {
-	style := fg(m.tokenColor(t))
+	style := ui.Fg(m.tokenColor(t))
 	if t.InCategory(chroma.Comment) {
 		style = style.Italic(true)
 	}
@@ -153,7 +154,7 @@ func (m Model) tokenColor(t chroma.TokenType) color.Color {
 	return m.pal.Text
 }
 
-func (m Model) codeSegs(r row) []seg {
+func (m Model) codeSegs(r row) []ui.Seg {
 	file, ok := m.currentFile()
 	hl, cached := m.highlights[highlightKey{file: m.fileIdx, full: m.full}]
 	if !ok || !cached || r.hunk < 0 && r.line.Kind == diff.LineRemoved {

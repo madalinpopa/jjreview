@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 const gapIndent = "       "
@@ -20,11 +21,11 @@ func (m Model) diffLine(r row, selected bool, width int) string {
 	case rowLine:
 		return m.codeLine(r, selected, width)
 	case rowGap:
-		return paint(width, p.Card, []seg{span(fg(p.Faint), gapIndent+r.text)}, nil)
+		return ui.Paint(width, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Faint), gapIndent+r.text)}, nil)
 	case rowError:
-		return paint(width, p.Card, []seg{span(fg(p.Removed), "  "+r.text)}, nil)
+		return ui.Paint(width, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  "+r.text)}, nil)
 	}
-	return paint(width, p.Card, []seg{span(fg(p.Muted).Italic(true), "  "+r.text)}, nil)
+	return ui.Paint(width, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Muted).Italic(true), "  "+r.text)}, nil)
 }
 
 func (m Model) hunkLine(k int, selected bool, width int) string {
@@ -42,13 +43,13 @@ func (m Model) hunkLine(k int, selected bool, width int) string {
 	}
 	bg := p.HunkBg
 	muted, stat := p.Muted, p.Stats
-	check, checkStyle := "○", fg(p.Muted)
+	check, checkStyle := "○", ui.Fg(p.Muted)
 	switch {
 	case committed != "":
-		bar, check, checkStyle = p.Added, "✓", fg(p.Added)
+		bar, check, checkStyle = p.Added, "✓", ui.Fg(p.Added)
 	case picked:
 		bg, text, muted, stat = p.Selection, p.OnSelection, p.OnSelection, p.OnSelection
-		bar, check, checkStyle = p.Selection, "●", fg(p.OnSelection).Bold(true)
+		bar, check, checkStyle = p.Selection, "●", ui.Fg(p.OnSelection).Bold(true)
 	}
 	if selected {
 		bar = p.Selection
@@ -58,18 +59,18 @@ func (m Model) hunkLine(k int, selected bool, width int) string {
 	if folded {
 		stats += " · folded"
 	}
-	left := []seg{
-		span(fg(bar), barGlyph(bar)+" "),
-		span(fg(muted), arrow+" "),
-		span(checkStyle, check+" "),
-		span(fg(text), hunkHeader(h)),
+	left := []ui.Seg{
+		ui.Span(ui.Fg(bar), ui.BarGlyph(bar)+" "),
+		ui.Span(ui.Fg(muted), arrow+" "),
+		ui.Span(checkStyle, check+" "),
+		ui.Span(ui.Fg(text), hunkHeader(h)),
 	}
-	right := []seg{span(fg(stat), stats)}
+	right := []ui.Seg{ui.Span(ui.Fg(stat), stats)}
 	if committed != "" {
-		right = append(right, span(fg(p.Added), " "+committed))
+		right = append(right, ui.Span(ui.Fg(p.Added), " "+committed))
 	}
-	right = append(right, span(lipgloss.NewStyle(), " "))
-	return paint(width, bg, left, right)
+	right = append(right, ui.Span(lipgloss.NewStyle(), " "))
+	return ui.Paint(width, bg, left, right)
 }
 
 func (m Model) codeLine(r row, selected bool, width int) string {
@@ -94,18 +95,18 @@ func (m Model) codeLine(r row, selected bool, width int) string {
 	if l.Kind != diff.LineRemoved && l.NewNo > 0 {
 		number = fmt.Sprint(l.NewNo)
 	}
-	left := []seg{
-		span(fg(bar), barGlyph(bar)),
-		span(fg(gutter), fmt.Sprintf("%4s ", number)),
-		span(fg(sign), signText),
+	left := []ui.Seg{
+		ui.Span(ui.Fg(bar), ui.BarGlyph(bar)),
+		ui.Span(ui.Fg(gutter), fmt.Sprintf("%4s ", number)),
+		ui.Span(ui.Fg(sign), signText),
 	}
 	if code == nil {
-		code = []seg{span(fg(text), l.Text)}
+		code = []ui.Seg{ui.Span(ui.Fg(text), l.Text)}
 	}
 	for _, c := range code {
-		left = append(left, span(c.style, expandTabs(c.text)))
+		left = append(left, ui.Span(c.Style, expandTabs(c.Text)))
 	}
-	return paint(width, bg, left, nil)
+	return ui.Paint(width, bg, left, nil)
 }
 
 func expandTabs(s string) string {

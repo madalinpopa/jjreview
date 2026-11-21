@@ -1,4 +1,4 @@
-package tui
+package ui
 
 import (
 	"image/color"
@@ -7,69 +7,69 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-type seg struct {
-	style lipgloss.Style
-	text  string
+type Seg struct {
+	Style lipgloss.Style
+	Text  string
 }
 
-func span(style lipgloss.Style, text string) seg {
-	return seg{style: style, text: text}
+func Span(style lipgloss.Style, text string) Seg {
+	return Seg{Style: style, Text: text}
 }
 
-func render(bg color.Color, segs []seg) string {
+func Render(bg color.Color, segs []Seg) string {
 	var b strings.Builder
 	for _, s := range segs {
-		style := s.style
+		style := s.Style
 		if _, unset := style.GetBackground().(lipgloss.NoColor); unset {
 			style = style.Background(bg)
 		}
-		b.WriteString(style.Render(s.text))
+		b.WriteString(style.Render(s.Text))
 	}
 	return b.String()
 }
 
-func clip(s string, width int) string {
+func Clip(s string, width int) string {
 	if width <= 0 {
 		return ""
 	}
 	return lipgloss.NewStyle().MaxWidth(width).Render(s)
 }
 
-func blank(width int, bg color.Color) string {
+func Blank(width int, bg color.Color) string {
 	if width <= 0 {
 		return ""
 	}
 	return lipgloss.NewStyle().Background(bg).Render(strings.Repeat(" ", width))
 }
 
-func paint(width int, bg color.Color, left, right []seg) string {
-	r := clip(render(bg, right), width)
+func Paint(width int, bg color.Color, left, right []Seg) string {
+	r := Clip(Render(bg, right), width)
 	avail := width - lipgloss.Width(r) - gapWidth(right)
-	l := clip(render(bg, left), avail)
+	l := Clip(Render(bg, left), avail)
 	fill := width - lipgloss.Width(l) - lipgloss.Width(r)
-	return clip(l+blank(fill, bg)+r, width)
+	return Clip(l+Blank(fill, bg)+r, width)
 }
 
-func gapWidth(right []seg) int {
+func gapWidth(right []Seg) int {
 	if len(right) > 0 {
 		return 1
 	}
 	return 0
 }
 
-func segsWidth(segs []seg) int {
+func Width(segs []Seg) int {
 	w := 0
 	for _, s := range segs {
-		w += lipgloss.Width(s.text)
+		w += lipgloss.Width(s.Text)
 	}
 	return w
 }
 
-func rowWidth(left, right []seg) int {
-	return segsWidth(left) + gapWidth(right) + segsWidth(right)
+func RowWidth(left, right []Seg) int {
+	return Width(left) + gapWidth(right) + Width(right)
 }
 
-func scrollTop(top, cursor, height, total int) int {
+func ScrollTop(top, cursor, height, total int) int {
 	if height <= 0 {
 		return 0
 	}
@@ -83,7 +83,7 @@ func scrollTop(top, cursor, height, total int) int {
 	return max(top, 0)
 }
 
-func plural(n int, word string) string {
+func Plural(n int, word string) string {
 	if n == 1 {
 		return word
 	}

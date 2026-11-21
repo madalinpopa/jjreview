@@ -13,6 +13,7 @@ import (
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 const (
@@ -72,7 +73,7 @@ func (m *Model) openModal() tea.Cmd {
 		return nil
 	}
 	if len(m.change.Parents) != 1 {
-		m.status = fmt.Sprintf("cannot commit: %s has %d parents, want 1", shortID(m.target), len(m.change.Parents))
+		m.status = fmt.Sprintf("cannot commit: %s has %d parents, want 1", ui.ShortID(m.target), len(m.change.Parents))
 		return nil
 	}
 	ctx, cancel := context.WithCancel(m.ctx)
@@ -186,7 +187,7 @@ func (m *Model) applyCommitted(msg committedMsg) {
 		return
 	}
 	m.markStale()
-	id := shortID(msg.selected.ChangeID)
+	id := ui.ShortID(msg.selected.ChangeID)
 	before := m.rows()
 	for _, p := range mo.picks {
 		m.reviews[p.file].commit(p.units, id, !wholeOnly(m.files[p.file]))

@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type pick struct {
@@ -105,7 +106,7 @@ func runCommit(ctx context.Context, src Source, req commitRequest) tea.Cmd {
 			}
 			content, err := src.FileContent(ctx, key.rev, key.path)
 			if err != nil {
-				return "", fmt.Errorf("read %s at %s: %w", key.path, shortID(key.rev), err)
+				return "", fmt.Errorf("read %s at %s: %w", key.path, ui.ShortID(key.rev), err)
 			}
 			fetched[key] = content
 			return content, nil
@@ -120,7 +121,7 @@ func runCommit(ctx context.Context, src Source, req commitRequest) tea.Cmd {
 		}
 		selected, rest, err := src.Split(ctx, req.changeID, req.headID, req.message, files)
 		if err != nil {
-			err = fmt.Errorf("split %s: %w", shortID(req.changeID), err)
+			err = fmt.Errorf("split %s: %w", ui.ShortID(req.changeID), err)
 		}
 		return committedMsg{selected: selected, rest: rest, fetched: fetched, err: err}
 	}

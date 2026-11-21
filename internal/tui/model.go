@@ -14,12 +14,12 @@ import (
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/llm"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 const (
 	defaultWidth  = 100
 	defaultHeight = 30
-	shortIDLen    = 8
 )
 
 type contentKey struct {
@@ -372,13 +372,6 @@ func (m *Model) scroll() {
 		m.bookmarks.keepVisible(m.diffHeight())
 		return
 	}
-	m.diffTop = scrollTop(m.diffTop, m.cursor, m.diffHeight(), len(m.rows()))
-	m.listTop = scrollTop(m.listTop, m.currentTreeRow(), m.diffHeight(), len(m.treeRows()))
-}
-
-func shortID(id string) string {
-	if len(id) > shortIDLen {
-		return id[:shortIDLen]
-	}
-	return id
+	m.diffTop = ui.ScrollTop(m.diffTop, m.cursor, m.diffHeight(), len(m.rows()))
+	m.listTop = ui.ScrollTop(m.listTop, m.currentTreeRow(), m.diffHeight(), len(m.treeRows()))
 }

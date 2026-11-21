@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 const (
@@ -235,7 +236,7 @@ func storeBookmark(ctx context.Context, src Source, r bookmarkRequest) bookmarkS
 		if err != nil {
 			observed := observe(ctx, src, r.oldName, r.name)
 			if moved != "" {
-				err = fmt.Errorf("moved %s to %s, but the rename failed: %w", r.oldName, shortID(moved), err)
+				err = fmt.Errorf("moved %s to %s, but the rename failed: %w", r.oldName, ui.ShortID(moved), err)
 			}
 			return bookmarkSavedMsg{name: r.oldName, refresh: true, moved: moved, observed: observed, warnings: joinWarnings(warnings), err: err}
 		}
@@ -335,20 +336,20 @@ func (m Model) bookmarkModalView() string {
 	chrome := m.bookmarkChrome(len(notes))
 	if room := max(m.height-chrome, 1); len(notes) > room {
 		notes = notes[:room]
-		notes[room-1].text = ansi.Truncate(notes[room-1].text, inner-1, "") + "…"
+		notes[room-1].Text = ansi.Truncate(notes[room-1].Text, inner-1, "") + "…"
 	}
 	var lines []string
 	switch chrome {
 	case bookmarkMinimalChrome:
 		lines = append(lines, m.bookmarkFields(inner, chrome)[m.bmModal.field])
 	default:
-		lines = append(lines, paint(inner, p.Card, m.bookmarkTitle(), nil))
+		lines = append(lines, ui.Paint(inner, p.Card, m.bookmarkTitle(), nil))
 		lines = append(lines, m.bookmarkFields(inner, chrome)...)
 	}
 	for _, note := range notes {
-		lines = append(lines, paint(inner, p.Card, []seg{note}, nil))
+		lines = append(lines, ui.Paint(inner, p.Card, []ui.Seg{note}, nil))
 	}
-	lines = append(lines, paint(inner, p.Card, nil, m.bookmarkModalFooter()))
+	lines = append(lines, ui.Paint(inner, p.Card, nil, m.bookmarkModalFooter()))
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(p.ModalBorder).
@@ -358,13 +359,13 @@ func (m Model) bookmarkModalView() string {
 		Render(strings.Join(lines, "\n"))
 }
 
-func (m Model) bookmarkTitle() []seg {
+func (m Model) bookmarkTitle() []ui.Seg {
 	p := m.pal
 	mo := m.bmModal
 	if mo.editing {
-		return []seg{span(fg(p.Title).Bold(true), "Edit bookmark "), m.pill(p.Chip, p.ChipText, mo.oldName)}
+		return []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "Edit bookmark "), ui.Pill(p.Chip, p.ChipText, mo.oldName)}
 	}
-	return []seg{span(fg(p.Title).Bold(true), "New bookmark")}
+	return []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "New bookmark")}
 }
 
 func (m Model) bookmarkFields(inner, chrome int) []string {
@@ -374,74 +375,74 @@ func (m Model) bookmarkFields(inner, chrome int) []string {
 	for i, label := range []string{"Name", "Target revision"} {
 		in := mo.inputs[i]
 		in.SetStyles(bookmarkInputStyles(p))
-		focus := fg(p.Header)
+		focus := ui.Fg(p.Header)
 		border := p.Border
 		if i == mo.field {
-			focus, border = fg(p.Selection), p.Selection
+			focus, border = ui.Fg(p.Selection), p.Selection
 		}
 		if chrome != bookmarkFullChrome {
 			short, _, _ := strings.Cut(label, " ")
-			lines = append(lines, paint(inner, p.Input, []seg{span(focus, fmt.Sprintf("%-*s", bookmarkLabelWidth, short)), span(lipgloss.NewStyle(), in.View())}, nil))
+			lines = append(lines, ui.Paint(inner, p.Input, []ui.Seg{ui.Span(focus, fmt.Sprintf("%-*s", bookmarkLabelWidth, short)), ui.Span(lipgloss.NewStyle(), in.View())}, nil))
 			continue
 		}
 		lines = append(lines,
-			paint(inner, p.Card, []seg{span(fg(p.Header), label)}, nil),
+			ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Header), label)}, nil),
 			m.box(inner, border, in.View()),
 		)
 	}
 	return lines
 }
 
-func (m Model) bookmarkNoteLines(width int) []seg {
-	var lines []seg
+func (m Model) bookmarkNoteLines(width int) []ui.Seg {
+	var lines []ui.Seg
 	for _, note := range m.bookmarkNotes() {
-		for text := range strings.SplitSeq(ansi.Wrap(note.text, width, ""), "\n") {
-			lines = append(lines, span(note.style, text))
+		for text := range strings.SplitSeq(ansi.Wrap(note.Text, width, ""), "\n") {
+			lines = append(lines, ui.Span(note.Style, text))
 		}
 	}
 	return lines
 }
 
-func (m Model) bookmarkNotes() []seg {
+func (m Model) bookmarkNotes() []ui.Seg {
 	mo := m.bmModal
-	style := fg(m.pal.Removed)
+	style := ui.Fg(m.pal.Removed)
 	var text string
 	switch {
 	case mo.saving:
-		return []seg{span(fg(m.pal.Status), "saving…")}
+		return []ui.Seg{ui.Span(ui.Fg(m.pal.Status), "saving…")}
 	case mo.done:
-		text, style = mo.notice, fg(m.pal.Status)
+		text, style = mo.notice, ui.Fg(m.pal.Status)
 	case mo.pending != bookmarkMove{}:
 		from := "its conflicted targets"
 		if !strings.HasPrefix(mo.pending.from, "conflict ") {
-			from = shortID(mo.pending.from)
+			from = ui.ShortID(mo.pending.from)
 		}
-		text = fmt.Sprintf("%s would move backwards or sideways (%s → %s); press enter again to allow it", mo.pending.name, from, shortID(mo.pending.to))
+		text = fmt.Sprintf("%s would move backwards or sideways (%s → %s); press enter again to allow it", mo.pending.name, from, ui.ShortID(mo.pending.to))
 	case mo.err != nil:
 		text = strings.Join(slices.DeleteFunc([]string{mo.observed, "error: " + mo.err.Error(), mo.notice}, func(s string) bool { return s == "" }), "\n")
 	default:
 		return nil
 	}
-	var notes []seg
+	var notes []ui.Seg
 	for line := range strings.Lines(text) {
-		notes = append(notes, span(style, strings.TrimRight(line, "\n")))
+		notes = append(notes, ui.Span(style, strings.TrimRight(line, "\n")))
 	}
 	return notes
 }
 
-func (m Model) bookmarkModalFooter() []seg {
-	key := fg(m.pal.Key)
-	text := fg(m.pal.Muted)
+func (m Model) bookmarkModalFooter() []ui.Seg {
+	key := ui.Fg(m.pal.Key)
+	text := ui.Fg(m.pal.Muted)
 	mo := m.bmModal
 	switch {
 	case mo.done:
-		return []seg{span(fg(m.pal.Status), "✓ saved · "), span(key, "enter"), span(text, " / "), span(key, "esc"), span(text, " close")}
+		return []ui.Seg{ui.Span(ui.Fg(m.pal.Status), "✓ saved · "), ui.Span(key, "enter"), ui.Span(text, " / "), ui.Span(key, "esc"), ui.Span(text, " close")}
 	case mo.pending != bookmarkMove{}:
-		return []seg{span(key, "enter"), span(text, " move anyway · "), span(key, "esc"), span(text, " cancel")}
+		return []ui.Seg{ui.Span(key, "enter"), ui.Span(text, " move anyway · "), ui.Span(key, "esc"), ui.Span(text, " cancel")}
 	}
-	return []seg{
-		span(key, "tab"), span(text, " next field · "),
-		span(key, "enter"), span(text, " save · "),
-		span(key, "esc"), span(text, " cancel"),
+	return []ui.Seg{
+		ui.Span(key, "tab"), ui.Span(text, " next field · "),
+		ui.Span(key, "enter"), ui.Span(text, " save · "),
+		ui.Span(key, "esc"), ui.Span(text, " cancel"),
 	}
 }

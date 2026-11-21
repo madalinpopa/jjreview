@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/madalinpopa/jjreview/internal/diff"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type rowKind int
@@ -29,7 +30,7 @@ func messageRow(text string) row {
 }
 
 func errorRow(err error) row {
-	return row{kind: rowError, hunk: -1, text: "error: " + escapePath(err.Error())}
+	return row{kind: rowError, hunk: -1, text: "error: " + ui.EscapePath(err.Error())}
 }
 
 func (m Model) rows() []row {
@@ -88,9 +89,9 @@ func describeWhole(f diff.File) string {
 	case f.NewMode == symlinkMode || f.OldMode == symlinkMode:
 		return "symlink"
 	case f.Status == diff.StatusRenamed:
-		return "renamed from " + escapePath(f.OldPath)
+		return "renamed from " + ui.EscapePath(f.OldPath)
 	case f.Status == diff.StatusCopied:
-		return "copied from " + escapePath(f.OldPath)
+		return "copied from " + ui.EscapePath(f.OldPath)
 	}
 	return ""
 }
@@ -152,7 +153,7 @@ func appendGap(rows []row, n int) []row {
 	if n <= 0 {
 		return rows
 	}
-	return append(rows, row{kind: rowGap, hunk: -1, text: fmt.Sprintf("⋯ %d unchanged %s", n, plural(n, "line"))})
+	return append(rows, row{kind: rowGap, hunk: -1, text: fmt.Sprintf("⋯ %d unchanged %s", n, ui.Plural(n, "line"))})
 }
 
 func hunkOf(file diff.File, l diff.Line) int {

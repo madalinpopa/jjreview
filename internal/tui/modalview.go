@@ -4,14 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
-	"strconv"
 	"strings"
-	"unicode"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 const (
@@ -63,19 +62,19 @@ func (m Model) modalView() string {
 	inner := m.modalInner()
 	rows := m.modalLayout()
 	lines := []string{
-		paint(inner, p.Card, []seg{
-			span(fg(p.Title).Bold(true), "New commit "),
-			m.pill(p.Chip, p.ChipText, "from "+shortID(m.target)),
+		ui.Paint(inner, p.Card, []ui.Seg{
+			ui.Span(ui.Fg(p.Title).Bold(true), "New commit "),
+			ui.Pill(p.Chip, p.ChipText, "from "+ui.ShortID(m.target)),
 		}, nil),
 	}
 	if rows.preview > 0 {
 		lines = append(lines,
-			blank(inner, p.Card),
+			ui.Blank(inner, p.Card),
 			m.box(inner, p.Border, strings.Join(m.pickLines(boxInner(inner), rows.preview), "\n")),
 		)
 	}
-	heading := paint(inner, p.Card, []seg{
-		span(fg(p.Header), "Commit message "),
+	heading := ui.Paint(inner, p.Card, []ui.Seg{
+		ui.Span(ui.Fg(p.Header), "Commit message "),
 		m.generatorNote(),
 	}, nil)
 	notes := m.noteLines(inner, rows.notes)
@@ -84,7 +83,7 @@ func (m Model) modalView() string {
 	}
 	lines = append(lines, heading, m.box(inner, p.Selection, mo.input.View()))
 	lines = append(lines, notes...)
-	lines = append(lines, paint(inner, p.Card, nil, m.modalFooter(inner)))
+	lines = append(lines, ui.Paint(inner, p.Card, nil, m.modalFooter(inner)))
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(p.ModalBorder).
@@ -121,17 +120,17 @@ func (m Model) pickCount() int {
 	return n
 }
 
-func (m Model) pickItems(limit int) [][]seg {
+func (m Model) pickItems(limit int) [][]ui.Seg {
 	p := m.pal
-	var items [][]seg
+	var items [][]ui.Seg
 	for _, pk := range m.modal.picks {
 		f := m.files[pk.file]
-		name := span(fg(p.Strong), escapePath(f.Path()))
+		name := ui.Span(ui.Fg(p.Strong), ui.EscapePath(f.Path()))
 		if wholeOnly(f) {
 			if len(items) == limit {
 				return items
 			}
-			items = append(items, []seg{name, span(fg(p.Header), "  "+wholeLabel(f))})
+			items = append(items, []ui.Seg{name, ui.Span(ui.Fg(p.Header), "  "+wholeLabel(f))})
 			continue
 		}
 		for _, k := range pk.units {
@@ -140,7 +139,7 @@ func (m Model) pickItems(limit int) [][]seg {
 			}
 			a, d := hunkStats(f.Hunks[k])
 			detail := fmt.Sprintf("  %s  +%d −%d", hunkHeader(f.Hunks[k]), a, d)
-			items = append(items, []seg{name, span(fg(p.Header), detail)})
+			items = append(items, []ui.Seg{name, ui.Span(ui.Fg(p.Header), detail)})
 		}
 	}
 	return items
@@ -149,33 +148,17 @@ func (m Model) pickItems(limit int) [][]seg {
 func (m Model) pickLines(width, rows int) []string {
 	p := m.pal
 	count := m.pickCount()
-	var items [][]seg
+	var items [][]ui.Seg
 	if count > rows {
-		items = append(m.pickItems(rows-1), []seg{span(fg(p.Muted), fmt.Sprintf("… %d more", count-rows+1))})
+		items = append(m.pickItems(rows-1), []ui.Seg{ui.Span(ui.Fg(p.Muted), fmt.Sprintf("… %d more", count-rows+1))})
 	} else {
 		items = m.pickItems(count)
 	}
 	lines := make([]string, len(items))
 	for i, item := range items {
-		lines[i] = paint(width, p.Input, item, nil)
+		lines[i] = ui.Paint(width, p.Input, item, nil)
 	}
 	return lines
-}
-
-func escapePath(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		switch {
-		case r == '\\':
-			b.WriteString(`\\`)
-		case unicode.IsControl(r):
-			q := strconv.QuoteRune(r)
-			b.WriteString(q[1 : len(q)-1])
-		default:
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
 }
 
 func wholeLabel(f diff.File) string {
@@ -188,28 +171,28 @@ func wholeLabel(f diff.File) string {
 	return "whole file"
 }
 
-func (m Model) generatorNote() seg {
+func (m Model) generatorNote() ui.Seg {
 	p := m.pal
 	mo := m.modal
 	switch {
 	case m.gen == nil:
-		return span(fg(p.Muted), generatorHint)
+		return ui.Span(ui.Fg(p.Muted), generatorHint)
 	case mo.generating:
-		return span(fg(p.Status), "✨ generating…")
+		return ui.Span(ui.Fg(p.Status), "✨ generating…")
 	case mo.genErr != nil:
-		return span(fg(p.Removed), "✨ generation failed")
+		return ui.Span(ui.Fg(p.Removed), "✨ generation failed")
 	case mo.generated:
 		n := pickedUnits(mo.picks)
-		return span(fg(p.Status), fmt.Sprintf("✨ generated from %d %s, edit freely", n, plural(n, "hunk")))
+		return ui.Span(ui.Fg(p.Status), fmt.Sprintf("✨ generated from %d %s, edit freely", n, ui.Plural(n, "hunk")))
 	}
-	return span(fg(p.Status), "")
+	return ui.Span(ui.Fg(p.Status), "")
 }
 
-func (m Model) noteSegs(width int) []seg {
-	var segs []seg
+func (m Model) noteSegs(width int) []ui.Seg {
+	var segs []ui.Seg
 	for _, note := range m.modalNotes() {
-		for text := range strings.SplitSeq(ansi.Wrap(note.text, width, ""), "\n") {
-			segs = append(segs, span(note.style, text))
+		for text := range strings.SplitSeq(ansi.Wrap(note.Text, width, ""), "\n") {
+			segs = append(segs, ui.Span(note.Style, text))
 		}
 	}
 	return segs
@@ -220,53 +203,53 @@ func (m Model) noteLines(width, room int) []string {
 	if len(segs) > room {
 		segs = segs[:room]
 		if room > 0 {
-			segs[room-1].text = ansi.Truncate(segs[room-1].text, width-1, "") + "…"
+			segs[room-1].Text = ansi.Truncate(segs[room-1].Text, width-1, "") + "…"
 		}
 	}
 	lines := make([]string, len(segs))
 	for i, s := range segs {
-		lines[i] = paint(width, m.pal.Card, []seg{s}, nil)
+		lines[i] = ui.Paint(width, m.pal.Card, []ui.Seg{s}, nil)
 	}
 	return lines
 }
 
-func (m Model) modalNotes() []seg {
+func (m Model) modalNotes() []ui.Seg {
 	mo := m.modal
-	var notes []seg
+	var notes []ui.Seg
 	switch {
 	case mo.committing:
-		notes = append(notes, span(fg(m.pal.Status), "committing…"))
+		notes = append(notes, ui.Span(ui.Fg(m.pal.Status), "committing…"))
 	case errors.Is(mo.err, jj.ErrStaleRevision):
-		notes = append(notes, span(fg(m.pal.Removed), "error: "+jj.ErrStaleRevision.Error()))
+		notes = append(notes, ui.Span(ui.Fg(m.pal.Removed), "error: "+jj.ErrStaleRevision.Error()))
 	case mo.err != nil:
-		notes = append(notes, span(fg(m.pal.Removed), "error: "+mo.err.Error()))
+		notes = append(notes, ui.Span(ui.Fg(m.pal.Removed), "error: "+mo.err.Error()))
 	}
 	if mo.genErr != nil {
-		notes = append(notes, span(fg(m.pal.Removed), "generation failed: "+mo.genErr.Error()))
+		notes = append(notes, ui.Span(ui.Fg(m.pal.Removed), "generation failed: "+mo.genErr.Error()))
 	}
 	return notes
 }
 
-func (m Model) modalFooter(width int) []seg {
+func (m Model) modalFooter(width int) []ui.Seg {
 	p := m.pal
-	key := fg(p.Key)
-	text := fg(p.Muted)
-	full := []seg{
-		span(key, "esc"), span(text, " cancel · "),
-		span(key, "ctrl+enter"), span(text, " / "), span(key, "ctrl+s"), span(text, " commit"),
+	key := ui.Fg(p.Key)
+	text := ui.Fg(p.Muted)
+	full := []ui.Seg{
+		ui.Span(key, "esc"), ui.Span(text, " cancel · "),
+		ui.Span(key, "ctrl+enter"), ui.Span(text, " / "), ui.Span(key, "ctrl+s"), ui.Span(text, " commit"),
 	}
 	if m.gen != nil {
-		full = append([]seg{span(key, "ctrl+r"), span(text, " regenerate · ")}, full...)
+		full = append([]ui.Seg{ui.Span(key, "ctrl+r"), ui.Span(text, " regenerate · ")}, full...)
 	}
-	if segsWidth(full) <= width {
+	if ui.Width(full) <= width {
 		return full
 	}
-	compact := []seg{
-		span(key, "ctrl+s"), span(text, " commit · "),
-		span(key, "esc"), span(text, " cancel"),
+	compact := []ui.Seg{
+		ui.Span(key, "ctrl+s"), ui.Span(text, " commit · "),
+		ui.Span(key, "esc"), ui.Span(text, " cancel"),
 	}
-	if segsWidth(compact) <= width {
+	if ui.Width(compact) <= width {
 		return compact
 	}
-	return []seg{span(key, "^s"), span(text, " commit · "), span(key, "esc")}
+	return []ui.Seg{ui.Span(key, "^s"), ui.Span(text, " commit · "), ui.Span(key, "esc")}
 }
