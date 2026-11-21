@@ -41,7 +41,7 @@ func TestLoad_success(t *testing.T) {
 		got := view(m)
 
 		assertContains(t, got,
-			"@ kxyzabcd", "changes only", "nothing selected",
+			"@ kxyzabcd", "nothing selected",
 			"FILES", "0/4 ✓", "UNIFIED DIFF", "src/ui/view.go",
 			"tab pane · j k line · space select · c commit · d diff · e edit · ? help", "file 1/4 · 1 hunk",
 		)
@@ -498,7 +498,8 @@ func TestFullMode_success(t *testing.T) {
 		if !slices.Contains(src.requested, "commit1:src/ui/view.go") {
 			t.Errorf("requested = %v, want commit1:src/ui/view.go", src.requested)
 		}
-		assertContains(t, view(m), "full file")
+		top, _, _ := strings.Cut(view(m), "\n")
+		assertMissing(t, top, "full file")
 	})
 
 	t.Run("shows the file lines without hunk headers", func(t *testing.T) {
@@ -946,5 +947,32 @@ func TestHunkHeader_success(t *testing.T) {
 
 	if !regexp.MustCompile(`\x1b\[([0-9]+;)*100(;[0-9]+)*m`).MatchString(raw) {
 		t.Error("View() has no bright-black (SGR 100) background for hunk headers")
+	}
+}
+
+func TestTopBar_reviewChipsOnlyInReview(t *testing.T) {
+	t.Run("review does not show the diff mode", func(t *testing.T) {
+		top := strings.Split(view(loaded(t, newSource())), "\n")[0]
+
+		assertMissing(t, top, "changes only")
+	})
+
+	for name, tab := range map[string]string{"log": "2", "bookmarks": "3"} {
+		t.Run(name+" hides the idle selection badge", func(t *testing.T) {
+			m := press(t, loaded(t, newSource()), tab)
+
+			top := strings.Split(view(m), "\n")[0]
+
+			assertMissing(t, top, "nothing selected")
+		})
+
+		t.Run(name+" shows a compact count of selected hunks", func(t *testing.T) {
+			m := press(t, loaded(t, newSource()), "tab", "j", "space", tab)
+
+			top := strings.Split(view(m), "\n")[0]
+
+			assertContains(t, top, "● 2")
+			assertMissing(t, top, "hunks selected")
+		})
 	}
 }

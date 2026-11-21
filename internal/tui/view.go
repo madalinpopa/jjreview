@@ -88,21 +88,17 @@ func (m Model) topBar() string {
 	gap := ui.Span(lipgloss.NewStyle(), " ")
 	revision := ui.Pill(p.Chip, p.ChipText, "@ "+ui.ShortID(id))
 	n := pickedUnits(m.picks())
-	badge := ui.Pill(p.BadgeIdle, p.BadgeIdleFg, "nothing selected")
-	if n > 0 {
-		badge = ui.Pill(p.BadgeSel, p.Picked, fmt.Sprintf("%d %s selected", n, ui.Plural(n, "hunk")))
-	}
-	badge.Style = badge.Style.Bold(true)
-	var indicators []ui.Seg
+	var indicators, optional []ui.Seg
 	if m.change.Immutable {
 		indicators = append(indicators, ui.Pill(p.Chip, p.Removed, "read only"))
 	}
-	if n > 0 {
-		indicators = append(indicators, badge)
-	}
-	optional := []ui.Seg{ui.Pill(p.Chip, p.Key, m.modeLabel())}
-	if n == 0 {
-		optional = append(optional, badge)
+	switch {
+	case m.view == reviewView && n > 0:
+		indicators = append(indicators, bold(ui.Pill(p.BadgeSel, p.Picked, fmt.Sprintf("%d %s selected", n, ui.Plural(n, "hunk")))))
+	case m.view == reviewView:
+		optional = append(optional, bold(ui.Pill(p.BadgeIdle, p.BadgeIdleFg, "nothing selected")))
+	case n > 0:
+		indicators = append(indicators, bold(ui.Pill(p.BadgeSel, p.Picked, fmt.Sprintf("● %d", n))))
 	}
 	var title []ui.Seg
 	if subject, _, _ := strings.Cut(strings.TrimSpace(m.change.Description), "\n"); subject != "" {
@@ -131,6 +127,11 @@ func (m Model) topBar() string {
 		}
 	}
 	return bar(left, nil)
+}
+
+func bold(s ui.Seg) ui.Seg {
+	s.Style = s.Style.Bold(true)
+	return s
 }
 
 func spaced(segs []ui.Seg) []ui.Seg {
@@ -173,13 +174,6 @@ func (m Model) tab(v view, b key.Binding, label string) ui.Seg {
 		return s
 	}
 	return ui.Pill(m.pal.Chip, m.pal.ChipText, text)
-}
-
-func (m Model) modeLabel() string {
-	if m.full {
-		return "full file"
-	}
-	return "changes only"
 }
 
 func (m Model) bottomBar() []string {
