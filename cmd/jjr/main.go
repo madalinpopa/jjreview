@@ -125,6 +125,8 @@ func resetColorScheme(w io.Writer, mode theme.Mode) error {
 
 func provider(cfg config.Config) (llm.Provider, error) {
 	switch cfg.Provider {
+	case config.ProviderNone:
+		return nil, nil
 	case config.ProviderAnthropic:
 		var opts []option.RequestOption
 		if cfg.Anthropic.APIKey != "" {

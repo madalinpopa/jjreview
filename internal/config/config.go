@@ -17,6 +17,7 @@ import (
 const (
 	appName           = "jjr"
 	fileName          = "config.toml"
+	ProviderNone      = "none"
 	ProviderAnthropic = "anthropic"
 	ProviderCopilot   = "copilot"
 )
@@ -53,7 +54,7 @@ func Load(path string) (Config, error) {
 	v := viper.New()
 	v.SetConfigFile(path)
 	v.SetConfigType("toml")
-	v.SetDefault("provider", ProviderAnthropic)
+	v.SetDefault("provider", ProviderNone)
 	if _, err := os.Stat(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return Config{}, fmt.Errorf("config: %w", err)
 	} else if err == nil {
@@ -73,9 +74,9 @@ func Load(path string) (Config, error) {
 		},
 	}
 	switch cfg.Provider {
-	case ProviderAnthropic, ProviderCopilot:
+	case ProviderNone, ProviderAnthropic, ProviderCopilot:
 	default:
-		return Config{}, fmt.Errorf("config: %s: unknown provider %q; supported: %s, %s", path, cfg.Provider, ProviderAnthropic, ProviderCopilot)
+		return Config{}, fmt.Errorf("config: %s: unknown provider %q; supported: %s, %s, %s", path, cfg.Provider, ProviderNone, ProviderAnthropic, ProviderCopilot)
 	}
 	if v.IsSet("providers.copilot.api_key") {
 		return Config{}, fmt.Errorf("config: %s: providers.copilot does not take api_key; sign in by running copilot", path)

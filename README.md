@@ -44,23 +44,24 @@ go install github.com/madalinpopa/jjreview/cmd/jjr@latest
 Prebuilt archives for Linux and macOS (amd64, arm64) are attached to each
 [release](https://github.com/madalinpopa/jjreview/releases).
 
-`jjr` requires jj 0.47 or newer in `PATH`. To generate commit messages, provide
-an Anthropic API key (in the config file, in `ANTHROPIC_API_KEY`, or through
-`ant auth login`), or set `provider = "copilot"` to use a signed-in
-[GitHub Copilot CLI](https://github.com/github/copilot-cli). Without either, you
-write the message yourself.
+`jjr` requires jj 0.47 or newer in `PATH`. Commit message generation is off by
+default (`provider = "none"`), so you write the message yourself. To turn it on,
+set `provider = "anthropic"` and provide an Anthropic API key (in the config
+file, in `ANTHROPIC_API_KEY`, or through `ant auth login`), or set
+`provider = "copilot"` to use a signed-in
+[GitHub Copilot CLI](https://github.com/github/copilot-cli).
 
 ## Quick start
 
 ```sh
-export ANTHROPIC_API_KEY=<your-api-key>
 jjr
 ```
 
 1. Move to a hunk and press `space` to select it, or press `space` on a file in
    the file pane to select the whole file.
-2. Press `c`. The commit dialog lists the selection and drafts a message.
-3. Edit the message if needed and press `ctrl+s` to commit.
+2. Press `c`. The commit dialog lists the selection and, when a provider is
+   configured, drafts a message.
+3. Write or edit the message and press `ctrl+s` to commit.
 
 Repeat until the change contains only what you want to keep for later.
 
@@ -166,7 +167,7 @@ optional; a missing file means the defaults below. Keep the file private
 (`chmod 600`) if it holds an API key.
 
 ```toml
-provider = "anthropic"
+provider = "none"             # "anthropic" or "copilot" to generate messages
 
 [providers.anthropic]
 api_key = ""                  # falls back to ANTHROPIC_API_KEY / ant auth login

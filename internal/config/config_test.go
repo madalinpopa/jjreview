@@ -59,8 +59,8 @@ func TestLoad_success(t *testing.T) {
 			t.Fatalf("Load() error = %v", err)
 		}
 
-		if got.Provider != "anthropic" || got.Anthropic.APIKey != "" || got.Anthropic.Model != "" {
-			t.Errorf("Load() = %+v, want the anthropic provider without key or model", got)
+		if got.Provider != config.ProviderNone || got.Anthropic.APIKey != "" || got.Anthropic.Model != "" {
+			t.Errorf("Load() = %+v, want no provider without key or model", got)
 		}
 		if got.Theme != theme.DefaultSet() {
 			t.Errorf("Load().Theme differs from theme.DefaultSet()")
@@ -143,6 +143,22 @@ removed = "none"
 		}
 	})
 
+	t.Run("reads the none provider", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "config.toml")
+		if err := os.WriteFile(path, []byte("provider = \"none\"\n"), 0o600); err != nil {
+			t.Fatalf("WriteFile() error = %v", err)
+		}
+
+		got, err := config.Load(path)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+
+		if got.Provider != config.ProviderNone {
+			t.Errorf("Load() provider = %q, want %q", got.Provider, config.ProviderNone)
+		}
+	})
+
 	t.Run("reads the copilot provider", func(t *testing.T) {
 		path := writeConfig(t, `
 provider = "copilot"
@@ -165,7 +181,7 @@ model = "gpt-5-mini"
 func TestLoad_failure(t *testing.T) {
 	for name, tc := range map[string]struct{ body, want string }{
 		"invalid toml":               {body: "provider = ", want: "config.toml"},
-		"unknown provider":           {body: `provider = "openai"`, want: "openai"},
+		"unknown provider":           {body: `provider = "openai"`, want: `unknown provider "openai"; supported: none, anthropic, copilot`},
 		"copilot api key":            {body: "[providers.copilot]\napi_key = \"secret\"\n", want: "api_key"},
 		"unknown theme key":          {body: "[theme.base]\nbordr = \"red\"\n", want: "unknown colour theme.base.bordr"},
 		"unknown section":            {body: "[theme.colors]\nborder = \"red\"\n", want: "unknown section theme.colors"},

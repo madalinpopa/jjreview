@@ -111,7 +111,9 @@ func TestCommitModal_success(t *testing.T) {
 		if m.Message() != "" {
 			t.Errorf("Message() = %q, want empty", m.Message())
 		}
-		assertContains(t, view(m), "ANTHROPIC_API_KEY")
+		got := view(m)
+		assertContains(t, got, "set provider in config.toml to generate")
+		assertMissing(t, got, "ANTHROPIC_API_KEY", "generating")
 	})
 
 	t.Run("esc closes the modal and keeps the selection", func(t *testing.T) {

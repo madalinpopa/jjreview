@@ -18,7 +18,7 @@ import (
 const (
 	modalMaxWidth   = 64
 	inputHeight     = 5
-	generatorHint   = "set ANTHROPIC_API_KEY or run `ant auth login` to generate messages"
+	generatorHint   = "set provider in config.toml to generate"
 	blockedStatus   = "split done; restart jjr to continue"
 	immutableStatus = "immutable revision: read only"
 	reloadingStatus = "reloading change…"

@@ -13,6 +13,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/madalinpopa/jjreview/internal/config"
 	"github.com/madalinpopa/jjreview/internal/theme"
 )
 
@@ -189,5 +190,18 @@ func TestFinishProgram_failed(t *testing.T) {
 				t.Errorf("finishProgram(%v) output = %q, want %q", tt.runErr, got, tt.wantOut)
 			}
 		})
+	}
+}
+
+func TestProvider_none(t *testing.T) {
+	t.Parallel()
+
+	gen, err := provider(config.Config{Provider: config.ProviderNone})
+
+	if err != nil {
+		t.Fatalf("provider() error = %v", err)
+	}
+	if gen != nil {
+		t.Errorf("provider() = %T, want no generator", gen)
 	}
 }
