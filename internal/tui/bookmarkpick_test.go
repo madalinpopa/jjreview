@@ -29,7 +29,7 @@ func TestLogBookmark_success(t *testing.T) {
 	t.Run("a new bookmark is created on the revision under the cursor", func(t *testing.T) {
 		src := bookmarkSource()
 		m := press(t, loaded(t, src), "2", "j", "b", "enter")
-		assertContains(t, view(m), "New bookmark", jj.CommitRevset("childcommit"))
+		assertContains(t, view(m), "New bookmark", "Target revision · child feature", "wxyzchil")
 
 		m = press(t, typeText(t, m, "fresh"), "enter")
 

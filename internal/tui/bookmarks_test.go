@@ -380,7 +380,8 @@ func TestBookmarkCreate_success(t *testing.T) {
 	t.Run("n creates a bookmark on the commit under review", func(t *testing.T) {
 		src := bookmarkSource()
 		m := press(t, loaded(t, src), "3", "n")
-		assertContains(t, view(m), "New bookmark", `commit_id("commit1")`)
+		assertContains(t, view(m), "New bookmark", "Target revision · wip", "kxyzabcd")
+		assertMissing(t, view(m), "commit_id(")
 
 		m = press(t, typeText(t, m, "topic"), "enter")
 
@@ -512,11 +513,32 @@ func TestBookmarkCreate_failed(t *testing.T) {
 	}
 }
 
+func TestBookmarkTarget_success(t *testing.T) {
+	t.Run("after a split the target is the remaining revision", func(t *testing.T) {
+		src := bookmarkSource()
+		m := press(t, loaded(t, src), "tab", "j", "tab", "space", "c", "ctrl+s")
+
+		m = press(t, m, "3", "n")
+
+		got := boxText(t, view(m), "New bookmark")
+		assertContains(t, got, "rest1zzz")
+		assertMissing(t, got, "kxyzabcd", "· wip")
+	})
+
+	t.Run("an edited target hides the description of the prefilled revision", func(t *testing.T) {
+		m := press(t, loaded(t, bookmarkSource()), "3", "n", "tab", "backspace")
+
+		assertMissing(t, view(m), "· wip")
+	})
+}
+
 func TestBookmarkEdit_success(t *testing.T) {
 	t.Run("e is prefilled with the bookmark and its commit", func(t *testing.T) {
 		m := press(t, loaded(t, bookmarkSource()), "3", "e")
 
-		assertContains(t, view(m), "Edit bookmark", `commit_id("childcommit")`)
+		got := view(m)
+		assertContains(t, got, "Edit bookmark", "Target revision · child feature", "wxyzchil")
+		assertMissing(t, got, "commit_id(")
 	})
 
 	t.Run("a new name renames the bookmark", func(t *testing.T) {
@@ -892,7 +914,7 @@ func TestBookmarkRound2_success(t *testing.T) {
 		m := press(t, loaded(t, src), "3", "e", "ctrl+u")
 		m = press(t, typeText(t, m, "renamed"), "tab", "ctrl+u")
 		m = press(t, typeText(t, m, "root()"), "enter")
-		assertContains(t, view(m), "rename failed", "something about the move", `commit_id("rootcommit")`)
+		assertContains(t, view(m), "rename failed", "something about the move", "rootcomm")
 		src.renameErr = nil
 
 		press(t, m, "enter")
@@ -1081,7 +1103,8 @@ func TestBookmarkModal_targetFits(t *testing.T) {
 			m := press(t, start(t, src, nil, size[0], size[1]), "3", "n", "tab")
 
 			box := boxText(t, view(m), "New bookmark")
-			assertContains(t, box, `234567")`)
+			assertContains(t, box, "kxyzabcd")
+			assertMissing(t, box, "0123456789abcdef")
 		})
 	}
 }
