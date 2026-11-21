@@ -15,8 +15,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/demo-light.gif">
-    <img alt="jjr demo" src="docs/demo.gif" width="880">
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/review-light.gif">
+    <img alt="jjr review tab demo" src="docs/demo/review.gif" width="880">
   </picture>
 </p>
 
@@ -129,6 +129,13 @@ bar marks the revision under review. Searching keeps only the revisions whose
 change or commit ID starts with the query or whose full description, body
 included, contains it, ignoring case.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/log-light.gif">
+    <img alt="jjr log tab demo" src="docs/demo/log.gif" width="880">
+  </picture>
+</p>
+
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Next / previous revision |
@@ -169,6 +176,13 @@ Each tracked remote shows `✓` when it is in sync, or how many commits the loca
 bookmark is ahead (`↑`) or behind (`↓`); a count jj could only bound is shown as
 a minimum, such as `↑10+`. Conflicted bookmarks are marked too.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/bookmarks-light.gif">
+    <img alt="jjr bookmarks tab demo" src="docs/demo/bookmarks.gif" width="880">
+  </picture>
+</p>
+
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Next / previous bookmark |
@@ -199,6 +213,13 @@ The operations tab lists the latest 500 operations of `jj op log`, newest
 first, with the operation ID, description and age. `l` shows the command that
 ran the operation under it, one row per line, when jj recorded one. A bar and an `@` mark the
 current operation; snapshots and the root operation are dimmed.
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="docs/demo/operations-light.gif">
+    <img alt="jjr operations tab demo" src="docs/demo/operations.gif" width="880">
+  </picture>
+</p>
 
 | Key | Action |
 |-----|--------|
@@ -368,7 +389,7 @@ Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and
 | `task lint` | Lint and verify `go.mod` and `go.sum` are tidy |
 | `task format` | Format the code |
 | `task check` | Test, format, then lint |
-| `docs/demo.sh` | Record both demo GIFs in a throwaway repository with the Rosé Pine themes |
+| `docs/demo.sh` | Record a dark and a light demo GIF of each tab in a throwaway repository with the Rosé Pine themes |
 
 | Package | Responsibility |
 |---------|----------------|
