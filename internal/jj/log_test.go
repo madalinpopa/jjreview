@@ -37,10 +37,10 @@ func TestLog_success(t *testing.T) {
 		childA := changeID(t, dir, "feat")
 		base := changeID(t, dir, "main")
 		want := []jj.LogLine{
-			{Graph: "@  ", Entry: &jj.LogEntry{ChangeID: childB, CommitID: commitID(t, dir, "@"), Description: "child b\n", Author: "Test User", WorkingCopy: true}},
-			{Graph: "│ ○  ", Entry: &jj.LogEntry{ChangeID: childA, CommitID: commitID(t, dir, "feat"), Description: "child a\n\nbody line\n", Author: "Test User", Bookmarks: []string{"feat", "feat-2"}}},
+			{Graph: "@  ", Entry: &jj.LogEntry{ChangeID: childB, CommitID: commitID(t, dir, "@"), Description: "child b\n", Author: "Test User", Parents: []string{commitID(t, dir, "main")}, WorkingCopy: true}},
+			{Graph: "│ ○  ", Entry: &jj.LogEntry{ChangeID: childA, CommitID: commitID(t, dir, "feat"), Description: "child a\n\nbody line\n", Author: "Test User", Bookmarks: []string{"feat", "feat-2"}, Parents: []string{commitID(t, dir, "main")}}},
 			{Graph: "├─╯"},
-			{Graph: "○  ", Entry: &jj.LogEntry{ChangeID: base, CommitID: commitID(t, dir, "main"), Description: "base \"quoted\" ü ✓\tend\n", Author: "Test User", Bookmarks: []string{"main"}}},
+			{Graph: "○  ", Entry: &jj.LogEntry{ChangeID: base, CommitID: commitID(t, dir, "main"), Description: "base \"quoted\" ü ✓\tend\n", Author: "Test User", Bookmarks: []string{"main"}, Parents: []string{commitID(t, dir, "root()")}}},
 			{Graph: "◆  ", Entry: &jj.LogEntry{ChangeID: changeID(t, dir, "root()"), CommitID: commitID(t, dir, "root()"), Immutable: true}},
 		}
 

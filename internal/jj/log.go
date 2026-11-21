@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-const logTemplate = `"\x1f{\"change_id\":" ++ json(change_id) ++ ",\"commit_id\":" ++ json(commit_id) ++ ",\"description\":" ++ json(description) ++ ",\"author\":" ++ json(author) ++ ",\"timestamp\":" ++ json(committer.timestamp().ago()) ++ ",\"bookmarks\":" ++ json(local_bookmarks.map(|b| b.name())) ++ ",\"workspaces\":" ++ json(working_copies.map(|w| w.name())) ++ ",\"immutable\":" ++ json(immutable) ++ ",\"working_copy\":" ++ json(current_working_copy) ++ "}\n"`
+const logTemplate = `"\x1f{\"change_id\":" ++ json(change_id) ++ ",\"commit_id\":" ++ json(commit_id) ++ ",\"description\":" ++ json(description) ++ ",\"author\":" ++ json(author) ++ ",\"timestamp\":" ++ json(committer.timestamp().ago()) ++ ",\"bookmarks\":" ++ json(local_bookmarks.map(|b| b.name())) ++ ",\"workspaces\":" ++ json(working_copies.map(|w| w.name())) ++ ",\"immutable\":" ++ json(immutable) ++ ",\"working_copy\":" ++ json(current_working_copy) ++ ",\"parents\":" ++ json(parents.map(|c| c.commit_id())) ++ "}\n"`
 
 type LogEntry struct {
 	ChangeID    string
@@ -17,6 +17,7 @@ type LogEntry struct {
 	Timestamp   string
 	Bookmarks   []string
 	Workspaces  []string
+	Parents     []string
 	Immutable   bool
 	WorkingCopy bool
 }
@@ -39,6 +40,7 @@ type logEntryJSON struct {
 	Workspaces  []string `json:"workspaces"`
 	Immutable   bool     `json:"immutable"`
 	WorkingCopy bool     `json:"working_copy"`
+	Parents     []string `json:"parents"`
 }
 
 func (c Client) Log(ctx context.Context) ([]LogLine, error) {
@@ -70,6 +72,10 @@ func (c Client) Log(ctx context.Context) ([]LogLine, error) {
 		if len(entry.Workspaces) > 0 {
 			workspaces = entry.Workspaces
 		}
+		var parents []string
+		if len(entry.Parents) > 0 {
+			parents = entry.Parents
+		}
 		lines = append(lines, LogLine{Graph: graph, Entry: &LogEntry{
 			ChangeID:    entry.ChangeID,
 			CommitID:    entry.CommitID,
@@ -78,6 +84,7 @@ func (c Client) Log(ctx context.Context) ([]LogLine, error) {
 			Timestamp:   entry.Timestamp,
 			Bookmarks:   bookmarks,
 			Workspaces:  workspaces,
+			Parents:     parents,
 			Immutable:   entry.Immutable,
 			WorkingCopy: entry.WorkingCopy,
 		}})
