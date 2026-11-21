@@ -20,6 +20,8 @@ type Source interface {
 	DeleteBookmark(ctx context.Context, name string) (string, error)
 	Abandon(ctx context.Context, commitID string, bookmarks []string) (workingCopy bool, err error)
 	Squash(ctx context.Context, from []jj.LogEntry, into jj.LogEntry) (string, error)
+	Push(ctx context.Context, e jj.LogEntry) ([]jj.PushResult, error)
+	Fetch(ctx context.Context) (bool, error)
 	Successor(ctx context.Context, changeID, commitID string) (jj.Change, error)
 	Split(ctx context.Context, changeID, commitID, message string, files []jj.SplitFile) (selected, rest jj.Change, err error)
 }

@@ -94,6 +94,7 @@ type Model struct {
 	opened   bookmarkRef
 	modal    *dialog
 	deleting *jj.Bookmark
+	picker   *picker
 }
 
 func New(ctx context.Context, src Source) Model {
@@ -149,7 +150,7 @@ func (b Model) selectedRef() bookmarkRef {
 }
 
 func (b Model) OverlayOpen() bool {
-	return b.modal != nil || b.deleting != nil
+	return b.modal != nil || b.deleting != nil || b.picker != nil
 }
 
 func (b *Model) move(delta int) {
@@ -234,6 +235,8 @@ func (b *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
 		return b.deleteKey(msg), Intent{}
 	case b.modal != nil:
 		return b.modalKey(msg), Intent{}
+	case b.picker != nil:
+		return b.pickKey(msg, env)
 	}
 	half := max(env.ListHeight/2, 1)
 	switch {
@@ -304,6 +307,8 @@ func (b Model) Overlay(env Env) string {
 		return b.modalView(env)
 	case b.deleting != nil:
 		return b.deleteView(env)
+	case b.picker != nil:
+		return b.pickerView(env)
 	}
 	return ""
 }

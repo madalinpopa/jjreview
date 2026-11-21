@@ -64,16 +64,37 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	}
 	cmd, in := m.log.Key(msg, m.logEnv())
+	if c, handled := m.logIntent(msg, armed, in); handled {
+		return c
+	}
+	return m.logEffects(cmd, in)
+}
+
+func (m *Model) logIntent(msg tea.KeyPressMsg, armed string, in logview.Intent) (tea.Cmd, bool) {
 	switch {
 	case in.Open != "":
-		return m.openCommit(msg, armed, in.Open)
+		return m.openCommit(msg, armed, in.Open), true
 	case in.Arm:
 		if m.canLoad() {
 			m.status = m.log.Arm()
 		}
 	case in.Abandon != nil:
 		if m.canLoad() {
-			return m.abandon(*in.Abandon)
+			return m.abandon(*in.Abandon), true
+		}
+	case in.ArmPush:
+		if m.canLoad() {
+			m.log.ArmPush()
+		}
+	case in.Push != nil:
+		if m.canLoad() {
+			return m.push(*in.Push), true
+		}
+	case in.Bookmark != nil:
+		return m.bookmarks.Pick(*in.Bookmark), true
+	case in.Fetch:
+		if m.canLoad() {
+			return m.fetchRemote(), true
 		}
 	case in.Squash:
 		if m.canLoad() {
@@ -82,12 +103,12 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 	case in.Squashed != nil:
 		if m.canLoad() && m.confirmDrop(msg, armed) {
 			m.log.FinishSquash()
-			return m.squash(*in.Squashed)
+			return m.squash(*in.Squashed), true
 		}
 	case in.Status != "":
 		m.status = in.Status
 	}
-	return m.logEffects(cmd, in)
+	return nil, false
 }
 
 func (m *Model) logEffects(cmd tea.Cmd, in logview.Intent) tea.Cmd {

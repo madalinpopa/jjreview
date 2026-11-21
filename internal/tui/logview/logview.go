@@ -38,6 +38,10 @@ type keyMap struct {
 	abandon     key.Binding
 	confirm     key.Binding
 	reload      key.Binding
+	reset       key.Binding
+	fetch       key.Binding
+	push        key.Binding
+	bookmark    key.Binding
 	mark        key.Binding
 	squash      key.Binding
 	cancel      key.Binding
@@ -58,7 +62,11 @@ func newKeyMap() keyMap {
 		collapse:    key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "hide the files of the revision")),
 		abandon:     key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "abandon the revision (y confirms)")),
 		confirm:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "confirm")),
-		reload:      key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh the log")),
+		reload:      key.NewBinding(key.WithKeys("ctrl+r"), key.WithHelp("ctrl+r", "refresh the log")),
+		reset:       key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "clear the selection and hide all files")),
+		fetch:       key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "fetch from the remote")),
+		push:        key.NewBinding(key.WithKeys("P"), key.WithHelp("P", "push the bookmarks of the revision, or the change (y confirms)")),
+		bookmark:    key.NewBinding(key.WithKeys("b"), key.WithHelp("b", "create or move a bookmark to the revision")),
 		mark:        key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "select the revision")),
 		squash:      key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "squash the selected revisions (y confirms)")),
 		cancel:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
@@ -85,11 +93,27 @@ type Intent struct {
 	Open     string
 	Arm      bool
 	Abandon  *jj.LogEntry
+	ArmPush  bool
+	Bookmark *jj.LogEntry
+	Push     *jj.LogEntry
+	Fetch    bool
 	Squash   bool
 	Squashed *Squash
 	Status   string
 	Refresh  bool
 	Retarget bool
+}
+
+type action int
+
+const (
+	abandonAction action = iota
+	pushAction
+)
+
+type confirmation struct {
+	action action
+	entry  jj.LogEntry
 }
 
 type Squash struct {
@@ -114,7 +138,7 @@ type Model struct {
 	cursor    int
 	followed  string
 	keep      Position
-	confirm   *jj.LogEntry
+	confirm   *confirmation
 	marked    map[string]bool
 	squashing []jj.LogEntry
 	top       int
@@ -249,6 +273,10 @@ func (l Model) SelectedChange() string {
 
 func (l Model) AbandonKey() string {
 	return l.keys.abandon.Help().Key
+}
+
+func (l Model) PushKey() string {
+	return l.keys.push.Help().Key
 }
 
 func (l Model) selectedCommit() string {
@@ -423,16 +451,12 @@ func (l Model) Ignores(msg tea.KeyPressMsg, reloading bool) bool {
 	if l.squashing != nil {
 		return key.Matches(msg, l.keys.confirm) && (msg.IsRepeat || reloading || l.loading)
 	}
-	return l.confirm == nil && !l.searching && key.Matches(msg, l.keys.abandon, l.keys.confirm, l.keys.squash) && (msg.IsRepeat || reloading || l.loading)
+	return l.confirm == nil && !l.searching && key.Matches(msg, l.keys.abandon, l.keys.confirm, l.keys.squash, l.keys.fetch, l.keys.push) && (msg.IsRepeat || reloading || l.loading)
 }
 
 func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
-	if target := l.confirm; target != nil {
-		l.confirm = nil
-		if e := l.selected(); !msg.IsRepeat && key.Matches(msg, l.keys.confirm) && e != nil && e.CommitID == target.CommitID {
-			return nil, Intent{Abandon: target}
-		}
-		return nil, Intent{}
+	if l.confirm != nil {
+		return nil, l.confirmKey(msg)
 	}
 	if l.searching {
 		return l.searchKey(msg), Intent{}
@@ -443,6 +467,22 @@ func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
 	if l.navigate(msg, env) {
 		return nil, Intent{}
 	}
+	return l.browseKey(msg)
+}
+
+func (l *Model) confirmKey(msg tea.KeyPressMsg) Intent {
+	c := l.confirm
+	l.confirm = nil
+	if e := l.selected(); msg.IsRepeat || !key.Matches(msg, l.keys.confirm) || e == nil || e.CommitID != c.entry.CommitID {
+		return Intent{}
+	}
+	if c.action == pushAction {
+		return Intent{Push: &c.entry}
+	}
+	return Intent{Abandon: &c.entry}
+}
+
+func (l *Model) browseKey(msg tea.KeyPressMsg) (tea.Cmd, Intent) {
 	switch {
 	case key.Matches(msg, l.keys.search):
 		if !l.loaded || l.err != nil {
@@ -468,6 +508,17 @@ func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
 		return l.expandFiles(), Intent{}
 	case key.Matches(msg, l.keys.abandon):
 		return nil, Intent{Arm: l.selected() != nil}
+	case key.Matches(msg, l.keys.push):
+		return nil, Intent{ArmPush: l.selected() != nil}
+	case key.Matches(msg, l.keys.fetch):
+		return nil, Intent{Fetch: true}
+	case key.Matches(msg, l.keys.bookmark):
+		if e := l.selected(); e != nil {
+			return nil, Intent{Bookmark: new(*e)}
+		}
+	case key.Matches(msg, l.keys.reset):
+		clear(l.marked)
+		clear(l.expanded)
 	case key.Matches(msg, l.keys.collapse):
 		if e := l.selected(); e != nil {
 			delete(l.expanded, e.CommitID)
@@ -524,7 +575,10 @@ func (l *Model) prune() {
 			present[line.Entry.CommitID] = true
 		}
 	}
-	maps.DeleteFunc(l.marked, func(id string, _ bool) bool { return !present[id] })
+	gone := func(id string, _ bool) bool { return !present[id] }
+	maps.DeleteFunc(l.marked, gone)
+	maps.DeleteFunc(l.expanded, gone)
+	maps.DeleteFunc(l.files, func(id string, _ fileList) bool { return !present[id] })
 	if slices.ContainsFunc(l.squashing, func(e jj.LogEntry) bool { return !present[e.CommitID] }) {
 		l.squashing = nil
 	}
@@ -585,17 +639,25 @@ func (l *Model) squashKey(msg tea.KeyPressMsg, env Env) Intent {
 }
 
 func (l *Model) Arm() string {
+	if e := l.selected(); e != nil && e.Immutable {
+		return ui.ShortID(e.ChangeID) + " is immutable"
+	}
+	l.arm(abandonAction)
+	return ""
+}
+
+func (l *Model) ArmPush() {
+	l.arm(pushAction)
+}
+
+func (l *Model) arm(a action) {
 	e := l.selected()
 	if e == nil {
-		return ""
-	}
-	if e.Immutable {
-		return ui.ShortID(e.ChangeID) + " is immutable"
+		return
 	}
 	target := *e
 	target.Bookmarks = slices.Clone(e.Bookmarks)
-	l.confirm = &target
-	return ""
+	l.confirm = &confirmation{action: a, entry: target}
 }
 
 func (l *Model) expandFiles() tea.Cmd {
@@ -735,14 +797,24 @@ func (l Model) Hints(tabs, help ui.KeyHint) []ui.KeyHint {
 		ui.Hint("revision", l.keys.down, l.keys.up),
 		ui.Hint("review", l.keys.open),
 		ui.Hint("select", l.keys.mark),
-		ui.Hint("squash", l.keys.squash),
+	}
+	if len(l.marked) > 0 {
+		hints = append(hints, ui.Hint("squash", l.keys.squash))
+	}
+	hints = append(hints,
 		ui.Hint("files", l.keys.expand, l.keys.collapse),
 		ui.Hint("search", l.keys.search),
-	}
-	if l.filtered() || len(l.marked) > 0 {
+		ui.Hint("fetch", l.keys.fetch),
+		ui.Hint("push", l.keys.push),
+		ui.Hint("bookmark", l.keys.bookmark),
+	)
+	if l.filtered() {
 		hints = append(hints, ui.Hint("clear", l.keys.clearSearch))
 	}
-	return append(hints, ui.Hint("refresh", l.keys.reload), help)
+	if len(l.marked) > 0 || len(l.expanded) > 0 {
+		hints = append(hints, ui.Hint("reset", l.keys.reset))
+	}
+	return append(hints, help)
 }
 
 func (l Model) Help() []ui.KeyHint {
@@ -756,8 +828,12 @@ func (l Model) Help() []ui.KeyHint {
 		ui.Describe(l.keys.mark),
 		ui.Describe(l.keys.squash),
 		ui.Describe(l.keys.abandon),
+		ui.Describe(l.keys.fetch),
+		ui.Describe(l.keys.push),
+		ui.Describe(l.keys.bookmark),
 		ui.Describe(l.keys.search),
 		ui.Describe(l.keys.clearSearch),
+		ui.Describe(l.keys.reset),
 		ui.Describe(l.keys.reload),
 	}
 }
@@ -904,10 +980,11 @@ func continuation(graph string, last bool) string {
 
 func (l Model) Overlay(env Env) string {
 	p := env.Theme
-	e := l.confirm
-	if e == nil {
+	if l.confirm == nil {
 		return ""
 	}
+	c := l.confirm
+	e := c.entry
 	inner := env.modalInner()
 	wrap := func(style lipgloss.Style, text string) []string {
 		var out []string
@@ -916,17 +993,27 @@ func (l Model) Overlay(env Env) string {
 		}
 		return out
 	}
-	lines := wrap(ui.Fg(p.Title).Bold(true), "Abandon "+ui.ShortID(e.ChangeID)+" "+ui.ShortID(e.CommitID))
+	verb := "abandon"
+	if c.action == pushAction {
+		verb = "push"
+	}
+	lines := wrap(ui.Fg(p.Title).Bold(true), strings.ToUpper(verb[:1])+verb[1:]+" "+ui.ShortID(e.ChangeID)+" "+ui.ShortID(e.CommitID))
 	if title, _, _ := strings.Cut(e.Description, "\n"); title != "" {
 		lines = append(lines, wrap(ui.Fg(p.Strong), title)...)
 	}
-	if n := len(e.Bookmarks); n > 0 {
+	n := len(e.Bookmarks)
+	switch {
+	case c.action == pushAction && n > 0:
+		lines = append(lines, wrap(ui.Fg(p.Added), "Pushes "+ui.Plural(n, "bookmark")+" "+strings.Join(e.Bookmarks, ", "))...)
+	case c.action == pushAction:
+		lines = append(lines, wrap(ui.Fg(p.Added), "Creates a bookmark for the change and pushes it")...)
+	case n > 0:
 		lines = append(lines, wrap(ui.Fg(p.Removed), "Deletes "+ui.Plural(n, "bookmark")+" "+strings.Join(e.Bookmarks, ", "))...)
 	}
-	if n := env.Dropped; n > 0 {
-		lines = append(lines, wrap(ui.Fg(p.Removed), fmt.Sprintf("Drops %d selected %s", n, ui.Plural(n, "hunk")))...)
+	if d := env.Dropped; d > 0 && c.action == abandonAction {
+		lines = append(lines, wrap(ui.Fg(p.Removed), fmt.Sprintf("Drops %d selected %s", d, ui.Plural(d, "hunk")))...)
 	}
-	footer := wrap(ui.Fg(p.Muted), l.keys.confirm.Help().Key+" abandon · any other key cancels")
+	footer := wrap(ui.Fg(p.Muted), l.keys.confirm.Help().Key+" "+verb+" · any other key cancels")
 	if room := max(env.Height-2-len(footer), 0); len(lines) > room {
 		lines = lines[:room]
 		if room > 0 {

@@ -84,6 +84,16 @@ func sameLines(a, b diff.Hunk) bool {
 	})
 }
 
+func sameFiles(a, b []diff.File) bool {
+	return slices.EqualFunc(a, b, func(x, y diff.File) bool {
+		return x.OldPath == y.OldPath && x.NewPath == y.NewPath && x.OldMode == y.OldMode && x.NewMode == y.NewMode &&
+			x.Status == y.Status && x.Binary == y.Binary && slices.EqualFunc(x.Hunks, y.Hunks, func(p, q diff.Hunk) bool {
+			return p.OldStart == q.OldStart && p.OldLines == q.OldLines && p.NewStart == q.NewStart &&
+				p.NewLines == q.NewLines && p.Section == q.Section && slices.Equal(p.Lines, q.Lines)
+		})
+	})
+}
+
 func modeChanged(f diff.File) bool {
 	return f.OldMode != "" && f.NewMode != "" && f.OldMode != f.NewMode
 }
