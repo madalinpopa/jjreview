@@ -481,8 +481,8 @@ func TestLogView_success(t *testing.T) {
 	t.Run("the key bar lists the log keys", func(t *testing.T) {
 		got := view(press(t, loaded(t, revisionSource()), "2"))
 
-		assertContains(t, got, "1 2 3 tabs", "j k revision", "enter review", "R refresh", "? help")
-		assertMissing(t, got, "space select", "file 1/4")
+		assertContains(t, got, "1 2 3 tabs", "j k revision", "enter review", "space select", "s squash", "R refresh", "? help")
+		assertMissing(t, got, "c commit", "file 1/4")
 	})
 
 	t.Run("help lists the log keys", func(t *testing.T) {
