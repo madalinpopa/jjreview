@@ -214,13 +214,12 @@ func TestFileNavigation_success(t *testing.T) {
 		keys []string
 		want string
 	}{
-		"starts at the first tree file":   {keys: nil, want: "src/ui/view.go"},
-		"plain n and p do not switch":     {keys: []string{"n", "n", "p"}, want: "src/ui/view.go"},
-		"j moves to the next file":        {keys: []string{"tab", "j"}, want: "src/main.go"},
-		"j clamps at the last file":       {keys: []string{"tab", "j", "j", "j", "j", "j"}, want: "img.png"},
-		"k moves back":                    {keys: []string{"tab", "j", "j", "k"}, want: "src/main.go"},
-		"k clamps at the first file":      {keys: []string{"tab", "k"}, want: "src/ui/view.go"},
-		"ctrl+n and ctrl+p do not switch": {keys: []string{"ctrl+n", "ctrl+n", "ctrl+p"}, want: "src/ui/view.go"},
+		"starts at the first tree file": {keys: nil, want: "src/ui/view.go"},
+		"plain n and p do not switch":   {keys: []string{"n", "n", "p"}, want: "src/ui/view.go"},
+		"j moves to the next file":      {keys: []string{"tab", "j"}, want: "src/main.go"},
+		"j clamps at the last file":     {keys: []string{"tab", "j", "j", "j", "j", "j"}, want: "img.png"},
+		"k moves back":                  {keys: []string{"tab", "j", "j", "k"}, want: "src/main.go"},
+		"k clamps at the first file":    {keys: []string{"tab", "k"}, want: "src/ui/view.go"},
 	}
 
 	for name, tt := range tests {
@@ -697,7 +696,7 @@ func TestKeyBar_success(t *testing.T) {
 		got := view(m)
 
 		assertContains(t, got, "tab pane", "j k line", "space select", "c commit", "d diff", "e edit", "? help", "file 1/4 · 1 hunk")
-		for _, hint := range []string{"half page", "^n ^p", "fold", "S select file", "full / changes"} {
+		for _, hint := range []string{"half page", "fold", "S select file", "full / changes"} {
 			if strings.Contains(got, hint) {
 				t.Errorf("View() key bar shows %q", hint)
 			}
@@ -719,7 +718,7 @@ func TestKeyBar_success(t *testing.T) {
 }
 
 func TestKeyBar_notWorkingCopy(t *testing.T) {
-	m := press(t, loaded(t, revisionSource()), "ctrl+p")
+	m := press(t, loaded(t, revisionSource()), reviewParent()...)
 
 	assertContains(t, view(m), "? help")
 	assertMissing(t, view(m), "e edit")
@@ -732,7 +731,7 @@ func TestHelp_success(t *testing.T) {
 
 		got := view(m)
 
-		assertContains(t, got, "Keys", "^d ^u", "half page", "^n ^p", "child / parent revision", "@", "working-copy revision", "S", "select every hunk in the file",
+		assertContains(t, got, "Keys", "^d ^u", "half page", "@", "working-copy revision", "S", "select every hunk in the file",
 			"Z", "fold all hunks", "R", "reload the change", "open in $EDITOR", "full file / changes only", "q", "quit")
 	})
 

@@ -69,6 +69,8 @@ type Model struct {
 	editor      func(ctx context.Context, path string) *exec.Cmd
 	root        string
 	reloadPath  string
+	view        view
+	log         logState
 }
 
 func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
@@ -84,10 +86,12 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		contents:    map[contentKey]string{},
 		contentErrs: map[contentKey]error{},
 		highlights:  map[highlightKey]fileHighlight{},
+		log:         newLogState(),
 		width:       defaultWidth,
 		height:      defaultHeight,
 	}
 	m.treeWidth = m.measureTree()
+	m.resizeSearch()
 	return m
 }
 
@@ -112,6 +116,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.resizeModal()
+		m.resizeSearch()
 	case queryBackgroundMsg:
 		cmd = m.requestBackground()
 	case tea.BackgroundColorMsg:
@@ -143,6 +148,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyContent(msg)
 	case generatedMsg:
 		m.applyGenerated(msg)
+	case logFilesMsg:
+		m.applyLogFiles(msg)
+	case logMsg:
+		cmd = m.applyLog(msg)
 	case committedMsg:
 		m.applyCommitted(msg)
 	case EditorFinishedMsg:
@@ -156,8 +165,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.modalKey(msg)
 		case m.help:
 			m.helpKey(msg)
+		case m.view == logView:
+			cmd = m.logKey(msg)
 		default:
 			cmd = m.reviewKey(msg)
+		}
+	default:
+		if m.view == logView && m.log.searching {
+			cmd = m.updateQuery(msg)
 		}
 	}
 	m.ensureHighlight()
@@ -235,6 +250,7 @@ func (m *Model) applyLoad(msg loadedMsg) tea.Cmd {
 	m.change = msg.change
 	m.target = msg.change.ChangeID
 	m.targetHead = msg.change.CommitID
+	m.log.follow(m.targetHead)
 	m.root = msg.root
 	prevFiles, prevReviews := m.files, m.reviews
 	m.files = slices.Clone(msg.files)
@@ -300,6 +316,10 @@ func (m Model) requestContent() tea.Cmd {
 }
 
 func (m *Model) scroll() {
+	if m.view == logView {
+		m.log.keepVisible(m.logHeight())
+		return
+	}
 	m.diffTop = scrollTop(m.diffTop, m.cursor, m.diffHeight(), len(m.rows()))
 	m.listTop = scrollTop(m.listTop, m.currentTreeRow(), m.diffHeight(), len(m.treeRows()))
 }

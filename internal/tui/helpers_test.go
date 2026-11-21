@@ -35,7 +35,16 @@ type fakeSource struct {
 	revisions  map[string]jj.Change
 	revFiles   map[string][]diff.File
 	revErrs    map[string]error
+	diffErrs   map[string]error
 	changeRevs []string
+	log        []jj.LogLine
+	logErr     error
+	logCalls   int
+}
+
+func (s *fakeSource) Log(context.Context) ([]jj.LogLine, error) {
+	s.logCalls++
+	return s.log, s.logErr
 }
 
 func (s *fakeSource) WorkspaceRoot(context.Context) (string, error) {
@@ -56,6 +65,9 @@ func (s *fakeSource) Change(_ context.Context, rev string) (jj.Change, error) {
 func (s *fakeSource) Diff(_ context.Context, rev string) ([]diff.File, error) {
 	s.diffCalls++
 	s.diffRevs = append(s.diffRevs, rev)
+	if err, ok := s.diffErrs[rev]; ok {
+		return nil, err
+	}
 	if files, ok := s.revFiles[rev]; ok {
 		return files, nil
 	}
@@ -229,7 +241,9 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
 	case "esc":
 		return tea.KeyPressMsg{Code: tea.KeyEscape}
-	case "ctrl+c", "ctrl+r", "ctrl+s", "ctrl+d", "ctrl+u", "ctrl+n", "ctrl+p", "ctrl+h", "ctrl+l":
+	case "backspace":
+		return tea.KeyPressMsg{Code: tea.KeyBackspace}
+	case "ctrl+c", "ctrl+r", "ctrl+s", "ctrl+d", "ctrl+u", "ctrl+h", "ctrl+l":
 		return tea.KeyPressMsg{Code: rune(k[len(k)-1]), Mod: tea.ModCtrl}
 	case "ctrl+enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter, Mod: tea.ModCtrl}

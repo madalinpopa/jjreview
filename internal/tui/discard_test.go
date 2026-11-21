@@ -49,7 +49,7 @@ func TestDiscard_quit(t *testing.T) {
 }
 
 func TestDiscard_load(t *testing.T) {
-	for _, tc := range []struct{ k, label string }{{"ctrl+n", "^n"}, {"ctrl+p", "^p"}, {"@", "@"}, {"R", "R"}} {
+	for _, tc := range []struct{ k, label string }{{"@", "@"}, {"R", "R"}} {
 		k, label := tc.k, tc.label
 		t.Run(k+" with selected hunks asks before loading", func(t *testing.T) {
 			src := revisionSource()
@@ -106,7 +106,7 @@ func TestDiscard_edit(t *testing.T) {
 
 	t.Run("e where editing is impossible does not ask", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, revisionSource()), "ctrl+p", "space"), &opened)
+		m := withEditor(press(t, press(t, loaded(t, revisionSource()), reviewParent()...), "space"), &opened)
 
 		got := view(press(t, m, "e"))
 

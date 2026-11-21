@@ -29,11 +29,23 @@ func load(ctx context.Context, src Source, rev string) tea.Cmd {
 	}
 }
 
+func (m *Model) canReload() bool {
+	if !m.canLoad() {
+		return false
+	}
+	if m.err == nil && !m.change.WorkingCopy {
+		m.status = "not the working copy; press @ to reload"
+		return false
+	}
+	return true
+}
+
 func (m *Model) reload() tea.Cmd {
 	if file, ok := m.currentFile(); ok {
 		m.reloadPath = file.Path()
 	}
 	m.reloading = true
+	m.log.stale = true
 	return load(m.ctx, m.src, cmp.Or(m.target, m.rev))
 }
 

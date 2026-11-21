@@ -21,6 +21,7 @@ const (
 	generatorHint   = "set ANTHROPIC_API_KEY or run `ant auth login` to generate messages"
 	blockedStatus   = "split done; restart jjr to continue"
 	immutableStatus = "immutable revision: read only"
+	reloadingStatus = "reloading change…"
 )
 
 var errEmptyMessage = errors.New("commit message is empty")
@@ -47,7 +48,7 @@ type commitModal struct {
 
 func (m *Model) openModal() tea.Cmd {
 	if m.reloading {
-		m.status = "reloading change…"
+		m.status = reloadingStatus
 		return nil
 	}
 	if !m.ready() {
@@ -172,6 +173,7 @@ func (m *Model) applyCommitted(msg committedMsg) {
 		mo.err = msg.err
 		return
 	}
+	m.log.stale = true
 	id := shortID(msg.selected.ChangeID)
 	before := m.rows()
 	for _, p := range mo.picks {

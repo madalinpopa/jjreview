@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"cmp"
 	"errors"
 
 	tea "charm.land/bubbletea/v2"
@@ -11,9 +10,8 @@ import (
 type revisionStep int
 
 const (
-	parentStep revisionStep = iota
-	childStep
-	workingCopyStep
+	workingCopyStep revisionStep = iota
+	pickedStep
 )
 
 type revisionMsg struct {
@@ -23,30 +21,12 @@ type revisionMsg struct {
 
 func (s revisionStep) String() string {
 	switch s {
-	case parentStep:
-		return "parent"
-	case childStep:
-		return "child"
 	case workingCopyStep:
 		return "working copy"
+	case pickedStep:
+		return "selected"
 	}
 	return "unknown"
-}
-
-func (s revisionStep) revset(changeID string) (string, bool) {
-	switch s {
-	case parentStep:
-		return changeID + "-", true
-	case childStep:
-		return changeID + "+", true
-	case workingCopyStep:
-		return "@", true
-	}
-	return "", false
-}
-
-func (s revisionStep) relative() bool {
-	return s == parentStep || s == childStep
 }
 
 func (s revisionStep) failure(err error) string {
@@ -70,14 +50,7 @@ func (m *Model) canLoad() bool {
 	return true
 }
 
-func (m *Model) moveRevision(step revisionStep) tea.Cmd {
-	if !m.canLoad() || step.relative() && m.err != nil {
-		return nil
-	}
-	rev, ok := step.revset(cmp.Or(m.target, m.change.ChangeID))
-	if !ok {
-		return nil
-	}
+func (m *Model) loadRevision(step revisionStep, rev string) tea.Cmd {
 	m.reloading = true
 	ctx, src := m.ctx, m.src
 	return func() tea.Msg {
@@ -91,6 +64,17 @@ func (m *Model) applyRevision(msg revisionMsg) tea.Cmd {
 		m.status = msg.step.failure(err)
 		return nil
 	}
+	if msg.step == pickedStep {
+		m.view = reviewView
+	}
 	m.files, m.reviews = nil, nil
-	return m.applyLoad(msg.loaded)
+	cmd := m.applyLoad(msg.loaded)
+	if msg.step != workingCopyStep {
+		return cmd
+	}
+	m.log.stale = true
+	if m.view == logView {
+		return tea.Batch(cmd, m.loadLog())
+	}
+	return cmd
 }

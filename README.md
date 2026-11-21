@@ -96,13 +96,13 @@ hunk in the file.
 
 | Key | Action |
 |-----|--------|
+| `1` / `2` | Show the review tab / the log tab |
 | `tab` | Switch between the file pane and the diff pane |
 | `j` / `k` | Next / previous file in the file pane, next / previous line in the diff pane |
 | `ctrl+d` / `ctrl+u` (`pgdown` / `pgup`) | Half a page down / up in the focused pane |
 | `g` / `G` (`home` / `end`) | First / last file in the file pane, first / last line in the diff pane |
 | `]` / `[` | Next hunk / start of the current or previous hunk |
 | `J` / `K` | Next / previous file from either pane |
-| `ctrl+n` / `ctrl+p` | Review the child / parent revision |
 | `@` | Go back to the working-copy revision |
 | `space` | Select the hunk under the cursor (in the file pane: the whole file) |
 | `S` | Select every open hunk in the file |
@@ -111,14 +111,36 @@ hunk in the file.
 | `d` | Show or hide the removed lines of the hunk under the cursor |
 | `D` | Show or hide the removed lines of every hunk in the file |
 | `c` | Commit the selected hunks |
-| `R` | Reload to pick up edits made outside jjr |
+| `R` | Reload to pick up edits made outside jjr; working-copy revision only |
 | `e` | Edit the current file in `$VISUAL` / `$EDITOR` (default `vi`); working-copy revision only |
 | `f` | Switch between changes only and the full file |
 | `?` | Show all keys |
 | `q` | Quit |
 
-`q`, `ctrl+n`, `ctrl+p`, `@`, `R` and `e` drop the selection, so they ask you to
-press the key again first. `ctrl+c` quits immediately.
+`q`, `@`, `R` and `e` drop the selection, so they ask you to press the key
+again first. `ctrl+c` quits immediately.
+
+Log tab:
+
+The log tab shows every revision (`::`) with its graph, so nothing is elided. A
+bar marks the revision under review. Searching keeps only the revisions whose
+change or commit ID starts with the query or whose full description, body
+included, contains it, ignoring case.
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Next / previous revision |
+| `ctrl+d` / `ctrl+u` (`pgdown` / `pgup`) | Scroll half a page down / up, through long file lists too |
+| `g` / `G` (`home` / `end`) | First / last revision |
+| `enter` | Review the revision under the cursor |
+| `l` / `h` | Show / hide the files changed by the revision |
+| `/` | Search by change ID, commit ID or description; `enter` keeps the filter |
+| `esc` | Clear the search |
+| `R` | Refresh the log |
+| `?` | Show all keys |
+| `q` | Quit |
+
+`enter` drops the selection, so it asks you to press it again first.
 
 Commit dialog:
 

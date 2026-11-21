@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 )
@@ -41,11 +42,17 @@ func fit(content string, width, height int) string {
 }
 
 func (m Model) screen() string {
-	body := lipgloss.JoinHorizontal(lipgloss.Top,
-		m.filesCard(),
-		blank(1, m.pal.Page),
-		m.diffCard(),
-	)
+	var body string
+	switch m.view {
+	case logView:
+		body = m.logCard()
+	case reviewView:
+		body = lipgloss.JoinHorizontal(lipgloss.Top,
+			m.filesCard(),
+			blank(1, m.pal.Page),
+			m.diffCard(),
+		)
+	}
 	return strings.Join(append([]string{m.topBar(), body}, m.bottomBar()...), "\n")
 }
 
@@ -84,6 +91,10 @@ func (m Model) topBar() string {
 		id = m.rev
 	}
 	left := []seg{
+		m.tab(reviewView, m.keys.reviewTab, "Review"),
+		span(lipgloss.NewStyle(), " "),
+		m.tab(logView, m.keys.logTab, "Log"),
+		span(lipgloss.NewStyle(), " "),
 		m.pill(p.Chip, p.ChipText, "@ "+shortID(id)),
 		span(lipgloss.NewStyle(), " "),
 		span(fg(p.Title).Bold(true), "jj review"),
@@ -99,6 +110,16 @@ func (m Model) topBar() string {
 		right = append([]seg{m.pill(p.Chip, p.Removed, "read only"), span(lipgloss.NewStyle(), " ")}, right...)
 	}
 	return paint(m.width, p.Page, left, right)
+}
+
+func (m Model) tab(v view, b key.Binding, label string) seg {
+	text := b.Help().Key + " " + label
+	if v == m.view {
+		s := m.pill(m.pal.Chip, m.pal.Key, text)
+		s.style = s.style.Bold(true)
+		return s
+	}
+	return m.pill(m.pal.Chip, m.pal.ChipText, text)
 }
 
 func (m Model) modeLabel() string {
@@ -153,7 +174,7 @@ func (m Model) bottomBar() []string {
 }
 
 func (m Model) statusText() string {
-	if m.status != "" {
+	if m.status != "" || m.view == logView {
 		return m.status
 	}
 	if !m.ready() {

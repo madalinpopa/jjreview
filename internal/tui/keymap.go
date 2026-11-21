@@ -18,8 +18,6 @@ type keyMap struct {
 	prevHunk    key.Binding
 	nextFile    key.Binding
 	prevFile    key.Binding
-	child       key.Binding
-	parent      key.Binding
 	workingCopy key.Binding
 	selectHunk  key.Binding
 	selectFile  key.Binding
@@ -34,6 +32,13 @@ type keyMap struct {
 	help        key.Binding
 	closeHelp   key.Binding
 	quit        key.Binding
+	reviewTab   key.Binding
+	logTab      key.Binding
+	open        key.Binding
+	search      key.Binding
+	clearSearch key.Binding
+	expand      key.Binding
+	collapse    key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -49,8 +54,6 @@ func newKeyMap() keyMap {
 		prevHunk:    key.NewBinding(key.WithKeys("["), key.WithHelp("[", "previous hunk")),
 		nextFile:    key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next file")),
 		prevFile:    key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "previous file")),
-		child:       key.NewBinding(key.WithKeys("ctrl+n"), key.WithHelp("^n", "child revision")),
-		parent:      key.NewBinding(key.WithKeys("ctrl+p"), key.WithHelp("^p", "parent revision")),
 		workingCopy: key.NewBinding(key.WithKeys("@"), key.WithHelp("@", "working-copy revision")),
 		selectHunk:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "select the hunk (the file in the file pane)")),
 		selectFile:  key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "select every hunk in the file")),
@@ -65,6 +68,13 @@ func newKeyMap() keyMap {
 		help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "toggle this help")),
 		closeHelp:   key.NewBinding(key.WithKeys("?", "esc", "q"), key.WithHelp("? / esc", "close")),
 		quit:        key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		reviewTab:   key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "review tab")),
+		logTab:      key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "log tab")),
+		open:        key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "review the revision")),
+		search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search by ID or description")),
+		expand:      key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "show the files of the revision")),
+		collapse:    key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "hide the files of the revision")),
+		clearSearch: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear the search")),
 	}
 }
 
@@ -86,6 +96,9 @@ func describe(b key.Binding) keyHint {
 }
 
 func (m Model) keyHints() []keyHint {
+	if m.view == logView {
+		return m.logHints()
+	}
 	move := hint("line", m.keys.down, m.keys.up)
 	if m.filesFocus {
 		move.label = "file"
@@ -105,18 +118,54 @@ func (m Model) keyHints() []keyHint {
 	return append(hints, hint("help", m.keys.help))
 }
 
+func (m Model) logHints() []keyHint {
+	if m.log.searching {
+		return []keyHint{hint("apply", m.keys.open), hint("clear", m.keys.clearSearch)}
+	}
+	hints := []keyHint{
+		hint("tabs", m.keys.reviewTab, m.keys.logTab),
+		hint("revision", m.keys.down, m.keys.up),
+		hint("review", m.keys.open),
+		hint("files", m.keys.expand, m.keys.collapse),
+		hint("search", m.keys.search),
+	}
+	if m.log.filtered() {
+		hints = append(hints, hint("clear", m.keys.clearSearch))
+	}
+	return append(hints, hint("refresh", m.keys.reload), hint("help", m.keys.help))
+}
+
 type helpSection struct {
 	title string
 	hints []keyHint
 }
 
 func (m Model) helpSections() []helpSection {
+	views := helpSection{title: "Views", hints: []keyHint{describe(m.keys.reviewTab), describe(m.keys.logTab)}}
+	if m.view == logView {
+		return []helpSection{
+			views,
+			{title: "Log", hints: []keyHint{
+				hint("next / previous revision", m.keys.down, m.keys.up),
+				hint("half page down / up", m.keys.halfDown, m.keys.halfUp),
+				hint("first / last revision", m.keys.top, m.keys.bottom),
+				describe(m.keys.open),
+				describe(m.keys.expand),
+				describe(m.keys.collapse),
+				describe(m.keys.search),
+				describe(m.keys.clearSearch),
+				hint("refresh the log", m.keys.reload),
+			}},
+			{title: "Other", hints: []keyHint{describe(m.keys.help), describe(m.keys.quit)}},
+		}
+	}
 	var review []keyHint
 	if !m.change.Immutable {
 		review = []keyHint{describe(m.keys.selectHunk), describe(m.keys.selectFile), describe(m.keys.commit)}
 	}
 	review = append(review, describe(m.keys.fold), describe(m.keys.foldAll), describe(m.keys.removed), describe(m.keys.removedAll))
 	return []helpSection{
+		views,
 		{title: "Navigation", hints: []keyHint{
 			describe(m.keys.switchPane),
 			hint("next / previous line or file", m.keys.down, m.keys.up),
@@ -124,7 +173,6 @@ func (m Model) helpSections() []helpSection {
 			hint("first / last line or file", m.keys.top, m.keys.bottom),
 			hint("next / previous hunk", m.keys.nextHunk, m.keys.prevHunk),
 			hint("next / previous file", m.keys.nextFile, m.keys.prevFile),
-			hint("child / parent revision", m.keys.child, m.keys.parent),
 			describe(m.keys.workingCopy),
 		}},
 		{title: "Review", hints: review},
@@ -133,9 +181,9 @@ func (m Model) helpSections() []helpSection {
 }
 
 func (m Model) otherHints() []keyHint {
-	hints := []keyHint{describe(m.keys.reload)}
+	var hints []keyHint
 	if m.change.WorkingCopy {
-		hints = append(hints, describe(m.keys.edit))
+		hints = append(hints, describe(m.keys.reload), describe(m.keys.edit))
 	}
 	return append(hints, describe(m.keys.full), describe(m.keys.help), describe(m.keys.quit))
 }

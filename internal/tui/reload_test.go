@@ -71,3 +71,33 @@ func TestReload_reloading(t *testing.T) {
 		}
 	})
 }
+
+func TestReload_notWorkingCopy(t *testing.T) {
+	t.Run("R does not reload a revision other than the working copy", func(t *testing.T) {
+		src := revisionSource()
+		m := press(t, loaded(t, src), reviewParent()...)
+		calls := len(src.changeRevs)
+
+		m = press(t, m, "R")
+
+		if got := len(src.changeRevs); got != calls {
+			t.Errorf("Change() calls = %d, want %d", got, calls)
+		}
+		assertContains(t, view(m), "not the working copy; press @ to reload")
+	})
+
+	t.Run("R with selected hunks does not ask to drop them", func(t *testing.T) {
+		m := press(t, loaded(t, revisionSource()), reviewParent()...)
+		m = press(t, m, "space", "R")
+
+		got := view(m)
+		assertContains(t, got, "not the working copy; press @ to reload", "1 hunk selected")
+		assertMissing(t, got, "press R again")
+	})
+
+	t.Run("help leaves out R", func(t *testing.T) {
+		m := press(t, loaded(t, revisionSource()), reviewParent()...)
+
+		assertMissing(t, view(press(t, m, "?")), "reload the change")
+	})
+}

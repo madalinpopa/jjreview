@@ -74,7 +74,7 @@ func TestEditor_failed(t *testing.T) {
 
 	t.Run("a revision other than the working copy cannot be edited", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, revisionSource()), "ctrl+p"), &opened)
+		m := withEditor(press(t, loaded(t, revisionSource()), reviewParent()...), &opened)
 
 		m = press(t, m, "e")
 
@@ -97,7 +97,7 @@ func TestEditor_reloading(t *testing.T) {
 	t.Run("e does not open the editor while a revision loads", func(t *testing.T) {
 		var opened []string
 		m := withEditor(loaded(t, revisionSource()), &opened)
-		m, _ = update(t, m, keyMsg("ctrl+p"))
+		m, _ = update(t, m, keyMsg("@"))
 
 		press(t, m, "e")
 

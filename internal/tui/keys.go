@@ -18,6 +18,8 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.confirmDrop(msg, armed) {
 			return tea.Quit
 		}
+	case key.Matches(msg, m.keys.logTab):
+		return m.showLog()
 	case key.Matches(msg, m.keys.switchPane):
 		m.filesFocus = !m.filesFocus
 	case key.Matches(msg, m.keys.down):
@@ -43,9 +45,13 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.moveFile(1)
 	case key.Matches(msg, m.keys.prevFile):
 		return m.moveFile(-1)
-	case key.Matches(msg, m.keys.child, m.keys.parent, m.keys.workingCopy, m.keys.reload):
+	case key.Matches(msg, m.keys.workingCopy):
 		if m.canLoad() && m.confirmDrop(msg, armed) {
-			return m.loadFor(msg)
+			return m.loadRevision(workingCopyStep, "@")
+		}
+	case key.Matches(msg, m.keys.reload):
+		if m.canReload() && m.confirmDrop(msg, armed) {
+			return m.reload()
 		}
 	case key.Matches(msg, m.keys.full):
 		m.full = !m.full
@@ -66,18 +72,6 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 	return nil
 }
 
-func (m *Model) loadFor(msg tea.KeyPressMsg) tea.Cmd {
-	switch {
-	case key.Matches(msg, m.keys.child):
-		return m.moveRevision(childStep)
-	case key.Matches(msg, m.keys.parent):
-		return m.moveRevision(parentStep)
-	case key.Matches(msg, m.keys.workingCopy):
-		return m.moveRevision(workingCopyStep)
-	}
-	return m.reload()
-}
-
 func (m *Model) confirmDrop(msg tea.KeyPressMsg, armed string) bool {
 	n := pickedUnits(m.picks())
 	k := msg.String()
@@ -90,7 +84,7 @@ func (m *Model) confirmDrop(msg tea.KeyPressMsg, armed string) bool {
 }
 
 func (m Model) dropLabel(msg tea.KeyPressMsg) string {
-	for _, b := range []key.Binding{m.keys.quit, m.keys.child, m.keys.parent, m.keys.workingCopy, m.keys.reload, m.keys.edit} {
+	for _, b := range []key.Binding{m.keys.quit, m.keys.workingCopy, m.keys.reload, m.keys.edit, m.keys.open} {
 		if key.Matches(msg, b) {
 			return b.Help().Key
 		}
@@ -117,6 +111,10 @@ func (m *Model) hunkKey(msg tea.KeyPressMsg) {
 		m.currentReview().foldAll()
 		m.cursor = firstRow(m.rows())
 	case key.Matches(msg, m.keys.selectHunk, m.keys.selectFile):
+		if m.reloading {
+			m.status = reloadingStatus
+			return
+		}
 		if m.change.Immutable {
 			m.status = immutableStatus
 			return
