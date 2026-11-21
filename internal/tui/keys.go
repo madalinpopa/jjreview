@@ -23,6 +23,8 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.showLog()
 	case key.Matches(msg, m.keys.bookmarksTab):
 		return m.showBookmarks()
+	case key.Matches(msg, m.keys.operationsTab):
+		return m.showOperations()
 	case key.Matches(msg, m.keys.help):
 		m.help = true
 		m.helpTop = 0

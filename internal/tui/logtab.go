@@ -52,6 +52,8 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		case key.Matches(msg, m.keys.bookmarksTab):
 			return m.showBookmarks()
+		case key.Matches(msg, m.keys.operationsTab):
+			return m.showOperations()
 		case key.Matches(msg, m.keys.quit):
 			if m.confirmDrop(msg, armed) {
 				return m.quit()

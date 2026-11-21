@@ -16,6 +16,7 @@ import (
 	"github.com/madalinpopa/jjreview/internal/theme"
 	"github.com/madalinpopa/jjreview/internal/tui/bookmarks"
 	"github.com/madalinpopa/jjreview/internal/tui/logview"
+	"github.com/madalinpopa/jjreview/internal/tui/operations"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -35,6 +36,7 @@ const (
 	reviewView view = iota
 	logView
 	bookmarksView
+	operationsView
 )
 
 type Model struct {
@@ -88,6 +90,7 @@ type Model struct {
 	view        view
 	log         logview.Model
 	bookmarks   bookmarks.Model
+	operations  operations.Model
 }
 
 func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
@@ -106,6 +109,7 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		highlights:  map[highlightKey]fileHighlight{},
 		log:         logview.New(ctx, src),
 		bookmarks:   bookmarks.New(ctx, src),
+		operations:  operations.New(ctx, src),
 		width:       defaultWidth,
 		height:      defaultHeight,
 	}
@@ -189,6 +193,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		if c, in, ok := m.bookmarks.Update(msg, m.bookmarkEnv()); ok {
 			cmd = m.bookmarkEffects(c, in)
+		} else if c, ok := m.operations.Update(msg, m.view == operationsView); ok {
+			cmd = c
 		} else if c, in, ok := m.log.Update(msg, m.logEnv()); ok {
 			cmd = m.logEffects(c, in)
 		} else if m.view == logView {
@@ -221,6 +227,8 @@ func (m *Model) keyPress(msg tea.KeyPressMsg) tea.Cmd {
 		return m.logKey(msg)
 	case m.view == bookmarksView:
 		return m.bookmarksKey(msg)
+	case m.view == operationsView:
+		return m.operationsKey(msg)
 	}
 	return m.reviewKey(msg)
 }
@@ -373,6 +381,9 @@ func (m *Model) scroll() {
 		return
 	case bookmarksView:
 		m.bookmarks.KeepVisible(m.diffHeight())
+		return
+	case operationsView:
+		m.operations.KeepVisible(m.operationEnv())
 		return
 	}
 	m.diffTop = ui.ScrollTop(m.diffTop, m.cursor, m.diffHeight(), len(m.rows()))

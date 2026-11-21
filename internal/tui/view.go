@@ -45,6 +45,8 @@ func (m Model) screen() string {
 		body = m.log.View(m.logEnv())
 	case bookmarksView:
 		body = m.bookmarks.View(m.bookmarkEnv())
+	case operationsView:
+		body = m.operations.View(m.operationEnv())
 	case reviewView:
 		body = lipgloss.JoinHorizontal(lipgloss.Top,
 			m.filesCard(),
@@ -154,6 +156,7 @@ func (m Model) tabs(short bool) []ui.Seg {
 		{reviewView, m.keys.reviewTab, "Review"},
 		{logView, m.keys.logTab, "Log"},
 		{bookmarksView, m.keys.bookmarksTab, "Bookmarks"},
+		{operationsView, m.keys.operationsTab, "Operations"},
 	}
 	segs := make([]ui.Seg, len(tabs))
 	for i, t := range tabs {

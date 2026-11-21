@@ -42,6 +42,7 @@ func (m *Model) showBookmarks() tea.Cmd {
 func (m *Model) markStale() {
 	m.log.MarkStale()
 	m.bookmarks.MarkStale()
+	m.operations.MarkStale()
 }
 
 func (m *Model) invalidate() tea.Cmd {
@@ -51,6 +52,8 @@ func (m *Model) invalidate() tea.Cmd {
 		return m.loadLog()
 	case bookmarksView:
 		return m.bookmarks.Load()
+	case operationsView:
+		return m.operations.Load()
 	}
 	return nil
 }
@@ -64,6 +67,8 @@ func (m *Model) bookmarksKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.view = reviewView
 	case key.Matches(msg, m.keys.logTab):
 		return m.showLog()
+	case key.Matches(msg, m.keys.operationsTab):
+		return m.showOperations()
 	case key.Matches(msg, m.keys.quit):
 		if m.confirmDrop(msg, armed) {
 			return m.quit()

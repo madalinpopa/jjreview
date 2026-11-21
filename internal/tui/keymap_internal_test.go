@@ -12,11 +12,12 @@ func TestKeyScopes_noSharedKeys(t *testing.T) {
 	g := newGlobalKeyMap()
 	r := newReviewKeyMap()
 	global := map[string]key.Binding{
-		"reviewTab":    g.reviewTab,
-		"logTab":       g.logTab,
-		"bookmarksTab": g.bookmarksTab,
-		"help":         g.help,
-		"quit":         g.quit,
+		"reviewTab":     g.reviewTab,
+		"logTab":        g.logTab,
+		"bookmarksTab":  g.bookmarksTab,
+		"operationsTab": g.operationsTab,
+		"help":          g.help,
+		"quit":          g.quit,
 	}
 	helpOverlay := map[string]key.Binding{
 		"closeHelp":  g.closeHelp,

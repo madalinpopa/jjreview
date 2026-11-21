@@ -68,6 +68,12 @@ type fakeSource struct {
 	fetches         int
 	fetchChanged    bool
 	fetchErr        error
+	ops             []jj.Operation
+	opsErr          error
+	opsCalls        int
+	opRuns          []string
+	opErr           error
+	afterOp         func()
 }
 
 type squashCall struct {
@@ -202,6 +208,34 @@ func (s *fakeSource) Successor(_ context.Context, changeID, commitID string) (jj
 		return change, nil
 	}
 	return jj.Change{}, fmt.Errorf("successor of %s in %s: %w", commitID, changeID, jj.ErrNoRevision)
+}
+
+func (s *fakeSource) Operations(context.Context) ([]jj.Operation, error) {
+	s.opsCalls++
+	return slices.Clone(s.ops), s.opsErr
+}
+
+func (s *fakeSource) runOp(kind, id string) error {
+	s.opRuns = append(s.opRuns, kind+" "+id)
+	if s.opErr != nil {
+		return s.opErr
+	}
+	if s.afterOp != nil {
+		s.afterOp()
+	}
+	return nil
+}
+
+func (s *fakeSource) RestoreOperation(_ context.Context, id string) error {
+	return s.runOp("restore", id)
+}
+
+func (s *fakeSource) RevertOperation(_ context.Context, id string) error {
+	return s.runOp("revert", id)
+}
+
+func (s *fakeSource) AbandonOperation(_ context.Context, id string) error {
+	return s.runOp("abandon", id)
 }
 
 func (s *fakeSource) Log(context.Context) ([]jj.LogLine, error) {

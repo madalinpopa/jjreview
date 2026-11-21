@@ -1110,14 +1110,14 @@ func TestBookmarkModal_targetFits(t *testing.T) {
 }
 
 func TestTopBar_narrow(t *testing.T) {
-	for _, width := range []int{80, 70} {
+	for _, width := range []int{90, 80} {
 		t.Run(fmt.Sprintf("%d columns", width), func(t *testing.T) {
 			src := bookmarkSource()
 			m := press(t, start(t, src, nil, width, 20), "tab", "j", "tab", "space")
 
 			top, _, _ := strings.Cut(view(m), "\n")
 
-			assertContains(t, top, "1 Review", "2 Log", "3 Bookmarks", "@ kxyzabcd")
+			assertContains(t, top, "1 Review", "2 Log", "3 Bookmarks", "4 Operations", "@ kxyzabcd")
 		})
 	}
 
@@ -1126,7 +1126,7 @@ func TestTopBar_narrow(t *testing.T) {
 
 		top, _, _ := strings.Cut(view(m), "\n")
 
-		assertContains(t, top, " 1 ", " 2 ", " 3 ", "@ kxyzabcd")
+		assertContains(t, top, " 1 ", " 2 ", " 3 ", " 4 ", "@ kxyzabcd")
 	})
 }
 
@@ -1144,7 +1144,7 @@ func TestTopBar_keepsBadges(t *testing.T) {
 	t.Run("a selection keeps its badge and truncates the subject", func(t *testing.T) {
 		src := newSource()
 		src.change.Description = "fix: answer 404 for unknown codes\n"
-		m := press(t, start(t, src, nil, 80, 20), "f", "tab", "j", "tab", "space")
+		m := press(t, start(t, src, nil, 94, 20), "f", "tab", "j", "tab", "space")
 
 		top, _, _ := strings.Cut(view(m), "\n")
 
@@ -1156,7 +1156,7 @@ func TestTopBar_keepsBadges(t *testing.T) {
 		src := newSource()
 		src.change.Description = "fix: answer 404 for unknown codes\n"
 		src.change.Immutable = true
-		m := start(t, src, nil, 80, 20)
+		m := start(t, src, nil, 94, 20)
 
 		top, _, _ := strings.Cut(view(m), "\n")
 

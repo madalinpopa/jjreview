@@ -23,5 +23,9 @@ type Source interface {
 	Push(ctx context.Context, e jj.LogEntry) ([]jj.PushResult, error)
 	Fetch(ctx context.Context) (bool, error)
 	Successor(ctx context.Context, changeID, commitID string) (jj.Change, error)
+	Operations(ctx context.Context) ([]jj.Operation, error)
+	RestoreOperation(ctx context.Context, id string) error
+	RevertOperation(ctx context.Context, id string) error
+	AbandonOperation(ctx context.Context, id string) error
 	Split(ctx context.Context, changeID, commitID, message string, files []jj.SplitFile) (selected, rest jj.Change, err error)
 }

@@ -30,6 +30,7 @@ type rewrittenMsg struct {
 type rewriteResult struct {
 	done      string
 	replaced  bool
+	restored  bool
 	warnings  string
 	keepPicks bool
 }
@@ -72,12 +73,12 @@ func (m *Model) rewrite(focus string, apply func(ctx context.Context, src Source
 			msg.step, msg.loaded = workingCopyStep, fetch(ctx, src, "@")
 			return msg
 		}
-		msg.step, msg.loaded, msg.lost = reviewedAfterRewrite(ctx, src, target, head)
+		msg.step, msg.loaded, msg.lost = reviewedAfterRewrite(ctx, src, target, head, r.restored)
 		return msg
 	}
 }
 
-func reviewedAfterRewrite(ctx context.Context, src Source, target, head string) (revisionStep, loadedMsg, string) {
+func reviewedAfterRewrite(ctx context.Context, src Source, target, head string, restored bool) (revisionStep, loadedMsg, string) {
 	loaded := fetch(ctx, src, jj.VisibleCommitRevset(head))
 	if !loaded.moved {
 		return reviewedStep, loaded, ""
@@ -87,6 +88,11 @@ func reviewedAfterRewrite(ctx context.Context, src Source, target, head string) 
 	case err == nil:
 		return reviewedStep, fetch(ctx, src, jj.VisibleCommitRevset(next.CommitID)), ""
 	case errors.Is(err, jj.ErrNoRevision) || errors.Is(err, jj.ErrMultipleRevisions):
+		if restored {
+			if loaded := fetch(ctx, src, jj.VisibleRevset(jj.ChangeRevset(target))); !errors.Is(loaded.err, jj.ErrNoRevision) && !errors.Is(loaded.err, jj.ErrMultipleRevisions) {
+				return reviewedStep, loaded, ""
+			}
+		}
 		return workingCopyStep, fetch(ctx, src, "@"), ui.ShortID(target)
 	}
 	return reviewedStep, loadedMsg{err: fmt.Errorf("find the rewritten %s: %w", ui.ShortID(target), err)}, ""
