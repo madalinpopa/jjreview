@@ -276,7 +276,7 @@ func TestFileContent_success(t *testing.T) {
 	client := newClient(t, dir)
 	for name, want := range files {
 		t.Run(name, func(t *testing.T) {
-			got, err := client.FileContent(t.Context(), "@-", name)
+			got, err := client.FileContent(t.Context(), commitID(t, dir, "@-"), name)
 			if err != nil {
 				t.Fatalf("FileContent(%q) error = %v", name, err)
 			}
@@ -296,7 +296,7 @@ func TestFileContent_success(t *testing.T) {
 		writeFile(t, sub, "x.txt", "nested\n")
 		commit(t, dir, "files")
 
-		got, err := newClient(t, sub).FileContent(t.Context(), "@-", "x.txt")
+		got, err := newClient(t, sub).FileContent(t.Context(), commitID(t, dir, "@-"), "x.txt")
 		if err != nil {
 			t.Fatalf("FileContent(%q) error = %v", "x.txt", err)
 		}
@@ -310,7 +310,7 @@ func TestFileContent_failed(t *testing.T) {
 	dir := newRepo(t)
 	commit(t, dir, "empty")
 
-	_, err := newClient(t, dir).FileContent(t.Context(), "@-", "missing.txt")
+	_, err := newClient(t, dir).FileContent(t.Context(), commitID(t, dir, "@-"), "missing.txt")
 	if err == nil {
 		t.Fatal("FileContent() error = nil, want error")
 	}
@@ -325,7 +325,7 @@ func TestDiff_success(t *testing.T) {
 	writeFile(t, dir, "b.txt", "b\n")
 	commit(t, dir, "files")
 
-	files, err := newClient(t, dir).Diff(t.Context(), "@-")
+	files, err := newClient(t, dir).Diff(t.Context(), commitID(t, dir, "@-"))
 	if err != nil {
 		t.Fatalf("Diff() error = %v", err)
 	}
@@ -342,34 +342,66 @@ func TestDiff_success(t *testing.T) {
 
 func TestDiff_failed(t *testing.T) {
 	dir := newRepo(t)
-	writeFile(t, dir, "a.txt", "a\n")
 	commit(t, dir, "first")
-	writeFile(t, dir, "b.txt", "b\n")
-	commit(t, dir, "second")
+	unknown := "0123456789abcdef0123456789abcdef01234567"
 
-	tests := []struct {
-		name     string
-		rev      string
-		wantIs   error
-		wantText string
-	}{
-		{name: "unknown revision", rev: "doesnotexist", wantText: "doesnotexist"},
-		{name: "multiple commits", rev: "@- | @--", wantIs: jj.ErrMultipleRevisions},
-		{name: "no commits", rev: "none()", wantIs: jj.ErrNoRevision},
+	_, err := newClient(t, dir).Diff(t.Context(), unknown)
+
+	if !errors.Is(err, jj.ErrNoRevision) {
+		t.Errorf("Diff(%q) error = %v, want %v", unknown, err, jj.ErrNoRevision)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := newClient(t, dir).Diff(t.Context(), tt.rev)
-			if err == nil {
-				t.Fatalf("Diff(%q) error = nil, want error", tt.rev)
-			}
-			if tt.wantIs != nil && !errors.Is(err, tt.wantIs) {
-				t.Errorf("Diff(%q) error = %v, want %v", tt.rev, err, tt.wantIs)
-			}
-			if !strings.Contains(err.Error(), tt.wantText) {
-				t.Errorf("Diff(%q) error = %q, want it to contain %q", tt.rev, err, tt.wantText)
-			}
-		})
+}
+
+func TestShadowedIDs_success(t *testing.T) {
+	dir := newRepo(t)
+	writeFile(t, dir, "a.txt", "a\n")
+	commit(t, dir, "target")
+	target := commitID(t, dir, "@-")
+	runJJ(t, dir, "config", "set", "--repo", `revset-aliases."`+target+`"`, "root()")
+	client := newClient(t, dir)
+
+	t.Run("Change of a commit revset", func(t *testing.T) {
+		got, err := client.Change(t.Context(), jj.CommitRevset(target))
+		if err != nil {
+			t.Fatalf("Change(CommitRevset(%q)) error = %v", target, err)
+		}
+		if got.CommitID != target {
+			t.Errorf("Change(CommitRevset(%q)) CommitID = %q, want %q", target, got.CommitID, target)
+		}
+	})
+
+	t.Run("Diff", func(t *testing.T) {
+		if got := diffPaths(t, client, target); !slices.Equal(got, []string{"a.txt"}) {
+			t.Errorf("Diff(%q) paths = %v, want [a.txt]", target, got)
+		}
+	})
+
+	t.Run("FileContent", func(t *testing.T) {
+		if got := fileContent(t, client, target, "a.txt"); got != "a\n" {
+			t.Errorf("FileContent(%q, a.txt) = %q, want %q", target, got, "a\n")
+		}
+	})
+}
+
+func TestSplit_successWhenShadowed(t *testing.T) {
+	dir := splitRepo(t)
+	client := newClient(t, dir)
+	original, err := client.Change(t.Context(), "@")
+	if err != nil {
+		t.Fatalf("Change(@) error = %v", err)
+	}
+	runJJ(t, dir, "config", "set", "--repo", `revset-aliases."`+original.ChangeID+`"`, "root()")
+
+	selected, rest, err := client.Split(t.Context(), original.ChangeID, original.CommitID, "selected", []jj.SplitFile{{Path: "b.txt", Content: "b2\n"}})
+	if err != nil {
+		t.Fatalf("Split() error = %v", err)
+	}
+
+	if selected.ChangeID != original.ChangeID || selected.Description != "selected\n" {
+		t.Errorf("Split() selected = %s %q, want %s %q", selected.ChangeID, selected.Description, original.ChangeID, "selected\n")
+	}
+	if !slices.Equal(rest.Parents, []string{selected.CommitID}) {
+		t.Errorf("Split() rest Parents = %v, want [%s]", rest.Parents, selected.CommitID)
 	}
 }
 
@@ -629,7 +661,7 @@ func TestSplit_failedAfterSplit(t *testing.T) {
 		t.Fatalf("restore config: %v", err)
 	}
 	t.Setenv(breakConfigEnv, "")
-	if got := diffPaths(t, client, original.ChangeID); !slices.Equal(got, []string{"b.txt"}) {
+	if got := diffPaths(t, client, commitID(t, dir, original.ChangeID)); !slices.Equal(got, []string{"b.txt"}) {
 		t.Errorf("selected diff paths = %v, want [b.txt]", got)
 	}
 }

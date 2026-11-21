@@ -57,7 +57,7 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 	if len(files) == 0 {
 		return Change{}, Change{}, fmt.Errorf("split %q: %w", changeID, ErrNoSplitFiles)
 	}
-	original, err := c.Change(ctx, changeID)
+	original, err := c.Change(ctx, changeRevset(changeID))
 	if err != nil {
 		return Change{}, Change{}, err
 	}
@@ -89,7 +89,7 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 		return Change{}, Change{}, fmt.Errorf("split %q: encode tool arguments: %w", changeID, err)
 	}
 	_, err = c.run(ctx, "split",
-		"--revision="+original.ChangeID,
+		"--revision="+changeRevset(original.ChangeID),
 		"--message="+message,
 		"--tool", splitTool,
 		"--config", "merge-tools."+splitTool+".program="+string(program),
@@ -99,11 +99,11 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 		return Change{}, Change{}, err
 	}
 	splitDone = true
-	selected, err = c.Change(ctx, original.ChangeID)
+	selected, err = c.Change(ctx, changeRevset(original.ChangeID))
 	if err != nil {
 		return Change{ChangeID: original.ChangeID}, Change{}, fmt.Errorf("split %q: %w: %w", changeID, ErrSplitIncomplete, err)
 	}
-	rest, err = c.Change(ctx, selected.CommitID+"+")
+	rest, err = c.Change(ctx, CommitRevset(selected.CommitID)+"+")
 	if err != nil {
 		return selected, Change{}, fmt.Errorf("split %q: %w: %w", changeID, ErrSplitIncomplete, err)
 	}
@@ -172,18 +172,17 @@ func decodeCommits(out []byte) ([]changeJSON, error) {
 	}
 }
 
-func (c Client) Diff(ctx context.Context, rev string) ([]diff.File, error) {
-	change, err := c.Change(ctx, rev)
-	if err != nil {
+func (c Client) Diff(ctx context.Context, commitID string) ([]diff.File, error) {
+	if _, err := c.Change(ctx, CommitRevset(commitID)); err != nil {
 		return nil, err
 	}
-	out, err := c.run(ctx, "diff", "--revisions="+change.CommitID, "--git")
+	out, err := c.run(ctx, "diff", "--revisions="+CommitRevset(commitID), "--git")
 	if err != nil {
 		return nil, err
 	}
 	files, err := diff.Parse(bytes.NewReader(out))
 	if err != nil {
-		return nil, fmt.Errorf("parse jj diff of %q: %w", rev, err)
+		return nil, fmt.Errorf("parse jj diff of %s: %w", commitID, err)
 	}
 	return files, nil
 }
@@ -196,17 +195,28 @@ func (c Client) WorkspaceRoot(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (c Client) FileContent(ctx context.Context, rev, path string) (string, error) {
-	out, err := c.run(ctx, "file", "show", "--revision="+rev, fileset(path))
+func (c Client) FileContent(ctx context.Context, commitID, path string) (string, error) {
+	out, err := c.run(ctx, "file", "show", "--revision="+CommitRevset(commitID), fileset(path))
 	if err != nil {
 		return "", err
 	}
 	return string(out), nil
 }
 
+func CommitRevset(commitID string) string {
+	return "commit_id(" + quote(commitID) + ")"
+}
+
+func changeRevset(changeID string) string {
+	return "change_id(" + quote(changeID) + ")"
+}
+
 func fileset(path string) string {
-	escaped := strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(path)
-	return `root-file:"` + escaped + `"`
+	return "root-file:" + quote(path)
+}
+
+func quote(s string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }
 
 func (c Client) run(ctx context.Context, args ...string) ([]byte, error) {
