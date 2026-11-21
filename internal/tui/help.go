@@ -31,6 +31,8 @@ func (m Model) overlay() string {
 		return m.bookmarkDeleteView()
 	case m.help:
 		return m.helpView()
+	case m.view == logView && m.log.confirm != nil:
+		return m.abandonView()
 	}
 	return ""
 }

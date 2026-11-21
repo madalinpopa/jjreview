@@ -35,6 +35,8 @@ type logState struct {
 	err       error
 	cursor    int
 	followed  string
+	keep      logPosition
+	confirm   *jj.LogEntry
 	top       int
 	seq       int
 }
@@ -175,6 +177,20 @@ func (l *logState) focus(commitID string) {
 	l.followed = l.selectedCommit()
 }
 
+func (l *logState) focusNth(n int) {
+	seen := 0
+	for i, line := range l.shown {
+		if line.Entry == nil {
+			continue
+		}
+		l.cursor = i
+		if seen++; seen == n {
+			break
+		}
+	}
+	l.followed = ""
+}
+
 func (l *logState) follow(commitID string) {
 	if l.loaded && l.selectedCommit() == l.followed {
 		l.focus(commitID)
@@ -251,8 +267,17 @@ func (m *Model) applyLog(msg logMsg) tea.Cmd {
 	} else {
 		m.log.lines = msg.lines
 	}
+	keep := m.log.keep
+	restore := keep.at > 0 && msg.err == nil && m.log.cursor == keep.cursor && m.log.query.Value() == keep.query
+	m.log.keep = logPosition{}
 	m.log.refilter()
-	m.log.focus(m.targetHead)
+	switch {
+	case restore:
+		m.log.focusNth(keep.at)
+	case keep.at > 0 && before != "" && m.log.selectedCommit() == before:
+	default:
+		m.log.focus(m.targetHead)
+	}
 	if m.view == logView && m.log.selectedCommit() != before && slices.Contains(m.keys.open.Keys(), m.armed) {
 		m.armed = ""
 		m.status = ""
@@ -264,6 +289,17 @@ func (m *Model) applyLog(msg logMsg) tea.Cmd {
 }
 
 func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
+	if confirm := m.log.confirm; confirm != nil {
+		m.log.confirm = nil
+		m.armed = ""
+		if !msg.IsRepeat && key.Matches(msg, m.keys.confirm) {
+			return m.confirmAbandon(*confirm)
+		}
+		return nil
+	}
+	if !m.log.searching && key.Matches(msg, m.keys.abandon, m.keys.confirm) && (msg.IsRepeat || m.abandonBusy()) {
+		return nil
+	}
 	m.status = ""
 	if m.log.searching {
 		m.armed = ""
@@ -304,6 +340,8 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.openPicked(msg, armed)
 	case key.Matches(msg, m.keys.expand):
 		return m.expandFiles()
+	case key.Matches(msg, m.keys.abandon):
+		return m.abandonPicked()
 	case key.Matches(msg, m.keys.collapse):
 		if e := m.log.selected(); e != nil {
 			delete(m.log.expanded, e.CommitID)
@@ -446,14 +484,17 @@ func (m *Model) openPicked(msg tea.KeyPressMsg, armed string) tea.Cmd {
 }
 
 func (m *Model) openCommit(msg tea.KeyPressMsg, armed, commitID string) tea.Cmd {
-	if commitID == m.targetHead {
+	if commitID == m.targetHead && !m.outdated {
 		m.view = reviewView
+		if m.change.WorkingCopy {
+			return m.checkWorkingCopy()
+		}
 		return nil
 	}
 	if !m.canLoad() || !m.confirmDrop(msg, armed) {
 		return nil
 	}
-	return m.loadRevision(pickedStep, jj.CommitRevset(commitID))
+	return m.loadRevision(pickedStep, jj.VisibleCommitRevset(commitID))
 }
 
 func (m Model) logCard() string {

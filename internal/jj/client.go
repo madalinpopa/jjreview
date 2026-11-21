@@ -1,6 +1,7 @@
 package jj
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json/jsontext"
@@ -10,12 +11,15 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/madalinpopa/jjreview/internal/diff"
 )
 
 const changeTemplate = `"{\"commit\":" ++ json(self) ++ ",\"immutable\":" ++ json(immutable) ++ ",\"working_copy\":" ++ json(current_working_copy) ++ "}\n"`
+
+const abandonTemplate = `"{\"bookmarks\":" ++ json(self.local_bookmarks().map(|b| b.name())) ++ ",\"working_copy\":" ++ json(self.current_working_copy()) ++ "}\n"`
 
 const splitTool = "jjr-apply"
 
@@ -25,6 +29,8 @@ var (
 	ErrNoSplitFiles      = errors.New("no files selected for split")
 	ErrSplitIncomplete   = errors.New("split applied but its result could not be loaded")
 	ErrStaleRevision     = errors.New("revision changed since its diff was loaded; restart jjr to review it again")
+	ErrHiddenRevision    = errors.New("revision was rewritten or abandoned since it was listed")
+	ErrBookmarksChanged  = errors.New("bookmarks on the revision changed since it was listed")
 )
 
 type commitJSON struct {
@@ -46,6 +52,11 @@ type changeJSON struct {
 
 const operationArgSafe = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789,-./:@_"
 
+type abandonJSON struct {
+	Bookmarks   []string `json:"bookmarks"`
+	WorkingCopy bool     `json:"working_copy"`
+}
+
 type operationJSON struct {
 	ID          string            `json:"id"`
 	Description string            `json:"description"`
@@ -65,7 +76,7 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 	if len(files) == 0 {
 		return Change{}, Change{}, fmt.Errorf("split %q: %w", changeID, ErrNoSplitFiles)
 	}
-	original, err := c.Change(ctx, changeRevset(changeID))
+	original, err := c.Change(ctx, ChangeRevset(changeID))
 	if errors.Is(err, ErrNoRevision) || errors.Is(err, ErrMultipleRevisions) {
 		return Change{}, Change{}, fmt.Errorf("split %q: %w: %w", changeID, ErrStaleRevision, err)
 	}
@@ -105,7 +116,7 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 		return Change{}, Change{}, fmt.Errorf("split %q: %w", changeID, err)
 	}
 	_, err = c.run(ctx, "split",
-		"--revision=exactly("+changeRevset(original.ChangeID)+", 1) & "+CommitRevset(original.CommitID),
+		"--revision=exactly("+ChangeRevset(original.ChangeID)+", 1) & "+CommitRevset(original.CommitID),
 		"--message="+message,
 		"--tool", splitTool,
 		"--config", "merge-tools."+splitTool+".program="+string(program),
@@ -116,7 +127,7 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 		return selected, Change{}, err
 	}
 	splitDone = true
-	selected, err = c.Change(ctx, changeRevset(original.ChangeID))
+	selected, err = c.Change(ctx, ChangeRevset(original.ChangeID))
 	if err != nil {
 		return Change{ChangeID: original.ChangeID}, Change{}, fmt.Errorf("split %q: %w: %w", changeID, ErrSplitIncomplete, err)
 	}
@@ -135,7 +146,7 @@ func (c Client) splitFailed(ctx context.Context, changeID string, original Chang
 	if published {
 		return Change{ChangeID: original.ChangeID}, true, fmt.Errorf("split %q: %w: %w", changeID, ErrSplitIncomplete, splitErr)
 	}
-	current, err := c.Change(ctx, changeRevset(original.ChangeID))
+	current, err := c.Change(ctx, ChangeRevset(original.ChangeID))
 	if errors.Is(err, ErrNoRevision) || errors.Is(err, ErrMultipleRevisions) || (err == nil && current.CommitID != original.CommitID) {
 		return Change{}, false, fmt.Errorf("split %q: %w: %w", changeID, ErrStaleRevision, splitErr)
 	}
@@ -259,6 +270,79 @@ func (c Client) Diff(ctx context.Context, commitID string) ([]diff.File, error) 
 	return files, nil
 }
 
+func (c Client) Abandon(ctx context.Context, commitID string, bookmarks []string) (bool, error) {
+	rev := VisibleCommitRevset(commitID)
+	out, err := c.run(ctx, "log", "--revision="+rev, "--no-graph", "--config", "ui.log-word-wrap=false", "-T", abandonTemplate)
+	if err != nil {
+		return false, err
+	}
+	if len(bytes.TrimSpace(out)) == 0 {
+		return false, fmt.Errorf("abandon %s: %w", commitID, ErrHiddenRevision)
+	}
+	var target abandonJSON
+	if err := json.Unmarshal(out, &target); err != nil {
+		return false, fmt.Errorf("abandon %s: decode output: %w", commitID, err)
+	}
+	if !slices.Equal(slices.Sorted(slices.Values(target.Bookmarks)), slices.Sorted(slices.Values(bookmarks))) {
+		return false, fmt.Errorf("abandon %s: %w", commitID, ErrBookmarksChanged)
+	}
+	if _, err := c.run(ctx, "abandon", "-r", "exactly("+rev+", 1)"); err != nil {
+		return false, err
+	}
+	return target.WorkingCopy, nil
+}
+
+func (c Client) Successor(ctx context.Context, changeID, commitID string) (Change, error) {
+	next, err := c.Change(ctx, ChangeRevset(changeID))
+	if err != nil {
+		return Change{}, err
+	}
+	found, err := c.evolvedFrom(ctx, next.CommitID, commitID)
+	if err != nil {
+		return Change{}, err
+	}
+	if !found {
+		return Change{}, fmt.Errorf("successor of %s: %w", commitID, ErrNoRevision)
+	}
+	return next, nil
+}
+
+func (c Client) evolvedFrom(ctx context.Context, commitID, predecessor string) (bool, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	args := []string{"evolog", "-r", CommitRevset(commitID), "--no-graph", "-T", `self.commit().commit_id() ++ "\n"`}
+	cmd := c.command(ctx, args)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return false, jjError(args, err, "")
+	}
+	if err := cmd.Start(); err != nil {
+		return false, jjError(args, err, "")
+	}
+	found := false
+	scanner := bufio.NewScanner(out)
+	for scanner.Scan() {
+		if scanner.Text() == predecessor {
+			found = true
+			cancel()
+			break
+		}
+	}
+	scanErr := scanner.Err()
+	waitErr := cmd.Wait()
+	switch {
+	case found:
+		return true, nil
+	case scanErr != nil:
+		return false, jjError(args, fmt.Errorf("read output: %w", scanErr), "")
+	case waitErr != nil:
+		return false, jjError(args, waitErr, stderr.String())
+	}
+	return false, nil
+}
+
 func (c Client) WorkspaceRoot(ctx context.Context) (string, error) {
 	out, err := c.run(ctx, "workspace", "root")
 	if err != nil {
@@ -283,11 +367,15 @@ func VisibleRevset(rev string) string {
 	return "(" + rev + ") & visible()"
 }
 
-func WorkingCopyRevset(changeID string) string {
-	return "@ & " + changeRevset(changeID)
+func VisibleCommitRevset(commitID string) string {
+	return VisibleRevset(CommitRevset(commitID))
 }
 
-func changeRevset(changeID string) string {
+func WorkingCopyRevset(changeID string) string {
+	return "@ & " + ChangeRevset(changeID)
+}
+
+func ChangeRevset(changeID string) string {
 	return "change_id(" + quote(changeID) + ")"
 }
 
@@ -304,20 +392,29 @@ func (c Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	return out, err
 }
 
-func (c Client) output(ctx context.Context, args ...string) ([]byte, string, error) {
+func (c Client) command(ctx context.Context, args []string) *exec.Cmd {
 	cmd := exec.CommandContext(ctx, "jj", append([]string{"--no-pager", "--color", "never"}, args...)...) //nolint:gosec
 	cmd.Dir = c.dir
+	return cmd
+}
+
+func (c Client) output(ctx context.Context, args ...string) ([]byte, string, error) {
+	cmd := c.command(ctx, args)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		subcommand := strings.Join(args[:subcommandLen(args)], " ")
-		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return nil, "", fmt.Errorf("jj %s: %w: %s", subcommand, err, msg)
-		}
-		return nil, "", fmt.Errorf("jj %s: %w", subcommand, err)
+		return nil, "", jjError(args, err, stderr.String())
 	}
 	return out, stderr.String(), nil
+}
+
+func jjError(args []string, err error, stderr string) error {
+	subcommand := strings.Join(args[:subcommandLen(args)], " ")
+	if msg := strings.TrimSpace(stderr); msg != "" {
+		return fmt.Errorf("jj %s: %w: %s", subcommand, err, msg)
+	}
+	return fmt.Errorf("jj %s: %w", subcommand, err)
 }
 
 func subcommandLen(args []string) int {

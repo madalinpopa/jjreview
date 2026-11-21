@@ -225,6 +225,9 @@ func (m Model) bottomBar() []string {
 }
 
 func (m Model) statusText() string {
+	if m.status == "" && m.outdated {
+		return outdatedStatus
+	}
 	if m.status != "" || m.view != reviewView {
 		return m.status
 	}

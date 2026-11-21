@@ -302,7 +302,7 @@ func TestBookmarksOpen_success(t *testing.T) {
 
 		m := press(t, loaded(t, src), "3", "enter")
 
-		if got, want := src.changeRevs[len(src.changeRevs)-1], jj.CommitRevset("childcommit"); got != want {
+		if got, want := src.changeRevs[len(src.changeRevs)-1], jj.VisibleCommitRevset("childcommit"); got != want {
 			t.Errorf("Change() last rev = %q, want %q", got, want)
 		}
 		assertReviewTab(t, m)
@@ -312,13 +312,13 @@ func TestBookmarksOpen_success(t *testing.T) {
 	t.Run("enter on the reviewed revision goes back without reloading", func(t *testing.T) {
 		src := bookmarkSource()
 		m := loaded(t, src)
-		calls := len(src.changeRevs)
+		calls := src.diffCalls
 
 		m = press(t, m, "3", "G", "enter")
 
 		assertReviewTab(t, m)
-		if got := len(src.changeRevs); got != calls {
-			t.Errorf("Change() calls = %d, want %d", got, calls)
+		if got := src.diffCalls; got != calls {
+			t.Errorf("Diff() calls = %d, want %d", got, calls)
 		}
 	})
 

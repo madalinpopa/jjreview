@@ -134,15 +134,34 @@ included, contains it, ignoring case.
 | `j` / `k` | Next / previous revision |
 | `ctrl+d` / `ctrl+u` (`pgdown` / `pgup`) | Scroll half a page down / up, through long file lists too |
 | `g` / `G` (`home` / `end`) | First / last revision |
-| `enter` | Review the revision under the cursor |
+| `enter` | Review the revision under the cursor; on the revision already under review it just switches to the review and keeps the selection, on another revision it asks before dropping selected hunks |
 | `l` / `h` | Show / hide the files changed by the revision |
+| `a` | Abandon the revision under the cursor (`jj abandon`); `y` confirms |
 | `/` | Search by change ID, commit ID or description; `enter` keeps the filter |
 | `esc` | Clear the search |
 | `R` | Refresh the log |
 | `?` | Show all keys |
 | `q` | Quit |
 
-`enter` drops the selection, so it asks you to press it again first.
+`a` always opens a confirmation box: press `y` to abandon, any other key
+cancels. The box names the change and commit IDs, the local bookmarks that will
+be deleted, and the selected hunks that will be dropped. If the bookmarks on
+the revision changed since the log was loaded, nothing is abandoned: the log
+refreshes and you press `a` again to review the new bookmarks. Immutable
+revisions are refused. Abandoning a revision:
+
+- deletes the local bookmarks that point to it;
+- rebases its descendants onto its parent(s), so they get new commit IDs;
+- when it is `@`, moves the working copy to a new empty change on its parent;
+- affects other workspaces too: if it is, or is an ancestor of, another
+  workspace's working copy, that working copy is replaced or rebased and the
+  other workspace may need `jj workspace update-stale`.
+
+Afterwards the log refreshes, the bookmarks are marked outdated, and the
+review follows: it stays on the reviewed commit if it still exists, follows its
+rebased successor, or moves to the working copy when the abandoned revision was
+the one under review or `@`. If the review cannot be reloaded it is marked out
+of date and blocks selecting and committing until you press `@`.
 
 Bookmarks tab:
 

@@ -43,6 +43,8 @@ type keyMap struct {
 	clearSearch    key.Binding
 	expand         key.Binding
 	collapse       key.Binding
+	abandon        key.Binding
+	confirm        key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -83,6 +85,8 @@ func newKeyMap() keyMap {
 		expand:         key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "show the files of the revision")),
 		collapse:       key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "hide the files of the revision")),
 		clearSearch:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear the search")),
+		abandon:        key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "abandon the revision (y confirms)")),
+		confirm:        key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "confirm")),
 	}
 }
 
@@ -192,6 +196,7 @@ func (m Model) helpSections() []helpSection {
 				describe(m.keys.open),
 				describe(m.keys.expand),
 				describe(m.keys.collapse),
+				describe(m.keys.abandon),
 				describe(m.keys.search),
 				describe(m.keys.clearSearch),
 				hint("refresh the log", m.keys.reload),

@@ -16,9 +16,11 @@ func reviewParent() []string {
 func revisionSource() *fakeSource {
 	src := newSource()
 	src.log = logLines()
+	child := jj.Change{ChangeID: "wxyzchild000", CommitID: "childcommit", Parents: []string{"parentcommit"}, Description: "child feature"}
+	parent := jj.Change{ChangeID: "pqrsparent00", CommitID: "parentcommit", Parents: []string{"rootcommit"}, Description: "parent"}
 	src.revisions = map[string]jj.Change{
-		jj.CommitRevset("childcommit"):  {ChangeID: "wxyzchild000", CommitID: "childcommit", Parents: []string{"parentcommit"}, Description: "child feature"},
-		jj.CommitRevset("parentcommit"): {ChangeID: "pqrsparent00", CommitID: "parentcommit", Parents: []string{"rootcommit"}, Description: "parent"},
+		jj.VisibleCommitRevset("childcommit"):  child,
+		jj.VisibleCommitRevset("parentcommit"): parent,
 	}
 	src.revFiles = map[string][]diff.File{
 		"parentcommit": {readmeFile()},
@@ -34,7 +36,7 @@ func TestRevisionNavigation_success(t *testing.T) {
 		wantID   string
 		wantFile string
 	}{
-		"enter in the log loads the picked revision": {keys: reviewParent(), wantRev: jj.CommitRevset("parentcommit"), wantID: "@ pqrspare", wantFile: "README.md"},
+		"enter in the log loads the picked revision": {keys: reviewParent(), wantRev: jj.VisibleCommitRevset("parentcommit"), wantID: "@ pqrspare", wantFile: "README.md"},
 		"@ goes back to the working copy":            {keys: append(reviewParent(), "@"), wantRev: "@", wantID: "@ kxyzabcd", wantFile: "src/ui/view.go"},
 	}
 

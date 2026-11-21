@@ -117,6 +117,10 @@ func (m *Model) hunkKey(msg tea.KeyPressMsg) {
 			m.status = reloadingStatus
 			return
 		}
+		if m.outdated {
+			m.status = outdatedStatus
+			return
+		}
 		if m.change.Immutable {
 			m.status = immutableStatus
 			return

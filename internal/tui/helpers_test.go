@@ -23,35 +23,42 @@ type splitCall struct {
 }
 
 type fakeSource struct {
-	change     jj.Change
-	files      []diff.File
-	err        error
-	contents   map[string]string
-	contentErr map[string]error
-	requested  []string
-	splitErr   error
-	splits     []splitCall
-	head       string
-	diffCalls  int
-	diffRevs   []string
-	revisions  map[string]jj.Change
-	revFiles   map[string][]diff.File
-	revErrs    map[string]error
-	diffErrs   map[string]error
-	changeRevs []string
-	log        []jj.LogLine
-	logErr     error
-	logCalls   int
-	bookmarks  []jj.Bookmark
-	bmLoadErr  error
-	bmCalls    int
-	bmErr      error
-	backwards  bool
-	bmWarnings string
-	renameErr  error
-	moves      []string
-	beforeMove func()
-	publishErr error
+	change          jj.Change
+	files           []diff.File
+	err             error
+	contents        map[string]string
+	contentErr      map[string]error
+	requested       []string
+	splitErr        error
+	splits          []splitCall
+	head            string
+	diffCalls       int
+	diffRevs        []string
+	revisions       map[string]jj.Change
+	revFiles        map[string][]diff.File
+	revErrs         map[string]error
+	diffErrs        map[string]error
+	changeRevs      []string
+	log             []jj.LogLine
+	logErr          error
+	logCalls        int
+	bookmarks       []jj.Bookmark
+	bmLoadErr       error
+	bmCalls         int
+	bmErr           error
+	backwards       bool
+	bmWarnings      string
+	renameErr       error
+	moves           []string
+	beforeMove      func()
+	publishErr      error
+	abandoned       []string
+	abandonErr      error
+	confirmed       [][]string
+	commitBookmarks map[string][]string
+	wcCommit        string
+	successors      map[string]jj.Change
+	succErrs        map[string]error
 }
 
 func (s *fakeSource) Bookmarks(context.Context) ([]jj.Bookmark, error) {
@@ -139,6 +146,25 @@ func (s *fakeSource) DeleteBookmark(_ context.Context, name string) (string, err
 	return s.published()
 }
 
+func (s *fakeSource) Abandon(_ context.Context, commitID string, bookmarks []string) (bool, error) {
+	s.abandoned = append(s.abandoned, commitID)
+	s.confirmed = append(s.confirmed, bookmarks)
+	if current, ok := s.commitBookmarks[commitID]; ok && !slices.Equal(current, bookmarks) {
+		return false, fmt.Errorf("abandon %s: %w", commitID, jj.ErrBookmarksChanged)
+	}
+	return commitID == s.wcCommit, s.abandonErr
+}
+
+func (s *fakeSource) Successor(_ context.Context, changeID, commitID string) (jj.Change, error) {
+	if err, ok := s.succErrs[commitID]; ok {
+		return jj.Change{}, err
+	}
+	if change, ok := s.successors[commitID]; ok {
+		return change, nil
+	}
+	return jj.Change{}, fmt.Errorf("successor of %s in %s: %w", commitID, changeID, jj.ErrNoRevision)
+}
+
 func (s *fakeSource) Log(context.Context) ([]jj.LogLine, error) {
 	s.logCalls++
 	return s.log, s.logErr
@@ -152,6 +178,9 @@ func (s *fakeSource) Change(_ context.Context, rev string) (jj.Change, error) {
 	s.changeRevs = append(s.changeRevs, rev)
 	if err, ok := s.revErrs[rev]; ok {
 		return jj.Change{}, err
+	}
+	if change, ok := s.revisions[rev]; ok {
+		return change, nil
 	}
 	if inner, ok := strings.CutSuffix(rev, ") & visible()"); ok {
 		rev = strings.TrimPrefix(inner, "(")
@@ -265,6 +294,7 @@ func newSource() *fakeSource {
 		},
 		contentErr: map[string]error{},
 		head:       "commit1",
+		wcCommit:   "commit1",
 	}
 }
 

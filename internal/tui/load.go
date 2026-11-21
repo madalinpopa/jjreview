@@ -56,6 +56,26 @@ func (m *Model) reload() tea.Cmd {
 	return load(m.ctx, m.src, rev)
 }
 
+type workingCopyMsg struct {
+	commitID string
+	moved    bool
+}
+
+func (m *Model) checkWorkingCopy() tea.Cmd {
+	ctx, src, target, head := m.ctx, m.src, m.target, m.targetHead
+	return func() tea.Msg {
+		change, err := src.Change(ctx, jj.WorkingCopyRevset(target))
+		return workingCopyMsg{commitID: head, moved: errors.Is(err, jj.ErrNoRevision) || err == nil && change.CommitID != head}
+	}
+}
+
+func (m *Model) applyWorkingCopy(msg workingCopyMsg) {
+	if msg.moved && msg.commitID == m.targetHead && m.change.WorkingCopy {
+		m.change.WorkingCopy = false
+		m.status = movedStatus
+	}
+}
+
 func fetch(ctx context.Context, src Source, rev string) loadedMsg {
 	change, err := src.Change(ctx, rev)
 	if err != nil {

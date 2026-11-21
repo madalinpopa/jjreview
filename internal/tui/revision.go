@@ -12,6 +12,7 @@ type revisionStep int
 const (
 	workingCopyStep revisionStep = iota
 	pickedStep
+	reviewedStep
 )
 
 type revisionMsg struct {
@@ -25,6 +26,8 @@ func (s revisionStep) String() string {
 		return "working copy"
 	case pickedStep:
 		return "selected"
+	case reviewedStep:
+		return "reviewed"
 	}
 	return "unknown"
 }

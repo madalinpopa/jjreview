@@ -58,6 +58,10 @@ func (m *Model) openModal() tea.Cmd {
 		m.status = blockedStatus
 		return nil
 	}
+	if m.outdated {
+		m.status = outdatedStatus
+		return nil
+	}
 	if m.change.Immutable {
 		m.status = immutableStatus
 		return nil

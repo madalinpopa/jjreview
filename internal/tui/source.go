@@ -18,5 +18,7 @@ type Source interface {
 	RenameBookmark(ctx context.Context, oldName, newName string) (string, error)
 	MoveBookmark(ctx context.Context, name string, from []string, to string, allowBackwards bool) (string, error)
 	DeleteBookmark(ctx context.Context, name string) (string, error)
+	Abandon(ctx context.Context, commitID string, bookmarks []string) (workingCopy bool, err error)
+	Successor(ctx context.Context, changeID, commitID string) (jj.Change, error)
 	Split(ctx context.Context, changeID, commitID, message string, files []jj.SplitFile) (selected, rest jj.Change, err error)
 }

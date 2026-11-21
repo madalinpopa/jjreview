@@ -250,7 +250,7 @@ func TestLogOpen_success(t *testing.T) {
 
 		m := press(t, loaded(t, src), "2", "j", "enter")
 
-		if got, want := src.changeRevs[len(src.changeRevs)-1], jj.CommitRevset("childcommit"); got != want {
+		if got, want := src.changeRevs[len(src.changeRevs)-1], jj.VisibleCommitRevset("childcommit"); got != want {
 			t.Errorf("Change() last rev = %q, want %q", got, want)
 		}
 		assertReviewTab(t, m)
@@ -263,13 +263,13 @@ func TestLogOpen_success(t *testing.T) {
 	t.Run("enter on the reviewed revision goes back without reloading", func(t *testing.T) {
 		src := revisionSource()
 		m := loaded(t, src)
-		calls := len(src.changeRevs)
+		calls := src.diffCalls
 
 		m = press(t, m, "2", "enter")
 
 		assertReviewTab(t, m)
-		if got := len(src.changeRevs); got != calls {
-			t.Errorf("Change() calls = %d, want %d", got, calls)
+		if got := src.diffCalls; got != calls {
+			t.Errorf("Diff() calls = %d, want %d", got, calls)
 		}
 	})
 
@@ -341,8 +341,8 @@ func divergentSource() *fakeSource {
 		{Graph: "○  ", Entry: &jj.LogEntry{ChangeID: "dupdupdup000", CommitID: "divergentone", Description: "first copy\n"}},
 		{Graph: "○  ", Entry: &jj.LogEntry{ChangeID: "dupdupdup000", CommitID: "divergenttwo", Description: "second copy\n"}},
 	}
-	src.revisions[jj.CommitRevset("divergentone")] = jj.Change{ChangeID: "dupdupdup000", CommitID: "divergentone", Description: "first copy\n"}
-	src.revisions[jj.CommitRevset("divergenttwo")] = jj.Change{ChangeID: "dupdupdup000", CommitID: "divergenttwo", Description: "second copy\n"}
+	src.revisions[jj.VisibleCommitRevset("divergentone")] = jj.Change{ChangeID: "dupdupdup000", CommitID: "divergentone", Description: "first copy\n"}
+	src.revisions[jj.VisibleCommitRevset("divergenttwo")] = jj.Change{ChangeID: "dupdupdup000", CommitID: "divergenttwo", Description: "second copy\n"}
 	src.revFiles["divergentone"] = []diff.File{readmeFile()}
 	src.revFiles["divergenttwo"] = []diff.File{mainFile()}
 	return src
@@ -354,7 +354,7 @@ func TestLogOpen_divergent(t *testing.T) {
 
 		m := press(t, loaded(t, src), "2", "j", "j", "enter")
 
-		if got, want := src.changeRevs[len(src.changeRevs)-1], jj.CommitRevset("divergenttwo"); got != want {
+		if got, want := src.changeRevs[len(src.changeRevs)-1], jj.VisibleCommitRevset("divergenttwo"); got != want {
 			t.Errorf("Change() last rev = %q, want %q", got, want)
 		}
 		if got := m.CurrentFile(); got != "src/main.go" {
@@ -375,7 +375,7 @@ func TestLogOpen_divergent(t *testing.T) {
 
 		m = press(t, m, "enter")
 
-		if got, want := src.changeRevs[len(src.changeRevs)-1], jj.CommitRevset("divergentone"); got != want {
+		if got, want := src.changeRevs[len(src.changeRevs)-1], jj.VisibleCommitRevset("divergentone"); got != want {
 			t.Errorf("Change() last rev = %q, want %q", got, want)
 		}
 		if got := m.CurrentFile(); got != "README.md" {
@@ -388,7 +388,7 @@ func TestLogOpen_failed(t *testing.T) {
 	t.Run("a failed load stays in the log", func(t *testing.T) {
 		src := revisionSource()
 		m := press(t, loaded(t, src), "2", "j")
-		src.revErrs = map[string]error{jj.CommitRevset("childcommit"): errors.New("boom")}
+		src.revErrs = map[string]error{jj.VisibleCommitRevset("childcommit"): errors.New("boom")}
 
 		m = press(t, m, "enter")
 
@@ -567,7 +567,7 @@ func TestLogSearch_success(t *testing.T) {
 		m := press(t, loaded(t, src), search("parent")...)
 		m = press(t, m, "enter", "enter")
 
-		if got, want := src.changeRevs[len(src.changeRevs)-1], jj.CommitRevset("parentcommit"); got != want {
+		if got, want := src.changeRevs[len(src.changeRevs)-1], jj.VisibleCommitRevset("parentcommit"); got != want {
 			t.Errorf("Change() last rev = %q, want %q", got, want)
 		}
 		assertReviewTab(t, m)
@@ -846,7 +846,7 @@ func TestLogCursor_reviewLoadedAfterLog(t *testing.T) {
 	launch := func(t *testing.T) (tui.Model, tea.Cmd) {
 		t.Helper()
 		src := revisionSource()
-		src.change = src.revisions[jj.CommitRevset("parentcommit")]
+		src.change = src.revisions[jj.VisibleCommitRevset("parentcommit")]
 		src.files = []diff.File{readmeFile()}
 		m := tui.New(t.Context(), src, nil, "pqrsparent00")
 		m, _ = update(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})

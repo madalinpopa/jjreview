@@ -45,6 +45,7 @@ type Model struct {
 	keys        keyMap
 	loaded      bool
 	reloading   bool
+	outdated    bool
 	err         error
 	change      jj.Change
 	target      string
@@ -149,6 +150,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = m.applyLoad(msg)
 	case revisionMsg:
 		cmd = m.applyRevision(msg)
+	case workingCopyMsg:
+		m.applyWorkingCopy(msg)
+	case abandonedMsg:
+		cmd = m.applyAbandoned(msg)
 	case contentMsg:
 		m.applyContent(msg)
 	case generatedMsg:
@@ -289,6 +294,7 @@ func (m *Model) applyLoad(msg loadedMsg) tea.Cmd {
 	if msg.err != nil {
 		return nil
 	}
+	m.outdated = false
 	m.change = msg.change
 	m.target = msg.change.ChangeID
 	m.targetHead = msg.change.CommitID
