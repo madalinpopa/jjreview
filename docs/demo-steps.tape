@@ -79,6 +79,30 @@ Sleep 500ms
 Type "f"
 Sleep 2.5s
 
+Type "2"
+Wait+Screen@10s /add url shortener/
+Sleep 1s
+Type@600ms "jj"
+Sleep 800ms
+Type "l"
+Wait+Screen@10s /A server.handler_test\.go/
+Sleep 1.5s
+Type "h"
+Sleep 800ms
+Type "/"
+Sleep 500ms
+Type@120ms "shortener"
+Sleep 1.5s
+Enter
+Sleep 1s
+Enter
+Wait+Screen@10s /@ \w+ +feat: add url shortener/
+Sleep 2.5s
+Type "2"
+Sleep 1s
+Type "1"
+Sleep 1s
+
 Type "q"
 Sleep 500ms
 Type "jj log"
