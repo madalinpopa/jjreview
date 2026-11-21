@@ -88,15 +88,20 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 	if err != nil {
 		return Change{}, Change{}, fmt.Errorf("split %q: encode tool arguments: %w", changeID, err)
 	}
+	baseOp, err := c.headOperation(ctx)
+	if err != nil {
+		return Change{}, Change{}, fmt.Errorf("split %q: %w", changeID, err)
+	}
 	_, err = c.run(ctx, "split",
-		"--revision="+changeRevset(original.ChangeID),
+		"--revision=exactly("+changeRevset(original.ChangeID)+", 1) & "+CommitRevset(original.CommitID),
 		"--message="+message,
 		"--tool", splitTool,
 		"--config", "merge-tools."+splitTool+".program="+string(program),
 		"--config", "merge-tools."+splitTool+".edit-args="+string(editArgs),
 	)
 	if err != nil {
-		return Change{}, Change{}, err
+		selected, splitDone, err = c.splitFailed(ctx, changeID, original, baseOp, err)
+		return selected, Change{}, err
 	}
 	splitDone = true
 	selected, err = c.Change(ctx, changeRevset(original.ChangeID))
@@ -108,6 +113,46 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 		return selected, Change{}, fmt.Errorf("split %q: %w: %w", changeID, ErrSplitIncomplete, err)
 	}
 	return selected, rest, nil
+}
+
+func (c Client) splitFailed(ctx context.Context, changeID string, original Change, baseOp string, splitErr error) (Change, bool, error) {
+	published, err := c.splitPublished(ctx, baseOp, original.CommitID)
+	if err != nil {
+		return Change{}, false, fmt.Errorf("split %q: %w", changeID, errors.Join(splitErr, err))
+	}
+	if published {
+		return Change{ChangeID: original.ChangeID}, true, fmt.Errorf("split %q: %w: %w", changeID, ErrSplitIncomplete, splitErr)
+	}
+	current, err := c.Change(ctx, changeRevset(original.ChangeID))
+	if errors.Is(err, ErrNoRevision) || errors.Is(err, ErrMultipleRevisions) || (err == nil && current.CommitID != original.CommitID) {
+		return Change{}, false, fmt.Errorf("split %q: %w: %w", changeID, ErrStaleRevision, splitErr)
+	}
+	return Change{}, false, splitErr
+}
+
+func (c Client) headOperation(ctx context.Context) (string, error) {
+	out, err := c.run(ctx, "operation", "log", "--ignore-working-copy", "--no-graph", "--limit=1", "-T", "id")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func (c Client) splitPublished(ctx context.Context, since, commitID string) (bool, error) {
+	out, err := c.run(ctx, "operation", "log", "--ignore-working-copy", "--no-graph", "-T", `id ++ " " ++ description.first_line() ++ "\n"`)
+	if err != nil {
+		return false, err
+	}
+	for line := range strings.Lines(string(out)) {
+		id, description, _ := strings.Cut(strings.TrimSuffix(line, "\n"), " ")
+		if id == since {
+			return false, nil
+		}
+		if description == "split commit "+commitID {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func writeSplitSpec(files []SplitFile) (string, error) {
@@ -205,6 +250,10 @@ func (c Client) FileContent(ctx context.Context, commitID, path string) (string,
 
 func CommitRevset(commitID string) string {
 	return "commit_id(" + quote(commitID) + ")"
+}
+
+func WorkingCopyRevset(changeID string) string {
+	return "@ & " + changeRevset(changeID)
 }
 
 func changeRevset(changeID string) string {
