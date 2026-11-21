@@ -1,0 +1,108 @@
+package tui
+
+import (
+	"charm.land/bubbles/v2/key"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
+)
+
+type reviewKeyMap struct {
+	switchPane  key.Binding
+	down        key.Binding
+	up          key.Binding
+	halfDown    key.Binding
+	halfUp      key.Binding
+	top         key.Binding
+	bottom      key.Binding
+	nextHunk    key.Binding
+	prevHunk    key.Binding
+	nextFile    key.Binding
+	prevFile    key.Binding
+	workingCopy key.Binding
+	selectHunk  key.Binding
+	selectFile  key.Binding
+	commit      key.Binding
+	fold        key.Binding
+	foldAll     key.Binding
+	removed     key.Binding
+	removedAll  key.Binding
+	reload      key.Binding
+	edit        key.Binding
+	full        key.Binding
+}
+
+func newReviewKeyMap() reviewKeyMap {
+	return reviewKeyMap{
+		switchPane:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
+		down:        key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next line or file")),
+		up:          key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous line or file")),
+		halfDown:    key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "half page down")),
+		halfUp:      key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", "half page up")),
+		top:         key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first line or file")),
+		bottom:      key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last line or file")),
+		nextHunk:    key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "next hunk")),
+		prevHunk:    key.NewBinding(key.WithKeys("["), key.WithHelp("[", "previous hunk")),
+		nextFile:    key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next file")),
+		prevFile:    key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "previous file")),
+		workingCopy: key.NewBinding(key.WithKeys("@"), key.WithHelp("@", "working-copy revision")),
+		selectHunk:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "select the hunk (the file in the file pane)")),
+		selectFile:  key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "select every hunk in the file")),
+		commit:      key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commit the selected hunks")),
+		fold:        key.NewBinding(key.WithKeys("z", "enter"), key.WithHelp("z enter", "fold the hunk")),
+		foldAll:     key.NewBinding(key.WithKeys("Z"), key.WithHelp("Z", "fold all hunks")),
+		removed:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "show removed lines of the hunk")),
+		removedAll:  key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "show removed lines of all hunks")),
+		reload:      key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "reload the change")),
+		edit:        key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "open in $EDITOR")),
+		full:        key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full file / changes only")),
+	}
+}
+
+func (m Model) reviewHints() []ui.KeyHint {
+	k := m.reviewKeys
+	move := ui.Hint("line", k.down, k.up)
+	if m.filesFocus {
+		move.Label = "file"
+	}
+	hints := []ui.KeyHint{ui.Hint("pane", k.switchPane), move}
+	if !m.change.Immutable {
+		hints = append(hints, ui.Hint("select", k.selectHunk), ui.Hint("commit", k.commit))
+	}
+	if m.filesFocus {
+		hints = append(hints, ui.Hint("diff", k.removedAll))
+	} else {
+		hints = append(hints, ui.Hint("diff", k.removed))
+	}
+	if m.change.WorkingCopy {
+		hints = append(hints, ui.Hint("edit", k.edit))
+	}
+	return hints
+}
+
+func (m Model) reviewHelp() []helpSection {
+	k := m.reviewKeys
+	var review []ui.KeyHint
+	if !m.change.Immutable {
+		review = []ui.KeyHint{ui.Describe(k.selectHunk), ui.Describe(k.selectFile), ui.Describe(k.commit)}
+	}
+	review = append(review, ui.Describe(k.fold), ui.Describe(k.foldAll), ui.Describe(k.removed), ui.Describe(k.removedAll))
+	return []helpSection{
+		{title: "Navigation", hints: []ui.KeyHint{
+			ui.Describe(k.switchPane),
+			ui.Hint("next / previous line or file", k.down, k.up),
+			ui.Hint("half page down / up", k.halfDown, k.halfUp),
+			ui.Hint("first / last line or file", k.top, k.bottom),
+			ui.Hint("next / previous hunk", k.nextHunk, k.prevHunk),
+			ui.Hint("next / previous file", k.nextFile, k.prevFile),
+			ui.Describe(k.workingCopy),
+		}},
+		{title: "Review", hints: review},
+	}
+}
+
+func (m Model) reviewOtherHelp() []ui.KeyHint {
+	var hints []ui.KeyHint
+	if m.change.WorkingCopy {
+		hints = append(hints, ui.Describe(m.reviewKeys.reload), ui.Describe(m.reviewKeys.edit))
+	}
+	return append(hints, ui.Describe(m.reviewKeys.full))
+}

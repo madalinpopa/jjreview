@@ -23,52 +23,52 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.showLog()
 	case key.Matches(msg, m.keys.bookmarksTab):
 		return m.showBookmarks()
-	case key.Matches(msg, m.keys.switchPane):
+	case key.Matches(msg, m.keys.help):
+		m.help = true
+		m.helpTop = 0
+	case key.Matches(msg, m.reviewKeys.switchPane):
 		m.filesFocus = !m.filesFocus
-	case key.Matches(msg, m.keys.down):
+	case key.Matches(msg, m.reviewKeys.down):
 		return m.move(1)
-	case key.Matches(msg, m.keys.up):
+	case key.Matches(msg, m.reviewKeys.up):
 		return m.move(-1)
-	case key.Matches(msg, m.keys.halfDown):
+	case key.Matches(msg, m.reviewKeys.halfDown):
 		return m.page(m.halfPage())
-	case key.Matches(msg, m.keys.halfUp):
+	case key.Matches(msg, m.reviewKeys.halfUp):
 		return m.page(-m.halfPage())
-	case key.Matches(msg, m.keys.top):
+	case key.Matches(msg, m.reviewKeys.top):
 		if m.filesFocus {
 			return m.moveFile(-len(m.files))
 		}
 		m.cursor = firstRow(m.rows())
-	case key.Matches(msg, m.keys.bottom):
+	case key.Matches(msg, m.reviewKeys.bottom):
 		return m.move(m.extent())
-	case key.Matches(msg, m.keys.nextHunk):
+	case key.Matches(msg, m.reviewKeys.nextHunk):
 		m.jumpHunk(1)
-	case key.Matches(msg, m.keys.prevHunk):
+	case key.Matches(msg, m.reviewKeys.prevHunk):
 		m.jumpHunk(-1)
-	case key.Matches(msg, m.keys.nextFile):
+	case key.Matches(msg, m.reviewKeys.nextFile):
 		return m.moveFile(1)
-	case key.Matches(msg, m.keys.prevFile):
+	case key.Matches(msg, m.reviewKeys.prevFile):
 		return m.moveFile(-1)
-	case key.Matches(msg, m.keys.workingCopy):
+	case key.Matches(msg, m.reviewKeys.workingCopy):
 		if m.canLoad() && m.confirmDrop(msg, armed) {
 			return m.loadRevision(workingCopyStep, "@")
 		}
-	case key.Matches(msg, m.keys.reload):
+	case key.Matches(msg, m.reviewKeys.reload):
 		if m.canReload() && m.confirmDrop(msg, armed) {
 			return m.reload()
 		}
-	case key.Matches(msg, m.keys.full):
+	case key.Matches(msg, m.reviewKeys.full):
 		m.full = !m.full
 		m.cursor = firstRow(m.rows())
 		return m.requestContent()
-	case key.Matches(msg, m.keys.commit):
+	case key.Matches(msg, m.reviewKeys.commit):
 		return m.openModal()
-	case key.Matches(msg, m.keys.edit):
+	case key.Matches(msg, m.reviewKeys.edit):
 		if path, ok := m.editablePath(); ok && m.confirmDrop(msg, armed) {
 			return m.startEdit(path)
 		}
-	case key.Matches(msg, m.keys.help):
-		m.help = true
-		m.helpTop = 0
 	default:
 		m.hunkKey(msg)
 	}
@@ -87,7 +87,7 @@ func (m *Model) confirmDrop(msg tea.KeyPressMsg, armed string) bool {
 }
 
 func (m Model) dropLabel(msg tea.KeyPressMsg) string {
-	for _, b := range []key.Binding{m.keys.quit, m.keys.workingCopy, m.keys.reload, m.keys.edit, m.keys.open} {
+	for _, b := range []key.Binding{m.keys.quit, m.reviewKeys.workingCopy, m.reviewKeys.reload, m.reviewKeys.edit, m.keys.open} {
 		if key.Matches(msg, b) {
 			return b.Help().Key
 		}
@@ -100,20 +100,20 @@ func (m *Model) hunkKey(msg tea.KeyPressMsg) {
 		return
 	}
 	switch {
-	case key.Matches(msg, m.keys.fold):
+	case key.Matches(msg, m.reviewKeys.fold):
 		m.toggleFold()
-	case key.Matches(msg, m.keys.removed):
+	case key.Matches(msg, m.reviewKeys.removed):
 		if m.filesFocus {
-			m.status = m.keys.removed.Help().Key + " works in the diff pane; press " + m.keys.switchPane.Help().Key
+			m.status = m.reviewKeys.removed.Help().Key + " works in the diff pane; press " + m.reviewKeys.switchPane.Help().Key
 			return
 		}
 		m.toggleRemoved()
-	case key.Matches(msg, m.keys.removedAll):
+	case key.Matches(msg, m.reviewKeys.removedAll):
 		m.toggleRemovedAll()
-	case key.Matches(msg, m.keys.foldAll):
+	case key.Matches(msg, m.reviewKeys.foldAll):
 		m.currentReview().foldAll()
 		m.cursor = firstRow(m.rows())
-	case key.Matches(msg, m.keys.selectHunk, m.keys.selectFile):
+	case key.Matches(msg, m.reviewKeys.selectHunk, m.reviewKeys.selectFile):
 		if m.reloading {
 			m.status = reloadingStatus
 			return
@@ -126,7 +126,7 @@ func (m *Model) hunkKey(msg tea.KeyPressMsg) {
 			m.status = immutableStatus
 			return
 		}
-		if key.Matches(msg, m.keys.selectFile) || m.filesFocus {
+		if key.Matches(msg, m.reviewKeys.selectFile) || m.filesFocus {
 			m.currentReview().toggleFile()
 			return
 		}

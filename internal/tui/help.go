@@ -15,9 +15,9 @@ func (m *Model) helpKey(msg tea.KeyPressMsg) {
 	switch {
 	case key.Matches(msg, m.keys.closeHelp):
 		m.help = false
-	case key.Matches(msg, m.keys.down):
+	case key.Matches(msg, m.keys.scrollDown):
 		m.helpTop = min(m.helpTop+1, m.helpOverflow())
-	case key.Matches(msg, m.keys.up):
+	case key.Matches(msg, m.keys.scrollUp):
 		m.helpTop = max(min(m.helpTop, m.helpOverflow())-1, 0)
 	}
 }
@@ -75,7 +75,7 @@ func (m Model) helpView() string {
 	if overflow := m.helpOverflow(); overflow > 0 {
 		top := min(m.helpTop, overflow)
 		lines = lines[top : top+m.helpRows()]
-		footer = strings.Join(ui.Hint("scroll", m.keys.down, m.keys.up).Keys, " ") + " scroll · " + footer
+		footer = strings.Join(ui.Hint("scroll", m.keys.scrollDown, m.keys.scrollUp).Keys, " ") + " scroll · " + footer
 	}
 	if m.height > helpChrome {
 		lines = append(lines, "", ui.Render(p.Card, []ui.Seg{ui.Span(ui.Fg(p.Muted), footer)}))

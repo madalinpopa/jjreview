@@ -51,7 +51,8 @@ type Model struct {
 	holdSeq     int
 	cancelEdit  context.CancelFunc
 	quitting    bool
-	keys        keyMap
+	keys        globalKeyMap
+	reviewKeys  reviewKeyMap
 	loaded      bool
 	reloading   bool
 	outdated    bool
@@ -97,7 +98,8 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		themes:      theme.DefaultSet(),
 		pal:         theme.Default(),
 		dark:        true,
-		keys:        newKeyMap(),
+		keys:        newGlobalKeyMap(),
+		reviewKeys:  newReviewKeyMap(),
 		contents:    map[contentKey]string{},
 		contentErrs: map[contentKey]error{},
 		highlights:  map[highlightKey]fileHighlight{},
