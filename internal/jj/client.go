@@ -126,7 +126,7 @@ func writeSplitSpec(files []SplitFile) (string, error) {
 }
 
 func (c Client) Change(ctx context.Context, rev string) (Change, error) {
-	out, err := c.run(ctx, "log", "--revision="+rev, "--no-graph", "-T", changeTemplate)
+	out, err := c.run(ctx, "log", "--revision="+rev, "--no-graph", "--config", "ui.log-word-wrap=false", "-T", changeTemplate)
 	if err != nil {
 		return Change{}, err
 	}
