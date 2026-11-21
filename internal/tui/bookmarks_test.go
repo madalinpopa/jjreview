@@ -1107,6 +1107,40 @@ func TestTopBar_narrow(t *testing.T) {
 	})
 }
 
+func TestTopBar_subject(t *testing.T) {
+	src := newSource()
+	src.change.Description = "fix: answer 404 for unknown codes\n"
+	m := press(t, start(t, src, nil, 102, 20), "f")
+
+	top, _, _ := strings.Cut(view(m), "\n")
+
+	assertContains(t, top, "1 Review", "2 Log", "3 Bookmarks", "@ kxyzabcd", "fix: answer 404 for unknown codes")
+}
+
+func TestTopBar_keepsBadges(t *testing.T) {
+	t.Run("a selection keeps its badge and truncates the subject", func(t *testing.T) {
+		src := newSource()
+		src.change.Description = "fix: answer 404 for unknown codes\n"
+		m := press(t, start(t, src, nil, 80, 20), "f", "tab", "j", "tab", "space")
+
+		top, _, _ := strings.Cut(view(m), "\n")
+
+		assertContains(t, top, "1 Review", "2 Log", "3 Bookmarks", "@ kxyzabcd", "1 hunk selected", "fix: answer")
+		assertMissing(t, top, "fix: answer 404 for unknown codes", "full file")
+	})
+
+	t.Run("an immutable revision keeps the read only badge", func(t *testing.T) {
+		src := newSource()
+		src.change.Description = "fix: answer 404 for unknown codes\n"
+		src.change.Immutable = true
+		m := start(t, src, nil, 80, 20)
+
+		top, _, _ := strings.Cut(view(m), "\n")
+
+		assertContains(t, top, "1 Review", "2 Log", "3 Bookmarks", "@ kxyzabcd", "read only", "fix: answer")
+	})
+}
+
 func TestBookmarkCreate_hiddenTarget(t *testing.T) {
 	src := bookmarkSource()
 	src.revErrs = map[string]error{

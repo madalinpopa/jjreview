@@ -111,24 +111,33 @@ func (m Model) topBar() string {
 	if n == 0 {
 		optional = append(optional, badge)
 	}
-	var left, right []seg
-	for _, short := range []bool{false, true} {
-		left = append(m.tabs(short), revision)
-		for drop := 0; drop <= len(optional)+len(indicators); drop++ {
-			right = slices.Concat(optional, indicators)[drop:]
-			if rowWidth(spaced(left), spaced(right))+1 <= m.width {
-				break
-			}
-		}
-		if rowWidth(spaced(left), spaced(right))+1 <= m.width {
-			break
-		}
-	}
-	left = spaced(left)
+	var title []seg
 	if subject, _, _ := strings.Cut(strings.TrimSpace(m.change.Description), "\n"); subject != "" {
-		left = append(left, gap, span(fg(p.Title).Bold(true), subject))
+		title = []seg{gap, span(fg(p.Title).Bold(true), subject)}
 	}
-	return paint(m.width, p.Page, left, spaced(right))
+	fits := func(left, right, title []seg) bool {
+		return rowWidth(slices.Concat(left, title), spaced(right))+1 <= m.width
+	}
+	bar := func(left, right []seg) string {
+		return paint(m.width, p.Page, slices.Concat(left, title), spaced(right))
+	}
+	left := spaced(append(m.tabs(false), revision))
+	chips := slices.Concat(optional, indicators)
+	for drop := range len(optional) + 1 {
+		if fits(left, chips[drop:], title) {
+			return bar(left, chips[drop:])
+		}
+	}
+	if fits(left, indicators, nil) {
+		return bar(left, indicators)
+	}
+	left = spaced(append(m.tabs(true), revision))
+	for drop := range len(indicators) {
+		if fits(left, indicators[drop:], nil) {
+			return bar(left, indicators[drop:])
+		}
+	}
+	return bar(left, nil)
 }
 
 func spaced(segs []seg) []seg {
