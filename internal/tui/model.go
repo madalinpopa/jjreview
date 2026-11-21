@@ -15,6 +15,7 @@ import (
 	"github.com/madalinpopa/jjreview/internal/llm"
 	"github.com/madalinpopa/jjreview/internal/theme"
 	"github.com/madalinpopa/jjreview/internal/tui/bookmarks"
+	"github.com/madalinpopa/jjreview/internal/tui/logview"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -85,7 +86,7 @@ type Model struct {
 	root        string
 	reloadPath  string
 	view        view
-	log         logModel
+	log         logview.Model
 	bookmarks   bookmarks.Model
 }
 
@@ -103,13 +104,13 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		contents:    map[contentKey]string{},
 		contentErrs: map[contentKey]error{},
 		highlights:  map[highlightKey]fileHighlight{},
-		log:         newLogModel(ctx, src),
+		log:         logview.New(ctx, src),
 		bookmarks:   bookmarks.New(ctx, src),
 		width:       defaultWidth,
 		height:      defaultHeight,
 	}
 	m.treeWidth = m.measureTree()
-	m.log.resize(m.width)
+	m.log.Resize(m.width)
 	return m
 }
 
@@ -133,7 +134,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
-		m.log.resize(m.width)
+		m.log.Resize(m.width)
 	case queryBackgroundMsg:
 		cmd = m.requestBackground()
 	case tea.BackgroundColorMsg:
@@ -168,8 +169,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyContent(msg)
 	case generatedMsg:
 		m.applyGenerated(msg)
-	case logMsg, logFilesMsg:
-		cmd = m.logEffects(m.log.update(msg, m.logEnv()))
 	case committedMsg:
 		m.applyCommitted(msg)
 	case editCheckedMsg:
@@ -185,13 +184,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.bookmarks.OverlayOpen():
 			cmd = m.bookmarks.Paste(msg)
 		case m.view == logView:
-			cmd = m.log.input(msg)
+			cmd = m.log.Input(msg)
 		}
 	default:
 		if c, in, ok := m.bookmarks.Update(msg, m.bookmarkEnv()); ok {
 			cmd = m.bookmarkEffects(c, in)
+		} else if c, in, ok := m.log.Update(msg, m.logEnv()); ok {
+			cmd = m.logEffects(c, in)
 		} else if m.view == logView {
-			cmd = m.log.input(msg)
+			cmd = m.log.Input(msg)
 		}
 	}
 	m.resizeModal()
@@ -300,7 +301,7 @@ func (m *Model) applyLoad(msg loadedMsg) tea.Cmd {
 	m.change = msg.change
 	m.target = msg.change.ChangeID
 	m.targetHead = msg.change.CommitID
-	m.log.follow(m.targetHead)
+	m.log.Follow(m.targetHead)
 	m.root = msg.root
 	prevFiles, prevReviews := m.files, m.reviews
 	m.files = slices.Clone(msg.files)
@@ -368,7 +369,7 @@ func (m Model) requestContent() tea.Cmd {
 func (m *Model) scroll() {
 	switch m.view {
 	case logView:
-		m.log.keepVisible(m.logEnv())
+		m.log.KeepVisible(m.logEnv())
 		return
 	case bookmarksView:
 		m.bookmarks.KeepVisible(m.diffHeight())

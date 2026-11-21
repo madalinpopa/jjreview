@@ -6,48 +6,46 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/tui/logview"
 )
 
 func (m Model) LogCursor() string {
-	if e := m.log.selected(); e != nil {
-		return e.ChangeID
-	}
-	return ""
+	return m.log.SelectedChange()
 }
 
-func (m Model) logEnv() logEnv {
-	return logEnv{
-		pal:     m.pal,
-		width:   m.width,
-		height:  m.height,
-		body:    m.bodyHeight(),
-		list:    m.diffHeight(),
-		modal:   m.modalInner(),
-		head:    m.targetHead,
-		active:  m.view == logView,
-		dropped: pickedUnits(m.picks()),
+func (m Model) logEnv() logview.Env {
+	return logview.Env{
+		Theme:      m.pal,
+		Width:      m.width,
+		Height:     m.height,
+		BodyHeight: m.bodyHeight(),
+		ListHeight: m.diffHeight(),
+		ModalWidth: m.modalWidth(),
+		Head:       m.targetHead,
+		Active:     m.view == logView,
+		Dropped:    pickedUnits(m.picks()),
 	}
 }
 
 func (m *Model) showLog() tea.Cmd {
 	m.view = logView
-	return m.log.show(m.targetHead)
+	return m.log.Show(m.targetHead)
 }
 
 func (m *Model) loadLog() tea.Cmd {
-	return m.log.load()
+	return m.log.Load()
 }
 
 func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
-	if m.log.ignores(msg, m.reloading) {
+	if m.log.Ignores(msg, m.reloading) {
 		return nil
 	}
 	armed := m.armed
 	m.armed = ""
-	if !m.log.confirming() {
+	if !m.log.OverlayOpen() {
 		m.status = ""
 	}
-	if !m.log.capturing() {
+	if !m.log.Capturing() {
 		switch {
 		case key.Matches(msg, m.keys.reviewTab):
 			m.view = reviewView
@@ -65,28 +63,28 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 			return nil
 		}
 	}
-	cmd, in := m.log.key(msg, m.logEnv())
+	cmd, in := m.log.Key(msg, m.logEnv())
 	switch {
-	case in.open != "":
-		return m.openCommit(msg, armed, in.open)
-	case in.arm:
+	case in.Open != "":
+		return m.openCommit(msg, armed, in.Open)
+	case in.Arm:
 		if m.canLoad() {
-			m.status = m.log.arm()
+			m.status = m.log.Arm()
 		}
-	case in.abandon != nil:
+	case in.Abandon != nil:
 		if m.canLoad() {
-			return m.abandon(*in.abandon)
+			return m.abandon(*in.Abandon)
 		}
 	}
 	return m.logEffects(cmd, in)
 }
 
-func (m *Model) logEffects(cmd tea.Cmd, in logIntent) tea.Cmd {
-	if in.retarget && slices.Contains(m.keys.open.Keys(), m.armed) {
+func (m *Model) logEffects(cmd tea.Cmd, in logview.Intent) tea.Cmd {
+	if in.Retarget && slices.Contains(m.keys.open.Keys(), m.armed) {
 		m.armed = ""
 		m.status = ""
 	}
-	if in.refresh {
+	if in.Refresh {
 		return tea.Batch(cmd, m.invalidate())
 	}
 	return cmd

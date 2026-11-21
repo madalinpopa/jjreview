@@ -31,7 +31,7 @@ func (m *Model) showBookmarks() tea.Cmd {
 }
 
 func (m *Model) markStale() {
-	m.log.stale = true
+	m.log.MarkStale()
 	m.bookmarks.MarkStale()
 }
 

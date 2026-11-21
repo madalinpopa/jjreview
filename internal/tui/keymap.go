@@ -37,7 +37,7 @@ func (m Model) keyHints() []ui.KeyHint {
 	help := ui.Hint("help", m.keys.help)
 	switch m.view {
 	case logView:
-		return m.log.hints(m.tabsHint(), help)
+		return m.log.Hints(m.tabsHint(), help)
 	case bookmarksView:
 		return slices.Concat([]ui.KeyHint{m.tabsHint()}, m.bookmarks.Hints(), []ui.KeyHint{help})
 	}
@@ -61,7 +61,7 @@ func (m Model) helpSections() []helpSection {
 	case bookmarksView:
 		own = []helpSection{{title: "Bookmarks", hints: m.bookmarks.Help()}}
 	case logView:
-		own = []helpSection{{title: "Log", hints: m.log.help()}}
+		own = []helpSection{{title: "Log", hints: m.log.Help()}}
 	default:
 		own = m.reviewHelp()
 		other = append(m.reviewOtherHelp(), other...)

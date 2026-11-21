@@ -8,6 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/tui/logview"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -15,7 +16,7 @@ const outdatedStatus = "review out of date; press @ to review the working copy"
 
 type abandonedMsg struct {
 	changeID string
-	keep     logPosition
+	keep     logview.Position
 	step     revisionStep
 	loaded   loadedMsg
 	lost     string
@@ -23,7 +24,7 @@ type abandonedMsg struct {
 }
 
 func (m *Model) abandon(e jj.LogEntry) tea.Cmd {
-	keep := m.log.holdPosition()
+	keep := m.log.HoldPosition()
 	m.reloading = true
 	ctx, src, target, head := m.ctx, m.src, m.target, m.targetHead
 	return func() tea.Msg {
@@ -57,11 +58,11 @@ func reviewedAfterAbandon(ctx context.Context, src Source, target, head string) 
 }
 
 func (m *Model) applyAbandoned(msg abandonedMsg) tea.Cmd {
-	m.log.restorePosition(msg.keep)
+	m.log.RestorePosition(msg.keep)
 	status := "abandoned " + ui.ShortID(msg.changeID)
 	switch {
 	case errors.Is(msg.err, jj.ErrBookmarksChanged):
-		status = "bookmarks changed; press " + m.log.keys.abandon.Help().Key + " to review the abandon again"
+		status = "bookmarks changed; press " + m.log.AbandonKey() + " to review the abandon again"
 	case msg.err != nil:
 		status, _, _ = strings.Cut(msg.err.Error(), "\n")
 	}

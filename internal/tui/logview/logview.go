@@ -1,4 +1,4 @@
-package tui
+package logview
 
 import (
 	"context"
@@ -17,12 +17,12 @@ import (
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
-type logSource interface {
+type Source interface {
 	Log(ctx context.Context) ([]jj.LogLine, error)
 	Diff(ctx context.Context, rev string) ([]diff.File, error)
 }
 
-type logKeys struct {
+type keyMap struct {
 	down        key.Binding
 	up          key.Binding
 	halfDown    key.Binding
@@ -39,8 +39,8 @@ type logKeys struct {
 	reload      key.Binding
 }
 
-func newLogKeys() logKeys {
-	return logKeys{
+func newKeyMap() keyMap {
+	return keyMap{
 		down:        key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next revision")),
 		up:          key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous revision")),
 		halfDown:    key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "half page down")),
@@ -58,85 +58,89 @@ func newLogKeys() logKeys {
 	}
 }
 
-type logEnv struct {
-	pal     theme.Theme
-	width   int
-	height  int
-	body    int
-	list    int
-	modal   int
-	head    string
-	active  bool
-	dropped int
+type Env struct {
+	Theme      theme.Theme
+	Width      int
+	Height     int
+	BodyHeight int
+	ListHeight int
+	ModalWidth int
+	Head       string
+	Active     bool
+	Dropped    int
 }
 
-type logIntent struct {
-	open     string
-	arm      bool
-	abandon  *jj.LogEntry
-	refresh  bool
-	retarget bool
+func (e Env) modalInner() int {
+	return ui.InputBoxInner(e.ModalWidth)
 }
 
-type logModel struct {
+type Intent struct {
+	Open     string
+	Arm      bool
+	Abandon  *jj.LogEntry
+	Refresh  bool
+	Retarget bool
+}
+
+type Model struct {
 	ctx       context.Context
-	src       logSource
-	keys      logKeys
+	src       Source
+	keys      keyMap
 	lines     []jj.LogLine
 	shown     []jj.LogLine
 	query     textinput.Model
 	searching bool
 	expanded  map[string]bool
-	files     map[string]logFiles
+	files     map[string]fileList
 	loaded    bool
 	loading   bool
 	stale     bool
 	err       error
 	cursor    int
 	followed  string
-	keep      logPosition
+	keep      Position
 	confirm   *jj.LogEntry
 	top       int
 	seq       int
 }
 
-type logPosition struct {
+type Position struct {
 	at     int
 	cursor int
 	query  string
 }
 
-type logFiles struct {
+type fileList struct {
 	files  []diff.File
 	err    error
 	loaded bool
 }
 
-type logFilesMsg struct {
+type filesMsg struct {
 	commitID string
 	files    []diff.File
 	err      error
 }
 
-type logRow struct {
+type row struct {
 	line int
 	file int
 }
 
 const (
-	logEntryRow   = -1
-	logMessageRow = -2
+	entryRow   = -1
+	messageRow = -2
 )
 
-const logMinDescription = 20
+const minDescription = 20
 
 const defaultWorkspace = "default"
 
-func newLogModel(ctx context.Context, src logSource) logModel {
-	return logModel{ctx: ctx, src: src, keys: newLogKeys(), query: newSearchInput(), expanded: map[string]bool{}, files: map[string]logFiles{}}
+func New(ctx context.Context, src Source) Model {
+	return Model{ctx: ctx, src: src, keys: newKeyMap(), query: newSearchInput(), expanded: map[string]bool{}, files: map[string]fileList{}}
 }
 
-type logMsg struct {
+type loadedMsg struct {
 	seq   int
 	lines []jj.LogLine
 	err   error
@@ -151,7 +155,7 @@ func newSearchInput() textinput.Model {
 	return in
 }
 
-func (l *logModel) resize(width int) {
+func (l *Model) Resize(width int) {
 	q := &l.query
 	value, pos := q.Value(), q.Position()
 	q.SetWidth(max(width-6, 1))
@@ -175,19 +179,19 @@ func searchStyles(p theme.Theme) textinput.Styles {
 	}
 }
 
-func (l logModel) filtered() bool {
+func (l Model) filtered() bool {
 	return l.searching || l.query.Value() != ""
 }
 
-func (l logModel) confirming() bool {
+func (l Model) OverlayOpen() bool {
 	return l.confirm != nil
 }
 
-func (l logModel) capturing() bool {
+func (l Model) Capturing() bool {
 	return l.searching || l.confirm != nil
 }
 
-func (l *logModel) refilter() {
+func (l *Model) refilter() {
 	keep := l.selected()
 	q := strings.ToLower(strings.TrimSpace(l.query.Value()))
 	if q == "" {
@@ -211,21 +215,32 @@ func matches(e jj.LogEntry, query string) bool {
 		strings.Contains(strings.ToLower(e.Description), query)
 }
 
-func (l logModel) selected() *jj.LogEntry {
+func (l Model) selected() *jj.LogEntry {
 	if l.cursor < 0 || l.cursor >= len(l.shown) {
 		return nil
 	}
 	return l.shown[l.cursor].Entry
 }
 
-func (l logModel) selectedCommit() string {
+func (l Model) SelectedChange() string {
+	if e := l.selected(); e != nil {
+		return e.ChangeID
+	}
+	return ""
+}
+
+func (l Model) AbandonKey() string {
+	return l.keys.abandon.Help().Key
+}
+
+func (l Model) selectedCommit() string {
 	if e := l.selected(); e != nil {
 		return e.CommitID
 	}
 	return ""
 }
 
-func (l *logModel) focusWhere(pred func(*jj.LogEntry) bool) bool {
+func (l *Model) focusWhere(pred func(*jj.LogEntry) bool) bool {
 	i := slices.IndexFunc(l.shown, func(line jj.LogLine) bool { return line.Entry != nil && pred(line.Entry) })
 	if i < 0 {
 		return false
@@ -234,7 +249,7 @@ func (l *logModel) focusWhere(pred func(*jj.LogEntry) bool) bool {
 	return true
 }
 
-func (l *logModel) focus(commitID string) {
+func (l *Model) focus(commitID string) {
 	switch {
 	case l.focusWhere(func(e *jj.LogEntry) bool { return e.CommitID == commitID }):
 	case l.focusWhere(func(e *jj.LogEntry) bool { return e.WorkingCopy }):
@@ -245,7 +260,7 @@ func (l *logModel) focus(commitID string) {
 	l.followed = l.selectedCommit()
 }
 
-func (l *logModel) focusNth(n int) {
+func (l *Model) focusNth(n int) {
 	seen := 0
 	for i, line := range l.shown {
 		if line.Entry == nil {
@@ -259,13 +274,13 @@ func (l *logModel) focusNth(n int) {
 	l.followed = ""
 }
 
-func (l *logModel) follow(commitID string) {
+func (l *Model) Follow(commitID string) {
 	if l.loaded && l.selectedCommit() == l.followed {
 		l.focus(commitID)
 	}
 }
 
-func (l *logModel) move(delta int) {
+func (l *Model) move(delta int) {
 	step := 1
 	if delta < 0 {
 		step = -1
@@ -278,12 +293,12 @@ func (l *logModel) move(delta int) {
 	}
 }
 
-func (l *logModel) jump(delta int) {
+func (l *Model) jump(delta int) {
 	l.move(delta)
 	l.top = min(l.top, l.cursorRow(l.rows()))
 }
 
-func (l logModel) position() (int, int) {
+func (l Model) position() (int, int) {
 	at, total := 0, 0
 	for i, line := range l.shown {
 		if line.Entry == nil {
@@ -297,25 +312,25 @@ func (l logModel) position() (int, int) {
 	return at, total
 }
 
-func (l *logModel) holdPosition() logPosition {
+func (l *Model) HoldPosition() Position {
 	at, _ := l.position()
 	l.followed = ""
-	return logPosition{at: at, cursor: l.cursor, query: l.query.Value()}
+	return Position{at: at, cursor: l.cursor, query: l.query.Value()}
 }
 
-func (l *logModel) restorePosition(keep logPosition) {
+func (l *Model) RestorePosition(keep Position) {
 	l.keep = keep
 }
 
-func (l *logModel) show(head string) tea.Cmd {
+func (l *Model) Show(head string) tea.Cmd {
 	if !l.loading && (!l.loaded || l.stale) {
-		return l.load()
+		return l.Load()
 	}
 	l.focus(head)
 	return nil
 }
 
-func (l *logModel) load() tea.Cmd {
+func (l *Model) Load() tea.Cmd {
 	l.seq++
 	l.loading = true
 	l.stale = false
@@ -325,23 +340,29 @@ func (l *logModel) load() tea.Cmd {
 		if err != nil {
 			err = fmt.Errorf("load log: %w", err)
 		}
-		return logMsg{seq: seq, lines: lines, err: err}
+		return loadedMsg{seq: seq, lines: lines, err: err}
 	}
 }
 
-func (l *logModel) update(msg tea.Msg, env logEnv) (tea.Cmd, logIntent) {
+func (l *Model) MarkStale() {
+	l.stale = true
+}
+
+func (l *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Intent, bool) {
 	switch msg := msg.(type) {
-	case logMsg:
-		return l.applyList(msg, env)
-	case logFilesMsg:
-		l.files[msg.commitID] = logFiles{files: msg.files, err: msg.err, loaded: true}
+	case loadedMsg:
+		cmd, in := l.applyList(msg, env)
+		return cmd, in, true
+	case filesMsg:
+		l.files[msg.commitID] = fileList{files: msg.files, err: msg.err, loaded: true}
+		return nil, Intent{}, true
 	}
-	return nil, logIntent{}
+	return nil, Intent{}, false
 }
 
-func (l *logModel) applyList(msg logMsg, env logEnv) (tea.Cmd, logIntent) {
+func (l *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Intent) {
 	if msg.seq != l.seq {
-		return nil, logIntent{}
+		return nil, Intent{}
 	}
 	before := l.selectedCommit()
 	l.loading = false
@@ -356,45 +377,45 @@ func (l *logModel) applyList(msg logMsg, env logEnv) (tea.Cmd, logIntent) {
 	}
 	keep := l.keep
 	restore := keep.at > 0 && msg.err == nil && l.cursor == keep.cursor && l.query.Value() == keep.query
-	l.keep = logPosition{}
+	l.keep = Position{}
 	l.refilter()
 	switch {
 	case restore:
 		l.focusNth(keep.at)
 	case keep.at > 0 && before != "" && l.selectedCommit() == before:
 	default:
-		l.focus(env.head)
+		l.focus(env.Head)
 	}
-	in := logIntent{retarget: env.active && l.selectedCommit() != before}
-	if l.stale && env.active {
-		return l.load(), in
+	in := Intent{Retarget: env.Active && l.selectedCommit() != before}
+	if l.stale && env.Active {
+		return l.Load(), in
 	}
 	return nil, in
 }
 
-func (l logModel) ignores(msg tea.KeyPressMsg, reloading bool) bool {
+func (l Model) Ignores(msg tea.KeyPressMsg, reloading bool) bool {
 	return l.confirm == nil && !l.searching && key.Matches(msg, l.keys.abandon, l.keys.confirm) && (msg.IsRepeat || reloading || l.loading)
 }
 
-func (l *logModel) key(msg tea.KeyPressMsg, env logEnv) (tea.Cmd, logIntent) {
+func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
 	if target := l.confirm; target != nil {
 		l.confirm = nil
 		if e := l.selected(); !msg.IsRepeat && key.Matches(msg, l.keys.confirm) && e != nil && e.CommitID == target.CommitID {
-			return nil, logIntent{abandon: target}
+			return nil, Intent{Abandon: target}
 		}
-		return nil, logIntent{}
+		return nil, Intent{}
 	}
 	if l.searching {
-		return l.searchKey(msg), logIntent{}
+		return l.searchKey(msg), Intent{}
 	}
-	half := max(env.list/2, 1)
+	half := max(env.ListHeight/2, 1)
 	switch {
 	case key.Matches(msg, l.keys.search):
 		if !l.loaded || l.err != nil {
-			return nil, logIntent{}
+			return nil, Intent{}
 		}
 		l.searching = true
-		return l.query.Focus(), logIntent{}
+		return l.query.Focus(), Intent{}
 	case key.Matches(msg, l.keys.clearSearch):
 		l.clearSearch()
 	case key.Matches(msg, l.keys.down):
@@ -411,23 +432,23 @@ func (l *logModel) key(msg tea.KeyPressMsg, env logEnv) (tea.Cmd, logIntent) {
 		l.jump(len(l.shown))
 	case key.Matches(msg, l.keys.open):
 		if e := l.selected(); e != nil {
-			return nil, logIntent{open: e.CommitID}
+			return nil, Intent{Open: e.CommitID}
 		}
 	case key.Matches(msg, l.keys.expand):
-		return l.expandFiles(), logIntent{}
+		return l.expandFiles(), Intent{}
 	case key.Matches(msg, l.keys.abandon):
-		return nil, logIntent{arm: l.selected() != nil}
+		return nil, Intent{Arm: l.selected() != nil}
 	case key.Matches(msg, l.keys.collapse):
 		if e := l.selected(); e != nil {
 			delete(l.expanded, e.CommitID)
 		}
 	case key.Matches(msg, l.keys.reload):
-		return nil, logIntent{refresh: !l.loading}
+		return nil, Intent{Refresh: !l.loading}
 	}
-	return nil, logIntent{}
+	return nil, Intent{}
 }
 
-func (l *logModel) arm() string {
+func (l *Model) Arm() string {
 	e := l.selected()
 	if e == nil {
 		return ""
@@ -441,7 +462,7 @@ func (l *logModel) arm() string {
 	return ""
 }
 
-func (l *logModel) expandFiles() tea.Cmd {
+func (l *Model) expandFiles() tea.Cmd {
 	e := l.selected()
 	if e == nil {
 		return nil
@@ -451,7 +472,7 @@ func (l *logModel) expandFiles() tea.Cmd {
 	if f, ok := l.files[id]; ok && (!f.loaded || f.err == nil) {
 		return nil
 	}
-	l.files[id] = logFiles{}
+	l.files[id] = fileList{}
 	ctx, src := l.ctx, l.src
 	return func() tea.Msg {
 		files, err := src.Diff(ctx, id)
@@ -462,41 +483,41 @@ func (l *logModel) expandFiles() tea.Cmd {
 		for _, f := range files {
 			paths = append(paths, diff.File{OldPath: f.OldPath, NewPath: f.NewPath, Status: f.Status})
 		}
-		return logFilesMsg{commitID: id, files: paths, err: err}
+		return filesMsg{commitID: id, files: paths, err: err}
 	}
 }
 
-func (l logModel) rows() []logRow {
-	var rows []logRow
+func (l Model) rows() []row {
+	var rows []row
 	for i, line := range l.shown {
-		rows = append(rows, logRow{line: i, file: logEntryRow})
+		rows = append(rows, row{line: i, file: entryRow})
 		if line.Entry == nil || !l.expanded[line.Entry.CommitID] {
 			continue
 		}
 		f := l.files[line.Entry.CommitID]
 		if !f.loaded || f.err != nil || len(f.files) == 0 {
-			rows = append(rows, logRow{line: i, file: logMessageRow})
+			rows = append(rows, row{line: i, file: messageRow})
 			continue
 		}
 		for j := range f.files {
-			rows = append(rows, logRow{line: i, file: j})
+			rows = append(rows, row{line: i, file: j})
 		}
 	}
 	return rows
 }
 
-func (l logModel) cursorRow(rows []logRow) int {
-	return max(slices.Index(rows, logRow{line: l.cursor, file: logEntryRow}), 0)
+func (l Model) cursorRow(rows []row) int {
+	return max(slices.Index(rows, row{line: l.cursor, file: entryRow}), 0)
 }
 
-func (l logModel) height(env logEnv) int {
+func (l Model) height(env Env) int {
 	if l.filtered() {
-		return max(env.list-1, 1)
+		return max(env.ListHeight-1, 1)
 	}
-	return env.list
+	return env.ListHeight
 }
 
-func (l *logModel) keepVisible(env logEnv) {
+func (l *Model) KeepVisible(env Env) {
 	height := l.height(env)
 	rows := l.rows()
 	top := min(l.top, max(len(rows)-height, 0))
@@ -514,7 +535,7 @@ func (l *logModel) keepVisible(env logEnv) {
 	l.top = max(top, 0)
 }
 
-func (l *logModel) scrollPage(delta, height int) {
+func (l *Model) scrollPage(delta, height int) {
 	rows := l.rows()
 	if len(rows) == 0 {
 		return
@@ -536,7 +557,7 @@ func (l *logModel) scrollPage(delta, height int) {
 	}
 }
 
-func (l *logModel) searchKey(msg tea.KeyPressMsg) tea.Cmd {
+func (l *Model) searchKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, l.keys.clearSearch):
 		l.clearSearch()
@@ -544,12 +565,12 @@ func (l *logModel) searchKey(msg tea.KeyPressMsg) tea.Cmd {
 		l.searching = false
 		l.query.Blur()
 	default:
-		return l.input(msg)
+		return l.Input(msg)
 	}
 	return nil
 }
 
-func (l *logModel) input(msg tea.Msg) tea.Cmd {
+func (l *Model) Input(msg tea.Msg) tea.Cmd {
 	if !l.searching {
 		return nil
 	}
@@ -559,14 +580,14 @@ func (l *logModel) input(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (l *logModel) clearSearch() {
+func (l *Model) clearSearch() {
 	l.searching = false
 	l.query.Blur()
 	l.query.Reset()
 	l.refilter()
 }
 
-func (l logModel) hints(tabs, help ui.KeyHint) []ui.KeyHint {
+func (l Model) Hints(tabs, help ui.KeyHint) []ui.KeyHint {
 	if l.searching {
 		return []ui.KeyHint{ui.Hint("apply", l.keys.open), ui.Hint("clear", l.keys.clearSearch)}
 	}
@@ -583,7 +604,7 @@ func (l logModel) hints(tabs, help ui.KeyHint) []ui.KeyHint {
 	return append(hints, ui.Hint("refresh", l.keys.reload), help)
 }
 
-func (l logModel) help() []ui.KeyHint {
+func (l Model) Help() []ui.KeyHint {
 	return []ui.KeyHint{
 		ui.Hint("next / previous revision", l.keys.down, l.keys.up),
 		ui.Hint("half page down / up", l.keys.halfDown, l.keys.halfUp),
@@ -598,9 +619,9 @@ func (l logModel) help() []ui.KeyHint {
 	}
 }
 
-func (l logModel) view(env logEnv) string {
-	p := env.pal
-	inner := max(env.width-2, 0)
+func (l Model) View(env Env) string {
+	p := env.Theme
+	inner := max(env.Width-2, 0)
 	var body []string
 	var value []ui.Seg
 	switch {
@@ -625,19 +646,19 @@ func (l logModel) view(env logEnv) string {
 		}
 		value = []ui.Seg{ui.Span(ui.Fg(p.Title), fmt.Sprintf("rev %d/%d", at, total))}
 		rows := l.rows()
-		for i := l.top; i < len(rows) && len(body) < env.list; i++ {
-			if rows[i].file == logEntryRow {
+		for i := l.top; i < len(rows) && len(body) < env.ListHeight; i++ {
+			if rows[i].file == entryRow {
 				body = append(body, l.line(env, rows[i].line, inner))
 			} else {
 				body = append(body, l.fileLine(p, rows[i], inner))
 			}
 		}
 	}
-	return ui.Card(p, env.width, env.body, "Log", true, value, body)
+	return ui.Card(p, env.Width, env.BodyHeight, "Log", true, value, body)
 }
 
-func (l logModel) line(env logEnv, i, width int) string {
-	p := env.pal
+func (l Model) line(env Env, i, width int) string {
+	p := env.Theme
 	line := l.shown[i]
 	bg := p.Card
 	if i == l.cursor {
@@ -645,7 +666,7 @@ func (l logModel) line(env logEnv, i, width int) string {
 	}
 	e := line.Entry
 	bar := bg
-	if e != nil && e.CommitID == env.head {
+	if e != nil && e.CommitID == env.Head {
 		bar = p.Selection
 	}
 	left := []ui.Seg{ui.Span(ui.Fg(bar), ui.BarGlyph(bar)), ui.Span(ui.Fg(p.Muted), line.Graph)}
@@ -667,13 +688,13 @@ func (l logModel) line(env logEnv, i, width int) string {
 	}
 	desc := ui.Description(p, e.Description, e.Immutable)
 	right := []ui.Seg{ui.Span(ui.Fg(p.Muted), strings.Join(slices.DeleteFunc([]string{e.Author, e.Timestamp}, func(s string) bool { return s == "" }), " · ")), ui.Span(lipgloss.NewStyle(), " ")}
-	if ui.RowWidth(left, right)+min(lipgloss.Width(desc.Text), logMinDescription) > width {
+	if ui.RowWidth(left, right)+min(lipgloss.Width(desc.Text), minDescription) > width {
 		right = nil
 	}
 	return ui.Paint(width, bg, append(left, desc), right)
 }
 
-func (l logModel) fileLine(p theme.Theme, r logRow, width int) string {
+func (l Model) fileLine(p theme.Theme, r row, width int) string {
 	e := l.shown[r.line].Entry
 	left := []ui.Seg{ui.Span(ui.Fg(p.Card), ui.BarGlyph(p.Card)), ui.Span(ui.Fg(p.Muted), continuation(l.shown[r.line].Graph, r.line == len(l.shown)-1)), ui.Span(lipgloss.NewStyle(), "  ")}
 	f := l.files[e.CommitID]
@@ -725,10 +746,13 @@ func continuation(graph string, last bool) string {
 	return b.String()
 }
 
-func (l logModel) confirmView(env logEnv) string {
-	p := env.pal
+func (l Model) Overlay(env Env) string {
+	p := env.Theme
 	e := l.confirm
-	inner := env.modal
+	if e == nil {
+		return ""
+	}
+	inner := env.modalInner()
 	wrap := func(style lipgloss.Style, text string) []string {
 		var out []string
 		for line := range strings.SplitSeq(ansi.Wrap(text, inner, ""), "\n") {
@@ -743,11 +767,11 @@ func (l logModel) confirmView(env logEnv) string {
 	if n := len(e.Bookmarks); n > 0 {
 		lines = append(lines, wrap(ui.Fg(p.Removed), "Deletes "+ui.Plural(n, "bookmark")+" "+strings.Join(e.Bookmarks, ", "))...)
 	}
-	if n := env.dropped; n > 0 {
+	if n := env.Dropped; n > 0 {
 		lines = append(lines, wrap(ui.Fg(p.Removed), fmt.Sprintf("Drops %d selected %s", n, ui.Plural(n, "hunk")))...)
 	}
 	footer := wrap(ui.Fg(p.Muted), l.keys.confirm.Help().Key+" abandon · any other key cancels")
-	if room := max(env.height-2-len(footer), 0); len(lines) > room {
+	if room := max(env.Height-2-len(footer), 0); len(lines) > room {
 		lines = lines[:room]
 		if room > 0 {
 			lines[room-1] = ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Muted), "…")}, nil)
