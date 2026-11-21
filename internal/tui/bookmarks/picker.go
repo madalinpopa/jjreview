@@ -20,6 +20,7 @@ const pickerChrome = 4
 type picker struct {
 	changeID string
 	commitID string
+	title    string
 	cursor   int
 	top      int
 	moving   bool
@@ -35,7 +36,7 @@ type pickedMsg struct {
 }
 
 func (b *Model) Pick(e jj.LogEntry) tea.Cmd {
-	b.picker = &picker{changeID: e.ChangeID, commitID: e.CommitID}
+	b.picker = &picker{changeID: e.ChangeID, commitID: e.CommitID, title: e.Description}
 	return b.Show()
 }
 
@@ -68,7 +69,7 @@ func (b *Model) pickKey(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
 func (b *Model) choose(pk *picker, env Env) (tea.Cmd, Intent) {
 	if pk.cursor = min(pk.cursor, len(b.items)); pk.cursor == 0 {
 		b.picker = nil
-		env.Head = pk.commitID
+		env.Head, env.HeadChange, env.HeadTitle = pk.commitID, pk.changeID, pk.title
 		cmd := b.openModal(nil, env)
 		b.modal.picked = true
 		return cmd, Intent{}

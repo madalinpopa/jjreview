@@ -1,6 +1,7 @@
 package bookmarks
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -42,6 +43,7 @@ type dialog struct {
 	oldRef     bookmarkRef
 	from       []string
 	oldTarget  string
+	prefill    target
 	inputs     [2]textinput.Model
 	field      int
 	pending    bookmarkMove
@@ -50,6 +52,27 @@ type dialog struct {
 	notice     string
 	observed   string
 	err        error
+}
+
+type target struct {
+	shown string
+	exact string
+	title string
+}
+
+func targetOf(changeID, commitID, title string) target {
+	if commitID == "" {
+		return target{}
+	}
+	shown := ui.ShortID(cmp.Or(changeID, commitID))
+	return target{shown: shown, exact: jj.CommitRevset(commitID), title: title}
+}
+
+func (t target) resolve(value string) string {
+	if t.shown != "" && value == t.shown {
+		return t.exact
+	}
+	return value
 }
 
 type bookmarkRequest struct {
@@ -88,16 +111,12 @@ func newInput(value string) textinput.Model {
 func (b *Model) openModal(s *jj.Bookmark, env Env) tea.Cmd {
 	mo := &dialog{}
 	if s == nil {
-		target := ""
-		if env.Head != "" {
-			target = jj.CommitRevset(env.Head)
-		}
-		mo.inputs = [2]textinput.Model{newInput(""), newInput(target)}
+		mo.prefill = targetOf(env.HeadChange, env.Head, env.HeadTitle)
+		mo.inputs = [2]textinput.Model{newInput(""), newInput(mo.prefill.shown)}
 	} else {
 		mo.editing, mo.oldName, mo.oldRef, mo.from = true, s.Name, refOf(*s), []string{s.CommitID}
-		if s.CommitID != "" {
-			mo.oldTarget = jj.CommitRevset(s.CommitID)
-		}
+		mo.prefill = targetOf(s.ChangeID, s.CommitID, s.Description)
+		mo.oldTarget = mo.prefill.shown
 		mo.inputs = [2]textinput.Model{newInput(s.Name), newInput(mo.oldTarget)}
 	}
 	b.modal = mo
@@ -167,6 +186,7 @@ func (b *Model) save() tea.Cmd {
 	}
 	r.rename = mo.editing && r.name != mo.oldName
 	r.move = !mo.editing || r.target != mo.oldTarget
+	r.target = mo.prefill.resolve(r.target)
 	switch {
 	case strings.TrimSpace(r.name) == "":
 		mo.err = errEmptyBookmark
@@ -279,7 +299,8 @@ func (b *Model) applySaved(msg savedMsg) Intent {
 	case msg.moved != "":
 		mo.oldRef = bookmarkRef{name: mo.oldName, target: msg.moved}
 		mo.from = []string{msg.moved}
-		mo.oldTarget = jj.CommitRevset(msg.moved)
+		mo.prefill = targetOf("", msg.moved, "")
+		mo.oldTarget = mo.prefill.shown
 		mo.inputs[1].SetValue(mo.oldTarget)
 	case msg.err != nil || refused:
 	case msg.warnings != "":
@@ -392,11 +413,21 @@ func (b Model) fields(p theme.Theme, inner, chrome int) []string {
 			continue
 		}
 		lines = append(lines,
-			ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Header), label)}, nil),
+			ui.Paint(inner, p.Card, b.fieldLabel(p, i, label), nil),
 			ui.InputBox(p, inner, border, in.View()),
 		)
 	}
 	return lines
+}
+
+func (b Model) fieldLabel(p theme.Theme, i int, label string) []ui.Seg {
+	segs := []ui.Seg{ui.Span(ui.Fg(p.Header), label)}
+	mo := b.modal
+	title, _, _ := strings.Cut(mo.prefill.title, "\n")
+	if i == 0 || title == "" || mo.inputs[1].Value() != mo.prefill.shown {
+		return segs
+	}
+	return append(segs, ui.Span(ui.Fg(p.Muted), " · "+title))
 }
 
 func (b Model) noteLines(p theme.Theme, width int) []ui.Seg {

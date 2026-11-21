@@ -21,8 +21,17 @@ func (m Model) bookmarkEnv() bookmarks.Env {
 		ListHeight: m.diffHeight(),
 		ModalWidth: m.modalWidth(),
 		Head:       m.targetHead,
+		HeadChange: m.target,
+		HeadTitle:  m.headTitle(),
 		Active:     m.view == bookmarksView,
 	}
+}
+
+func (m Model) headTitle() string {
+	if m.change.CommitID != m.targetHead {
+		return ""
+	}
+	return m.change.Description
 }
 
 func (m *Model) showBookmarks() tea.Cmd {

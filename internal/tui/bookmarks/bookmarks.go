@@ -63,6 +63,8 @@ type Env struct {
 	ListHeight int
 	ModalWidth int
 	Head       string
+	HeadChange string
+	HeadTitle  string
 	Active     bool
 }
 
