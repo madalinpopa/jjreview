@@ -136,10 +136,16 @@ included, contains it, ignoring case.
 | `g` / `G` (`home` / `end`) | First / last revision |
 | `enter` | Review the revision under the cursor; on the revision already under review it just switches to the review and keeps the selection, on another revision it asks before dropping selected hunks |
 | `l` / `h` | Show / hide the files changed by the revision |
+| `space` | Select / unselect the revision under the cursor |
+| `s` | Squash the selected revisions, or the one under the cursor, into another revision (`jj squash`); pick the destination with `j` / `k`, `y` confirms, `esc` cancels |
 | `a` | Abandon the revision under the cursor (`jj abandon`); `y` confirms |
+| `f` | Fetch from the remote (`jj git fetch`) |
+| `P` | Push the bookmarks of the revision under the cursor, or the change when it has none (`jj git push`); `y` confirms |
+| `b` | Create a bookmark on the revision under the cursor, or move an existing one to it (`jj bookmark move`); `y` allows a backwards or sideways move |
 | `/` | Search by change ID, commit ID or description; `enter` keeps the filter |
-| `esc` | Clear the search |
-| `R` | Refresh the log |
+| `esc` | Clear the search, or the selection |
+| `R` | Clear the selection and hide all files |
+| `ctrl+r` | Refresh the log |
 | `?` | Show all keys |
 | `q` | Quit |
 
@@ -148,6 +154,12 @@ and the selected hunks that will be dropped; press `y` to abandon, any other key
 cancels. As with `jj abandon`, descendants are rebased onto the parent, and
 abandoning `@` starts a new empty change. Immutable revisions can't be
 abandoned.
+
+`P` asks for confirmation and names the bookmarks it pushes. A revision without
+bookmarks is pushed with `jj git push --change`, which creates a bookmark for
+it. Fetch and push use jj's default remote and run without a terminal, so a
+remote that needs a password or an SSH passphrase must get it from a credential
+helper or `ssh-agent`.
 
 Bookmarks tab:
 
