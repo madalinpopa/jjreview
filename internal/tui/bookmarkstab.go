@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"slices"
+
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/tui/bookmarks"
@@ -17,10 +19,9 @@ func (m Model) bookmarkEnv() bookmarks.Env {
 		Height:     m.height,
 		BodyHeight: m.bodyHeight(),
 		ListHeight: m.diffHeight(),
-		ModalWidth: m.modalInner(),
+		ModalWidth: m.modalWidth(),
 		Head:       m.targetHead,
 		Active:     m.view == bookmarksView,
-		Armed:      m.armed,
 	}
 }
 
@@ -66,7 +67,7 @@ func (m *Model) bookmarksKey(msg tea.KeyPressMsg) tea.Cmd {
 		if in.Open == "" {
 			return m.bookmarkEffects(cmd, in)
 		}
-		if in.Disarm {
+		if !in.Reopen {
 			armed = ""
 		}
 		return m.openCommit(msg, armed, in.Open)
@@ -78,7 +79,7 @@ func (m *Model) bookmarkEffects(cmd tea.Cmd, in bookmarks.Intent) tea.Cmd {
 	if in.Status != "" {
 		m.status = in.Status
 	}
-	if in.Disarm {
+	if in.Retarget && slices.Contains(m.keys.open.Keys(), m.armed) {
 		m.armed = ""
 		m.status = ""
 	}

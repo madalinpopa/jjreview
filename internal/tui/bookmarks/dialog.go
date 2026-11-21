@@ -291,7 +291,7 @@ func (b *Model) Resize(env Env) {
 	if b.modal == nil {
 		return
 	}
-	inner := env.ModalWidth
+	inner := env.modalInner()
 	w := inner - labelWidth
 	if chromeRows(env.Height, len(b.noteLines(env.Theme, inner))) == fullChrome {
 		w = ui.InputBoxInner(inner)
@@ -336,7 +336,7 @@ func chromeRows(height, notes int) int {
 
 func (b Model) modalView(env Env) string {
 	p := env.Theme
-	inner := env.ModalWidth
+	inner := env.modalInner()
 	notes := b.noteLines(env.Theme, inner)
 	chrome := chromeRows(env.Height, len(notes))
 	if room := max(env.Height-chrome, 1); len(notes) > room {

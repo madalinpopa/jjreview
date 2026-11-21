@@ -38,7 +38,7 @@ func newSource() *fakeSource {
 }
 
 func env() bookmarks.Env {
-	return bookmarks.Env{Width: 80, Height: 24, BodyHeight: 20, ListHeight: 16, ModalWidth: 60, Head: "aaaa", Active: true}
+	return bookmarks.Env{Width: 80, Height: 24, BodyHeight: 20, ListHeight: 16, ModalWidth: 64, Head: "aaaa", Active: true}
 }
 
 func run(t *testing.T, cmd tea.Cmd) tea.Msg {
@@ -147,43 +147,56 @@ func TestUpdate_failed(t *testing.T) {
 func TestKeyOpen_success(t *testing.T) {
 	t.Parallel()
 
-	t.Run("disarms a pending confirmation on the first open of a target", func(t *testing.T) {
+	t.Run("reports the first open of a target as a new target", func(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, newSource())
 
 		_, in := m.Key(press("enter"), env())
 
-		if in.Open != "aaaa" || !in.Disarm {
-			t.Errorf("Key(enter) intent = %+v, want Open aaaa and Disarm", in)
+		if in.Open != "aaaa" || in.Reopen {
+			t.Errorf("Key(enter) intent = %+v, want Open aaaa without Reopen", in)
 		}
 	})
 
-	t.Run("keeps the confirmation when the same target opens again", func(t *testing.T) {
+	t.Run("reports a repeated open of the same target as a reopen", func(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, newSource())
 		m.Key(press("enter"), env())
 
 		_, in := m.Key(press("enter"), env())
 
-		if in.Open != "aaaa" || in.Disarm {
-			t.Errorf("Key(enter) intent = %+v, want Open aaaa without Disarm", in)
+		if in.Open != "aaaa" || !in.Reopen {
+			t.Errorf("Key(enter) intent = %+v, want Open aaaa and Reopen", in)
+		}
+	})
+
+	t.Run("reports an open after the target moved as a new target", func(t *testing.T) {
+		t.Parallel()
+		src := newSource()
+		m := loaded(t, src)
+		m.Key(press("enter"), env())
+		src.items[0].CommitID = "bbbb"
+		m.Update(run(t, m.Load()), env())
+
+		_, in := m.Key(press("enter"), env())
+
+		if in.Open != "bbbb" || in.Reopen {
+			t.Errorf("Key(enter) intent = %+v, want Open bbbb without Reopen", in)
 		}
 	})
 }
 
-func TestReloadDisarm_success(t *testing.T) {
+func TestReloadRetarget_success(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
 		moved  bool
-		armed  string
 		active bool
 		want   bool
 	}{
-		"disarms an open armed for a target that moved":       {moved: true, armed: "enter", active: true, want: true},
-		"keeps an open armed for a target that did not move":  {moved: false, armed: "enter", active: true, want: false},
-		"keeps a confirmation armed by another key":           {moved: true, armed: "q", active: true, want: false},
-		"keeps the confirmation while the tab is not visible": {moved: true, armed: "enter", active: false, want: false},
+		"reports a retarget when the opened target moved":         {moved: true, active: true, want: true},
+		"reports no retarget when the opened target did not move": {moved: false, active: true, want: false},
+		"reports no retarget while the tab is not visible":        {moved: true, active: false, want: false},
 	}
 
 	for name, tt := range tests {
@@ -196,12 +209,12 @@ func TestReloadDisarm_success(t *testing.T) {
 				src.items[0].CommitID = "bbbb"
 			}
 			e := env()
-			e.Armed, e.Active = tt.armed, tt.active
+			e.Active = tt.active
 
 			_, in, _ := m.Update(run(t, m.Load()), e)
 
-			if in.Disarm != tt.want {
-				t.Errorf("Update(reload) Disarm = %v, want %v", in.Disarm, tt.want)
+			if in.Retarget != tt.want {
+				t.Errorf("Update(reload) Retarget = %v, want %v", in.Retarget, tt.want)
 			}
 		})
 	}

@@ -64,14 +64,18 @@ type Env struct {
 	ModalWidth int
 	Head       string
 	Active     bool
-	Armed      string
+}
+
+func (e Env) modalInner() int {
+	return ui.InputBoxInner(e.ModalWidth)
 }
 
 type Intent struct {
-	Status  string
-	Refresh bool
-	Disarm  bool
-	Open    string
+	Status   string
+	Refresh  bool
+	Retarget bool
+	Reopen   bool
+	Open     string
 }
 
 type Model struct {
@@ -87,7 +91,7 @@ type Model struct {
 	top      int
 	seq      int
 	want     string
-	armed    bookmarkRef
+	opened   bookmarkRef
 	modal    *dialog
 	deleting *jj.Bookmark
 }
@@ -217,7 +221,7 @@ func (b *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Intent) {
 	if !b.stale {
 		b.want = ""
 	}
-	in := Intent{Disarm: env.Active && b.selectedRef() != b.armed && slices.Contains(b.keys.open.Keys(), env.Armed)}
+	in := Intent{Retarget: env.Active && b.selectedRef() != b.opened}
 	if b.stale && env.Active {
 		return b.Load(), in
 	}
@@ -277,8 +281,8 @@ func (b *Model) open() Intent {
 		return Intent{Status: s.Name + " is conflicted: it has no single target"}
 	}
 	ref := b.selectedRef()
-	in := Intent{Open: s.CommitID, Disarm: ref != b.armed}
-	b.armed = ref
+	in := Intent{Open: s.CommitID, Reopen: ref == b.opened}
+	b.opened = ref
 	return in
 }
 
@@ -307,7 +311,7 @@ func (b Model) Overlay(env Env) string {
 func (b Model) deleteView(env Env) string {
 	p := env.Theme
 	d := b.deleting
-	inner := env.ModalWidth
+	inner := env.modalInner()
 	lines := []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "Delete bookmark")}, nil)}
 	for line := range strings.SplitSeq(ansi.Hardwrap(ui.EscapePath(d.Name), inner, true), "\n") {
 		lines = append(lines, ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Key).Bold(true), line)}, nil))
