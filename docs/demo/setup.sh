@@ -19,7 +19,7 @@ for entry in "$config"/*; do
 		ln -s "$entry" "$root/config/"
 	fi
 done
-cp "${JJR_DEMO_THEME:-docs/demo-dark.toml}" "$root/config/jjr/config.toml"
+cp "${JJR_DEMO_THEME:-docs/demo/dark.toml}" "$root/config/jjr/config.toml"
 
 mkdir -p "$root/repo/server" "$root/repo/cmd/shortener"
 cd "$root/repo"
@@ -140,11 +140,56 @@ EOF
 jj describe --quiet -m "feat: add url shortener"
 jj bookmark create --quiet main -r @
 jj new --quiet
+git init --quiet --bare "$root/origin.git"
+jj git remote add origin "$root/origin.git"
+jj bookmark track --quiet main --remote origin
+jj git push --quiet --bookmark main
+
+git clone --quiet "$root/origin.git" "$root/upstream"
+mkdir -p "$root/upstream/.github/workflows"
+cat >"$root/upstream/.github/workflows/ci.yml" <<'EOF'
+name: CI
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+      - run: go test ./...
+EOF
+git -C "$root/upstream" add .
+git -C "$root/upstream" -c user.name=demo -c user.email=demo@example.com commit --quiet -m "ci: run the tests"
+git -C "$root/upstream" push --quiet
 
 cat >>README.md <<'EOF'
 
 `POST /` answers `400 Bad Request` when the URL is missing.
 EOF
+jj describe --quiet -m "docs: document the missing url error"
+jj new --quiet
+
+cat >.gitignore <<'EOF'
+/shortener
+EOF
+jj describe --quiet -m "chore: ignore the binary"
+jj new --quiet
+
+cat >Makefile <<'EOF'
+build:
+	go build ./cmd/shortener
+EOF
+jj describe --quiet -m "build: add a makefile"
+jj new --quiet
+
+cat >.editorconfig <<'EOF'
+root = true
+
+[*.go]
+indent_style = tab
+EOF
+jj describe --quiet -m "chore: add an editorconfig"
+jj new --quiet
 
 cat >cmd/shortener/main.go <<'EOF'
 package main
