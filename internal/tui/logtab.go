@@ -75,6 +75,17 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 		if m.canLoad() {
 			return m.abandon(*in.Abandon)
 		}
+	case in.Squash:
+		if m.canLoad() {
+			m.status = m.log.StartSquash()
+		}
+	case in.Squashed != nil:
+		if m.canLoad() && m.confirmDrop(msg, armed) {
+			m.log.FinishSquash()
+			return m.squash(*in.Squashed)
+		}
+	case in.Status != "":
+		m.status = in.Status
 	}
 	return m.logEffects(cmd, in)
 }

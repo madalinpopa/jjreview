@@ -163,8 +163,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = m.applyRevision(msg)
 	case workingCopyMsg:
 		m.applyWorkingCopy(msg)
-	case abandonedMsg:
-		cmd = m.applyAbandoned(msg)
+	case rewrittenMsg:
+		cmd = m.applyRewritten(msg)
 	case contentMsg:
 		m.applyContent(msg)
 	case generatedMsg:
