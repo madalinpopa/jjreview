@@ -952,7 +952,7 @@ func TestHunkHeader_success(t *testing.T) {
 
 func TestTopBar_reviewChipsOnlyInReview(t *testing.T) {
 	t.Run("review does not show the diff mode", func(t *testing.T) {
-		top := strings.Split(view(loaded(t, newSource())), "\n")[0]
+		top, _, _ := strings.Cut(view(loaded(t, newSource())), "\n")
 
 		assertMissing(t, top, "changes only")
 	})
@@ -961,7 +961,7 @@ func TestTopBar_reviewChipsOnlyInReview(t *testing.T) {
 		t.Run(name+" hides the idle selection badge", func(t *testing.T) {
 			m := press(t, loaded(t, newSource()), tab)
 
-			top := strings.Split(view(m), "\n")[0]
+			top, _, _ := strings.Cut(view(m), "\n")
 
 			assertMissing(t, top, "nothing selected")
 		})
@@ -969,7 +969,7 @@ func TestTopBar_reviewChipsOnlyInReview(t *testing.T) {
 		t.Run(name+" shows a compact count of selected hunks", func(t *testing.T) {
 			m := press(t, loaded(t, newSource()), "tab", "j", "space", tab)
 
-			top := strings.Split(view(m), "\n")[0]
+			top, _, _ := strings.Cut(view(m), "\n")
 
 			assertContains(t, top, "● 2")
 			assertMissing(t, top, "hunks selected")
