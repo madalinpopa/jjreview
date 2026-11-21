@@ -98,7 +98,7 @@ hunk in the file.
 
 | Key | Action |
 |-----|--------|
-| `1` / `2` / `3` | Show the review tab / the log tab / the bookmarks tab |
+| `1` / `2` / `3` / `4` | Show the review tab / the log tab / the bookmarks tab / the operations tab |
 | `tab` | Switch between the file pane and the diff pane |
 | `j` / `k` | Next / previous file in the file pane, next / previous line in the diff pane |
 | `ctrl+d` / `ctrl+u` (`pgdown` / `pgup`) | Half a page down / up in the focused pane |
@@ -193,8 +193,34 @@ Bookmark dialog:
 jj refuses to move a bookmark backwards or sideways; the dialog then shows the
 move and asks you to press `enter` again to confirm it.
 
-`R` in the log or bookmarks tab refreshes the lists, not the review; press `R`
-in the review tab to pick up file changes.
+Operations tab:
+
+The operations tab lists the latest 500 operations of `jj op log`, newest
+first, with the operation ID, description and age. `l` shows the command that
+ran the operation under it, one row per line, when jj recorded one. A bar and an `@` mark the
+current operation; snapshots and the root operation are dimmed.
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Next / previous operation |
+| `ctrl+d` / `ctrl+u` (`pgdown` / `pgup`) | Scroll half a page down / up |
+| `g` / `G` (`home` / `end`) | Newest / oldest operation |
+| `l` / `h` | Show / hide the command of the operation |
+| `r` | Restore the repo to its state after the operation (`jj op restore`); `y` confirms |
+| `u` | Undo the operation by applying its inverse (`jj op revert`); `y` confirms |
+| `a` | Abandon the operation from the history (`jj op abandon`); the repo is unchanged; `y` confirms |
+| `R` | Refresh the operations |
+| `?` | Show all keys |
+| `q` | Quit |
+
+Each action shows the operation, its command line and its age before it runs;
+press `y` to go ahead, any other key cancels. Restore and undo create a new
+operation, so they can be undone in turn, and drop the selected hunks; the
+prompt says so. The current operation can't be abandoned (undo it first), and
+the root operation can't be undone or abandoned.
+
+`R` in the log, bookmarks or operations tab refreshes the lists, not the review;
+press `R` in the review tab to pick up file changes.
 
 Commit dialog:
 
