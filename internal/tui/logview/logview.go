@@ -3,6 +3,7 @@ package logview
 import (
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -37,6 +38,9 @@ type keyMap struct {
 	abandon     key.Binding
 	confirm     key.Binding
 	reload      key.Binding
+	mark        key.Binding
+	squash      key.Binding
+	cancel      key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -55,6 +59,9 @@ func newKeyMap() keyMap {
 		abandon:     key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "abandon the revision (y confirms)")),
 		confirm:     key.NewBinding(key.WithKeys("y"), key.WithHelp("y", "confirm")),
 		reload:      key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh the log")),
+		mark:        key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "select the revision")),
+		squash:      key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "squash the selected revisions (y confirms)")),
+		cancel:      key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
 	}
 }
 
@@ -78,8 +85,16 @@ type Intent struct {
 	Open     string
 	Arm      bool
 	Abandon  *jj.LogEntry
+	Squash   bool
+	Squashed *Squash
+	Status   string
 	Refresh  bool
 	Retarget bool
+}
+
+type Squash struct {
+	From []jj.LogEntry
+	Into jj.LogEntry
 }
 
 type Model struct {
@@ -100,6 +115,8 @@ type Model struct {
 	followed  string
 	keep      Position
 	confirm   *jj.LogEntry
+	marked    map[string]bool
+	squashing []jj.LogEntry
 	top       int
 	seq       int
 }
@@ -108,6 +125,7 @@ type Position struct {
 	at     int
 	cursor int
 	query  string
+	change string
 }
 
 type fileList struct {
@@ -137,7 +155,7 @@ const minDescription = 20
 const defaultWorkspace = "default"
 
 func New(ctx context.Context, src Source) Model {
-	return Model{ctx: ctx, src: src, keys: newKeyMap(), query: newSearchInput(), expanded: map[string]bool{}, files: map[string]fileList{}}
+	return Model{ctx: ctx, src: src, keys: newKeyMap(), query: newSearchInput(), expanded: map[string]bool{}, files: map[string]fileList{}, marked: map[string]bool{}}
 }
 
 type loadedMsg struct {
@@ -188,7 +206,7 @@ func (l Model) OverlayOpen() bool {
 }
 
 func (l Model) Capturing() bool {
-	return l.searching || l.confirm != nil
+	return l.searching || l.confirm != nil || l.squashing != nil
 }
 
 func (l *Model) refilter() {
@@ -318,6 +336,11 @@ func (l *Model) HoldPosition() Position {
 	return Position{at: at, cursor: l.cursor, query: l.query.Value()}
 }
 
+func (p Position) Targeting(changeID string) Position {
+	p.change = changeID
+	return p
+}
+
 func (l *Model) RestorePosition(keep Position) {
 	l.keep = keep
 }
@@ -375,11 +398,14 @@ func (l *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Intent) {
 	} else {
 		l.lines = msg.lines
 	}
+	l.prune()
 	keep := l.keep
 	restore := keep.at > 0 && msg.err == nil && l.cursor == keep.cursor && l.query.Value() == keep.query
 	l.keep = Position{}
 	l.refilter()
 	switch {
+	case restore && keep.change != "" && l.focusWhere(func(e *jj.LogEntry) bool { return e.ChangeID == keep.change }):
+		l.followed = ""
 	case restore:
 		l.focusNth(keep.at)
 	case keep.at > 0 && before != "" && l.selectedCommit() == before:
@@ -394,7 +420,10 @@ func (l *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Intent) {
 }
 
 func (l Model) Ignores(msg tea.KeyPressMsg, reloading bool) bool {
-	return l.confirm == nil && !l.searching && key.Matches(msg, l.keys.abandon, l.keys.confirm) && (msg.IsRepeat || reloading || l.loading)
+	if l.squashing != nil {
+		return key.Matches(msg, l.keys.confirm) && (msg.IsRepeat || reloading || l.loading)
+	}
+	return l.confirm == nil && !l.searching && key.Matches(msg, l.keys.abandon, l.keys.confirm, l.keys.squash) && (msg.IsRepeat || reloading || l.loading)
 }
 
 func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
@@ -408,7 +437,12 @@ func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
 	if l.searching {
 		return l.searchKey(msg), Intent{}
 	}
-	half := max(env.ListHeight/2, 1)
+	if l.squashing != nil {
+		return nil, l.squashKey(msg, env)
+	}
+	if l.navigate(msg, env) {
+		return nil, Intent{}
+	}
 	switch {
 	case key.Matches(msg, l.keys.search):
 		if !l.loaded || l.err != nil {
@@ -416,20 +450,16 @@ func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
 		}
 		l.searching = true
 		return l.query.Focus(), Intent{}
-	case key.Matches(msg, l.keys.clearSearch):
+	case key.Matches(msg, l.keys.clearSearch) && l.filtered():
 		l.clearSearch()
-	case key.Matches(msg, l.keys.down):
-		l.move(1)
-	case key.Matches(msg, l.keys.up):
-		l.move(-1)
-	case key.Matches(msg, l.keys.halfDown):
-		l.scrollPage(half, l.height(env))
-	case key.Matches(msg, l.keys.halfUp):
-		l.scrollPage(-half, l.height(env))
-	case key.Matches(msg, l.keys.top):
-		l.jump(-len(l.shown))
-	case key.Matches(msg, l.keys.bottom):
-		l.jump(len(l.shown))
+	case key.Matches(msg, l.keys.cancel):
+		clear(l.marked)
+	case key.Matches(msg, l.keys.mark):
+		if e := l.selected(); e != nil {
+			l.toggleMark(e.CommitID)
+		}
+	case key.Matches(msg, l.keys.squash):
+		return nil, Intent{Squash: l.selected() != nil || len(l.marked) > 0}
 	case key.Matches(msg, l.keys.open):
 		if e := l.selected(); e != nil {
 			return nil, Intent{Open: e.CommitID}
@@ -446,6 +476,112 @@ func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
 		return nil, Intent{Refresh: !l.loading}
 	}
 	return nil, Intent{}
+}
+
+func (l *Model) navigate(msg tea.KeyPressMsg, env Env) bool {
+	half := max(env.ListHeight/2, 1)
+	switch {
+	case key.Matches(msg, l.keys.down):
+		l.move(1)
+	case key.Matches(msg, l.keys.up):
+		l.move(-1)
+	case key.Matches(msg, l.keys.halfDown):
+		l.scrollPage(half, l.height(env))
+	case key.Matches(msg, l.keys.halfUp):
+		l.scrollPage(-half, l.height(env))
+	case key.Matches(msg, l.keys.top):
+		l.jump(-len(l.shown))
+	case key.Matches(msg, l.keys.bottom):
+		l.jump(len(l.shown))
+	default:
+		return false
+	}
+	return true
+}
+
+func (l *Model) toggleMark(commitID string) {
+	if l.marked[commitID] {
+		delete(l.marked, commitID)
+		return
+	}
+	l.marked[commitID] = true
+}
+
+func (l Model) marks() []jj.LogEntry {
+	var out []jj.LogEntry
+	for _, line := range l.lines {
+		if line.Entry != nil && l.marked[line.Entry.CommitID] {
+			out = append(out, *line.Entry)
+		}
+	}
+	return out
+}
+
+func (l *Model) prune() {
+	present := map[string]bool{}
+	for _, line := range l.lines {
+		if line.Entry != nil {
+			present[line.Entry.CommitID] = true
+		}
+	}
+	maps.DeleteFunc(l.marked, func(id string, _ bool) bool { return !present[id] })
+	if slices.ContainsFunc(l.squashing, func(e jj.LogEntry) bool { return !present[e.CommitID] }) {
+		l.squashing = nil
+	}
+}
+
+func (l Model) squashed(commitID string) bool {
+	return slices.ContainsFunc(l.squashing, func(e jj.LogEntry) bool { return e.CommitID == commitID })
+}
+
+func (l *Model) StartSquash() string {
+	from := l.marks()
+	if len(from) == 0 {
+		if e := l.selected(); e != nil {
+			from = []jj.LogEntry{*e}
+		}
+	}
+	if len(from) == 0 {
+		return ""
+	}
+	if i := slices.IndexFunc(from, func(e jj.LogEntry) bool { return e.Immutable }); i >= 0 {
+		return ui.ShortID(from[i].ChangeID) + " is immutable"
+	}
+	l.squashing = from
+	l.clearSearch()
+	parents := map[string]bool{}
+	for _, e := range from {
+		for _, p := range e.Parents {
+			parents[p] = !l.squashed(p)
+		}
+	}
+	l.focusWhere(func(e *jj.LogEntry) bool { return parents[e.CommitID] })
+	return ""
+}
+
+func (l *Model) FinishSquash() {
+	l.squashing = nil
+	clear(l.marked)
+}
+
+func (l *Model) squashKey(msg tea.KeyPressMsg, env Env) Intent {
+	switch {
+	case l.navigate(msg, env):
+	case key.Matches(msg, l.keys.cancel):
+		l.squashing = nil
+	case key.Matches(msg, l.keys.confirm):
+		e := l.selected()
+		switch {
+		case e == nil:
+		case l.squashed(e.CommitID):
+			return Intent{Status: "pick a revision that is not being squashed"}
+		case e.Immutable:
+			return Intent{Status: ui.ShortID(e.ChangeID) + " is immutable"}
+		default:
+			return Intent{Squashed: &Squash{From: slices.Clone(l.squashing), Into: *e}}
+		}
+	}
+	return Intent{}
 }
 
 func (l *Model) Arm() string {
@@ -591,14 +727,19 @@ func (l Model) Hints(tabs, help ui.KeyHint) []ui.KeyHint {
 	if l.searching {
 		return []ui.KeyHint{ui.Hint("apply", l.keys.open), ui.Hint("clear", l.keys.clearSearch)}
 	}
+	if l.squashing != nil {
+		return []ui.KeyHint{ui.Hint("into", l.keys.down, l.keys.up), ui.Hint("squash", l.keys.confirm), ui.Hint("cancel", l.keys.cancel)}
+	}
 	hints := []ui.KeyHint{
 		tabs,
 		ui.Hint("revision", l.keys.down, l.keys.up),
 		ui.Hint("review", l.keys.open),
+		ui.Hint("select", l.keys.mark),
+		ui.Hint("squash", l.keys.squash),
 		ui.Hint("files", l.keys.expand, l.keys.collapse),
 		ui.Hint("search", l.keys.search),
 	}
-	if l.filtered() {
+	if l.filtered() || len(l.marked) > 0 {
 		hints = append(hints, ui.Hint("clear", l.keys.clearSearch))
 	}
 	return append(hints, ui.Hint("refresh", l.keys.reload), help)
@@ -612,6 +753,8 @@ func (l Model) Help() []ui.KeyHint {
 		ui.Describe(l.keys.open),
 		ui.Describe(l.keys.expand),
 		ui.Describe(l.keys.collapse),
+		ui.Describe(l.keys.mark),
+		ui.Describe(l.keys.squash),
 		ui.Describe(l.keys.abandon),
 		ui.Describe(l.keys.search),
 		ui.Describe(l.keys.clearSearch),
@@ -645,6 +788,9 @@ func (l Model) View(env Env) string {
 			break
 		}
 		value = []ui.Seg{ui.Span(ui.Fg(p.Title), fmt.Sprintf("rev %d/%d", at, total))}
+		if n := len(l.marked); n > 0 {
+			value = append(value, ui.Span(ui.Fg(p.Picked), fmt.Sprintf(" · %d selected", n)))
+		}
 		rows := l.rows()
 		for i := l.top; i < len(rows) && len(body) < env.ListHeight; i++ {
 			if rows[i].file == entryRow {
@@ -672,6 +818,16 @@ func (l Model) line(env Env, i, width int) string {
 	left := []ui.Seg{ui.Span(ui.Fg(bar), ui.BarGlyph(bar)), ui.Span(ui.Fg(p.Muted), line.Graph)}
 	if e == nil {
 		return ui.Paint(width, bg, left, nil)
+	}
+	switch {
+	case l.squashing == nil:
+		if l.marked[e.CommitID] {
+			left = append(left, ui.Span(ui.Fg(p.Picked).Bold(true), "● "))
+		}
+	case l.squashed(e.CommitID):
+		left = append(left, ui.Pill(p.Chip, p.Removed, "squash"), ui.Span(lipgloss.NewStyle(), " "))
+	case i == l.cursor:
+		left = append(left, ui.Pill(p.Chip, p.Added, "into"), ui.Span(lipgloss.NewStyle(), " "))
 	}
 	id := ui.Fg(p.Title)
 	if e.WorkingCopy {

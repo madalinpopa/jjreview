@@ -59,8 +59,13 @@ func loaded(t *testing.T, src *fakeSource) logview.Model {
 }
 
 func press(k string) tea.KeyPressMsg {
-	if k == "enter" {
+	switch k {
+	case "enter":
 		return tea.KeyPressMsg{Code: tea.KeyEnter}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "space":
+		return tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}
 	}
 	return tea.KeyPressMsg{Code: rune(k[0]), Text: k}
 }
@@ -157,6 +162,38 @@ func TestRestorePosition_success(t *testing.T) {
 		m := loaded(t, src)
 		m.Key(press("j"), env(true))
 		keep := m.HoldPosition()
+		src.lines = []jj.LogLine{entry("@  ", "aaaa", "c1"), entry("○  ", "cccc", "c3")}
+
+		m.RestorePosition(keep)
+		m.Update(run(t, m.Load()), env(true))
+
+		if got := m.SelectedChange(); got != "cccc" {
+			t.Errorf("SelectedChange() = %q, want cccc in the held row", got)
+		}
+	})
+
+	t.Run("a targeted change wins over the held row", func(t *testing.T) {
+		t.Parallel()
+		src := &fakeSource{lines: []jj.LogLine{entry("@  ", "aaaa", "c1"), entry("○  ", "bbbb", "c2"), entry("○  ", "cccc", "c3")}}
+		m := loaded(t, src)
+		m.Key(press("j"), env(true))
+		keep := m.HoldPosition().Targeting("bbbb")
+		src.lines = []jj.LogLine{entry("@  ", "bbbb", "c2b"), entry("○  ", "cccc", "c3")}
+
+		m.RestorePosition(keep)
+		m.Update(run(t, m.Load()), env(true))
+
+		if got := m.SelectedChange(); got != "bbbb" {
+			t.Errorf("SelectedChange() = %q, want the targeted bbbb", got)
+		}
+	})
+
+	t.Run("a missing targeted change keeps the held row", func(t *testing.T) {
+		t.Parallel()
+		src := &fakeSource{lines: []jj.LogLine{entry("@  ", "aaaa", "c1"), entry("○  ", "bbbb", "c2"), entry("○  ", "cccc", "c3")}}
+		m := loaded(t, src)
+		m.Key(press("j"), env(true))
+		keep := m.HoldPosition().Targeting("gone")
 		src.lines = []jj.LogLine{entry("@  ", "aaaa", "c1"), entry("○  ", "cccc", "c3")}
 
 		m.RestorePosition(keep)
