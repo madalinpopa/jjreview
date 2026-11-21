@@ -66,12 +66,12 @@ func TestLogTab_success(t *testing.T) {
 		}
 	})
 
-	t.Run("R refreshes the log", func(t *testing.T) {
+	t.Run("ctrl+r refreshes the log", func(t *testing.T) {
 		src := revisionSource()
 		m := press(t, loaded(t, src), "2")
 		src.log = append(src.log, jj.LogLine{Graph: "○  ", Entry: &jj.LogEntry{ChangeID: "newnewnew000", Description: "brand new"}})
 
-		m = press(t, m, "R")
+		m = press(t, m, "ctrl+r")
 
 		assertContains(t, view(m), "brand new")
 		if src.logCalls != 2 {
@@ -169,8 +169,8 @@ func TestLogTab_outdatedResponse(t *testing.T) {
 func TestLogTab_refreshWhileLoading(t *testing.T) {
 	src := revisionSource()
 	m := press(t, loaded(t, src), "2")
-	m, first := update(t, m, keyMsg("R"))
-	m, second := update(t, m, keyMsg("R"))
+	m, first := update(t, m, keyMsg("ctrl+r"))
+	m, second := update(t, m, keyMsg("ctrl+r"))
 
 	m = run(t, m, first)
 	run(t, m, second)
@@ -296,7 +296,7 @@ func TestLogOpen_success(t *testing.T) {
 func TestLogOpen_confirmationFollowsSelection(t *testing.T) {
 	src := revisionSource()
 	m := press(t, loaded(t, src), "tab", "j", "tab", "space", "2")
-	m, refresh := update(t, m, keyMsg("R"))
+	m, refresh := update(t, m, keyMsg("ctrl+r"))
 	m = press(t, m, "j", "enter")
 	assertContains(t, view(m), "press enter again")
 	src.log = logLines()
@@ -317,7 +317,7 @@ func TestLogOpen_confirmationFollowsSelection(t *testing.T) {
 func TestLogRefresh_keepsReviewConfirmation(t *testing.T) {
 	src := revisionSource()
 	m := press(t, loaded(t, src), "tab", "j", "tab", "space", "2")
-	m, refresh := update(t, m, keyMsg("R"))
+	m, refresh := update(t, m, keyMsg("ctrl+r"))
 	m = press(t, m, "1", "q")
 	src.log = logLines()
 	src.log[0].Entry.CommitID = "commit2"
@@ -481,7 +481,8 @@ func TestLogView_success(t *testing.T) {
 	t.Run("the key bar lists the log keys", func(t *testing.T) {
 		got := view(press(t, loaded(t, revisionSource()), "2"))
 
-		assertContains(t, got, "1 2 3 tabs", "j k revision", "enter review", "space select", "s squash", "R refresh", "? help")
+		assertContains(t, got, "1 2 3 tabs", "j k revision", "enter review", "space select", "f fetch", "P push", "? help")
+		assertMissing(t, got, "s squash", "R reset", "R refresh")
 		assertMissing(t, got, "c commit", "file 1/4")
 	})
 
@@ -843,7 +844,7 @@ func TestLogTab_staleDuringRefresh(t *testing.T) {
 	t.Run("reloads again when the log is shown", func(t *testing.T) {
 		src := revisionSource()
 		m := press(t, loaded(t, src), "2")
-		m, refresh := update(t, m, keyMsg("R"))
+		m, refresh := update(t, m, keyMsg("ctrl+r"))
 		m = press(t, m, "1", "tab", "j", "tab", "space", "c", "ctrl+s", "2")
 
 		run(t, m, refresh)
@@ -856,7 +857,7 @@ func TestLogTab_staleDuringRefresh(t *testing.T) {
 	t.Run("stays stale while the review is shown", func(t *testing.T) {
 		src := revisionSource()
 		m := press(t, loaded(t, src), "2")
-		m, refresh := update(t, m, keyMsg("R"))
+		m, refresh := update(t, m, keyMsg("ctrl+r"))
 		m = press(t, m, "1", "tab", "j", "tab", "space", "c", "ctrl+s")
 
 		m = run(t, m, refresh)
@@ -954,13 +955,13 @@ func TestLogSearch_notLoaded(t *testing.T) {
 		m := press(t, loaded(t, src), "2")
 		src.logErr = nil
 
-		m = press(t, m, "/", "R")
+		m = press(t, m, "/", "ctrl+r")
 
 		if src.logCalls != 2 {
 			t.Errorf("Log() calls = %d, want 2", src.logCalls)
 		}
 		got := view(m)
-		assertMissing(t, got, "jj exploded", "/ R")
+		assertMissing(t, got, "jj exploded")
 		assertContains(t, got, "child feature")
 	})
 }
@@ -1004,7 +1005,7 @@ func TestLogSearch_failedRefresh(t *testing.T) {
 	searchDuringFailedRefresh := func(t *testing.T, src *fakeSource) tui.Model {
 		t.Helper()
 		m := press(t, loaded(t, src), "2")
-		m, refresh := update(t, m, keyMsg("R"))
+		m, refresh := update(t, m, keyMsg("ctrl+r"))
 		m = press(t, m, "/", "c", "h", "i", "l", "d")
 		src.logErr = errors.New("jj exploded")
 		m = run(t, m, refresh)
@@ -1012,11 +1013,11 @@ func TestLogSearch_failedRefresh(t *testing.T) {
 		return m
 	}
 
-	t.Run("R retries and keeps the query", func(t *testing.T) {
+	t.Run("ctrl+r retries and keeps the query", func(t *testing.T) {
 		src := revisionSource()
 		m := searchDuringFailedRefresh(t, src)
 
-		m = press(t, m, "R")
+		m = press(t, m, "ctrl+r")
 
 		if src.logCalls != 3 {
 			t.Errorf("Log() calls = %d, want 3", src.logCalls)

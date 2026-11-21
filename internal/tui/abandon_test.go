@@ -201,7 +201,7 @@ func TestLogAbandon_cancelled(t *testing.T) {
 	t.Run("a is ignored while the log refreshes", func(t *testing.T) {
 		src := revisionSource()
 		m := press(t, loaded(t, src), "2", "j")
-		m, refresh := update(t, m, keyMsg("R"))
+		m, refresh := update(t, m, keyMsg("ctrl+r"))
 
 		m = press(t, m, "a")
 

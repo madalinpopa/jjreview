@@ -144,10 +144,10 @@ func TestBookmarksTab_success(t *testing.T) {
 		}
 	})
 
-	t.Run("R in the log marks the bookmarks stale", func(t *testing.T) {
+	t.Run("ctrl+r in the log marks the bookmarks stale", func(t *testing.T) {
 		src := bookmarkSource()
 
-		press(t, loaded(t, src), "3", "2", "R", "3")
+		press(t, loaded(t, src), "3", "2", "ctrl+r", "3")
 
 		if src.bmCalls != 2 {
 			t.Errorf("Bookmarks() calls = %d, want 2", src.bmCalls)
