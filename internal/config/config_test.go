@@ -62,8 +62,8 @@ func TestLoad_success(t *testing.T) {
 		if got.Provider != "anthropic" || got.Anthropic.APIKey != "" || got.Anthropic.Model != "" {
 			t.Errorf("Load() = %+v, want the anthropic provider without key or model", got)
 		}
-		if got.Theme != theme.Default() {
-			t.Errorf("Load().Theme differs from theme.Default()")
+		if got.Theme != theme.DefaultSet() {
+			t.Errorf("Load().Theme differs from theme.DefaultSet()")
 		}
 	})
 
@@ -93,14 +93,53 @@ comment = "white"
 		if got.Anthropic.APIKey != "sk-test" || got.Anthropic.Model != "claude-sonnet-5-5" {
 			t.Errorf("Load().Anthropic = %+v", got.Anthropic)
 		}
-		if got.Theme.Border != lipgloss.Magenta || got.Theme.Syntax.Comment != lipgloss.White {
-			t.Errorf("Load().Theme border = %v, comment = %v", got.Theme.Border, got.Theme.Syntax.Comment)
+		if got.Theme.Mode != theme.ModeAuto || got.Theme.Light != got.Theme.Dark {
+			t.Errorf("Load().Theme mode = %q, want auto with identical profiles", got.Theme.Mode)
 		}
-		if got.Theme.ModalBorder != lipgloss.Cyan {
-			t.Errorf("Load().Theme.ModalBorder = %v, want lipgloss.Cyan", got.Theme.ModalBorder)
+		th := got.Theme.Dark
+		if th.Border != lipgloss.Magenta || th.Syntax.Comment != lipgloss.White {
+			t.Errorf("Load().Theme border = %v, comment = %v", th.Border, th.Syntax.Comment)
 		}
-		if got.Theme.Added != theme.Default().Added {
-			t.Errorf("Load().Theme.Added = %v, want the default", got.Theme.Added)
+		if th.ModalBorder != lipgloss.Cyan {
+			t.Errorf("Load().Theme.ModalBorder = %v, want lipgloss.Cyan", th.ModalBorder)
+		}
+		if th.Added != theme.Default().Added {
+			t.Errorf("Load().Theme.Added = %v, want the default", th.Added)
+		}
+	})
+
+	t.Run("reads the theme mode and profiles", func(t *testing.T) {
+		path := writeConfig(t, `
+[theme]
+mode = "dark"
+
+[theme.base]
+border = "magenta"
+
+[theme.light.diff]
+added = "#166534"
+
+[theme.dark.diff]
+added = "#86efac"
+removed = "none"
+`)
+
+		got, err := config.Load(path)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+
+		if got.Theme.Mode != theme.ModeDark {
+			t.Errorf("Load().Theme.Mode = %q, want %q", got.Theme.Mode, theme.ModeDark)
+		}
+		if got.Theme.Light.Added != lipgloss.Color("#166534") || got.Theme.Light.Border != lipgloss.Magenta {
+			t.Errorf("Load().Theme.Light added = %v, border = %v", got.Theme.Light.Added, got.Theme.Light.Border)
+		}
+		if got.Theme.Dark.Added != lipgloss.Color("#86efac") || got.Theme.Dark.Border != lipgloss.Magenta {
+			t.Errorf("Load().Theme.Dark added = %v, border = %v", got.Theme.Dark.Added, got.Theme.Dark.Border)
+		}
+		if got.Theme.Dark.Removed != (lipgloss.NoColor{}) || got.Theme.Light.Removed != theme.Default().Removed {
+			t.Errorf("Load().Theme removed dark = %v, light = %v", got.Theme.Dark.Removed, got.Theme.Light.Removed)
 		}
 	})
 
@@ -125,17 +164,31 @@ model = "gpt-5-mini"
 
 func TestLoad_failure(t *testing.T) {
 	for name, tc := range map[string]struct{ body, want string }{
-		"invalid toml":      {body: "provider = ", want: "config.toml"},
-		"unknown provider":  {body: `provider = "openai"`, want: "openai"},
-		"copilot api key":   {body: "[providers.copilot]\napi_key = \"secret\"\n", want: "api_key"},
-		"unknown theme key": {body: "[theme.base]\nbordr = \"red\"\n", want: "unknown colour theme.base.bordr"},
-		"unknown section":   {body: "[theme.colors]\nborder = \"red\"\n", want: "unknown section theme.colors"},
-		"non-string colour": {body: "[theme.base]\nborder = 1\n", want: "theme.base.border"},
-		"flat theme key":    {body: "[theme]\nadded = \"red\"\n", want: "theme.added moved to theme.diff.added"},
-		"renamed flat key":  {body: "[theme]\nmodal_border = \"red\"\n", want: "theme.modal_border moved to theme.modal.border"},
-		"unknown flat key":  {body: "[theme]\nbordr = \"red\"\n", want: "unknown theme key theme.bordr; use a section: bar, base, diff, files, modal or syntax"},
-		"every flat key":    {body: "[theme]\nadded = \"red\"\nborder = \"red\"\n", want: "theme.added moved to theme.diff.added\ntheme.border moved to theme.base.border"},
-		"invalid colour":    {body: "[theme.syntax]\nkeyword = \"nope\"\n", want: "theme.syntax.keyword: "},
+		"invalid toml":               {body: "provider = ", want: "config.toml"},
+		"unknown provider":           {body: `provider = "openai"`, want: "openai"},
+		"copilot api key":            {body: "[providers.copilot]\napi_key = \"secret\"\n", want: "api_key"},
+		"unknown theme key":          {body: "[theme.base]\nbordr = \"red\"\n", want: "unknown colour theme.base.bordr"},
+		"unknown section":            {body: "[theme.colors]\nborder = \"red\"\n", want: "unknown section theme.colors"},
+		"non-string colour":          {body: "[theme.base]\nborder = 1\n", want: "theme.base.border"},
+		"flat theme key":             {body: "[theme]\nadded = \"red\"\n", want: "theme.added moved to theme.diff.added"},
+		"renamed flat key":           {body: "[theme]\nmodal_border = \"red\"\n", want: "theme.modal_border moved to theme.modal.border"},
+		"unknown flat key":           {body: "[theme]\nbordr = \"red\"\n", want: "unknown theme key theme.bordr; use mode, light, dark or a section: bar, base, diff, files, modal or syntax"},
+		"mode typo":                  {body: "[theme]\nmdoe = \"light\"\n", want: "unknown theme key theme.mdoe; use mode, light, dark or a section: bar, base, diff, files, modal or syntax"},
+		"profile typo":               {body: "[theme.ligth.base]\ncursor_bg = \"#e8e4df\"\n", want: "unknown section theme.ligth; use mode, light, dark or a section: bar, base, diff, files, modal or syntax"},
+		"string theme":               {body: "theme = \"light\"\n", want: `theme must be a table; use [theme] mode = "light"`},
+		"json string theme":          {body: "theme = '{\"mode\":\"light\"}'\n", want: `theme must be a table; use [theme] mode = "light"`},
+		"number theme":               {body: "theme = 1\n", want: `theme must be a table; use [theme] mode = "light"`},
+		"array theme":                {body: "theme = [\"light\"]\n", want: `theme must be a table; use [theme] mode = "light"`},
+		"every flat key":             {body: "[theme]\nadded = \"red\"\nborder = \"red\"\n", want: "theme.added moved to theme.diff.added\ntheme.border moved to theme.base.border"},
+		"invalid colour":             {body: "[theme.syntax]\nkeyword = \"nope\"\n", want: "theme.syntax.keyword: "},
+		"unknown mode":               {body: "[theme]\nmode = \"dusk\"\n", want: `unknown theme mode "dusk"; supported: auto, light, dark`},
+		"non-string mode":            {body: "[theme]\nmode = 1\n", want: "theme.mode must be a string"},
+		"inactive profile":           {body: "[theme]\nmode = \"dark\"\n[theme.light.diff]\nadded = \"nope\"\n", want: "theme.light.diff.added: unknown colour"},
+		"non-table profile":          {body: "[theme]\nlight = \"red\"\n", want: "theme.light must be a table of sections: bar, base, diff, files, modal or syntax"},
+		"flat profile key":           {body: "[theme.dark]\nadded = \"red\"\n", want: "unknown theme key theme.dark.added; use a section: bar, base, diff, files, modal or syntax"},
+		"profile section":            {body: "[theme.dark.foo]\nadded = \"red\"\n", want: "unknown section theme.dark.foo"},
+		"profile section non-string": {body: "[theme.dark.foo]\nadded = 1\n", want: "unknown section theme.dark.foo; use bar, base, diff, files, modal or syntax"},
+		"profile non-string":         {body: "[theme.light.base]\nborder = 1\n", want: "theme.light.base.border must be a string"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := config.Load(writeConfig(t, tc.body))

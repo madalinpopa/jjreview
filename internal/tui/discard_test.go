@@ -88,7 +88,7 @@ func TestDiscard_load(t *testing.T) {
 func TestDiscard_edit(t *testing.T) {
 	t.Run("e with selected hunks asks before opening the editor", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, newSource()), "space"), &opened)
+		m := withEditor(answered(t, press(t, loaded(t, newSource()), "space")), &opened)
 
 		m = press(t, m, "e")
 

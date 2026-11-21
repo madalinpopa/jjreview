@@ -2,9 +2,18 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"errors"
+	"fmt"
+	"os"
 	"slices"
+	"syscall"
 	"testing"
+
+	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/madalinpopa/jjreview/internal/theme"
 )
 
 func TestRun_success(t *testing.T) {
@@ -102,6 +111,82 @@ func TestEditorCommand_success(t *testing.T) {
 
 			if !slices.Equal(cmd.Args, tt.want) {
 				t.Errorf("editorCommand(%q, %q) args = %q, want %q", tt.visual, tt.editor, cmd.Args, tt.want)
+			}
+		})
+	}
+}
+
+func TestResetColorScheme_success(t *testing.T) {
+	tests := map[string]struct {
+		mode theme.Mode
+		want string
+	}{
+		"auto turns colour scheme reports off": {mode: theme.ModeAuto, want: ansi.ResetModeLightDark},
+		"light writes nothing":                 {mode: theme.ModeLight, want: ""},
+		"dark writes nothing":                  {mode: theme.ModeDark, want: ""},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var out bytes.Buffer
+
+			err := resetColorScheme(&out, tt.mode)
+
+			if err != nil {
+				t.Fatalf("resetColorScheme(%q) error = %v", tt.mode, err)
+			}
+			if got := out.String(); got != tt.want {
+				t.Errorf("resetColorScheme(%q) output = %q, want %q", tt.mode, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestFinishProgram_success(t *testing.T) {
+	tests := map[string]error{
+		"normal quit":   nil,
+		"ctrl+c signal": fmt.Errorf("%w: %w", tea.ErrProgramKilled, tea.ErrInterrupted),
+		"killed":        tea.ErrProgramKilled,
+		"cancelled":     fmt.Errorf("%w: %w", tea.ErrProgramKilled, context.Canceled),
+	}
+
+	for name, runErr := range tests {
+		t.Run(name, func(t *testing.T) {
+			var out bytes.Buffer
+
+			err := finishProgram(&out, theme.ModeAuto, runErr)
+
+			if err != nil {
+				t.Fatalf("finishProgram(%v) error = %v", runErr, err)
+			}
+			if got := out.String(); got != ansi.ResetModeLightDark {
+				t.Errorf("finishProgram(%v) output = %q, want %q", runErr, got, ansi.ResetModeLightDark)
+			}
+		})
+	}
+}
+
+func TestFinishProgram_failed(t *testing.T) {
+	tests := map[string]struct {
+		runErr  error
+		wantOut string
+	}{
+		"before taking over the terminal": {runErr: fmt.Errorf("bubbletea: error opening TTY: %w", os.ErrNotExist)},
+		"panic":                           {runErr: fmt.Errorf("%w: %w", tea.ErrProgramKilled, tea.ErrProgramPanic), wantOut: ansi.ResetModeLightDark},
+		"read error":                      {runErr: fmt.Errorf("%w: %w", tea.ErrProgramKilled, syscall.EIO), wantOut: ansi.ResetModeLightDark},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			var out bytes.Buffer
+
+			err := finishProgram(&out, theme.ModeAuto, tt.runErr)
+
+			if !errors.Is(err, tt.runErr) {
+				t.Errorf("finishProgram(%v) error = %v, want %v", tt.runErr, err, tt.runErr)
+			}
+			if got := out.String(); got != tt.wantOut {
+				t.Errorf("finishProgram(%v) output = %q, want %q", tt.runErr, got, tt.wantOut)
 			}
 		})
 	}

@@ -3,6 +3,7 @@ package tui_test
 import (
 	"context"
 	"fmt"
+	"image/color"
 	"regexp"
 	"testing"
 
@@ -194,6 +195,12 @@ func start(tb testing.TB, src tui.Source, gen llm.Provider, width, height int) t
 func loaded(t *testing.T, src tui.Source) tui.Model {
 	t.Helper()
 	return start(t, src, &fakeGenerator{text: "feat: generated"}, 120, 30)
+}
+
+func answered(tb testing.TB, m tui.Model) tui.Model {
+	tb.Helper()
+	m, _ = update(tb, m, tea.BackgroundColorMsg{Color: color.Black})
+	return m
 }
 
 func keyMsg(k string) tea.KeyPressMsg {

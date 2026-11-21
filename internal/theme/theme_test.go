@@ -41,17 +41,18 @@ func TestDefault_success(t *testing.T) {
 	})
 }
 
-func TestNew_success(t *testing.T) {
+func TestNewSetCommon_success(t *testing.T) {
 	t.Run("overrides only the given colours", func(t *testing.T) {
-		got, err := theme.New(map[string]map[string]string{
+		set, err := theme.NewSet(theme.ModeAuto, map[string]map[string]string{
 			"base":   {"border": "red", "cursor_bg": "bright-black", "page": "none"},
 			"diff":   {"added": "#00ff00", "removed": "196", "hunk": "14"},
 			"modal":  {"border": "blue"},
 			"syntax": {"keyword": "Bright_Blue"},
-		})
+		}, nil, nil)
 		if err != nil {
-			t.Fatalf("New() error = %v", err)
+			t.Fatalf("NewSet() error = %v", err)
 		}
+		got := set.Dark
 
 		for name, pair := range map[string][2]color.Color{
 			"border":         {got.Border, lipgloss.Red},
@@ -83,7 +84,7 @@ func TestNew_success(t *testing.T) {
 	})
 }
 
-func TestNew_failure(t *testing.T) {
+func TestNewSetCommon_failure(t *testing.T) {
 	for name, tc := range map[string]struct {
 		sections map[string]map[string]string
 		want     string
@@ -96,10 +97,10 @@ func TestNew_failure(t *testing.T) {
 		"number out of range":  {sections: map[string]map[string]string{"base": {"border": "256"}}, want: "theme.base.border: "},
 	} {
 		t.Run(name, func(t *testing.T) {
-			_, err := theme.New(tc.sections)
+			_, err := theme.NewSet(theme.ModeAuto, tc.sections, nil, nil)
 
 			if err == nil || !strings.Contains(err.Error(), tc.want) {
-				t.Errorf("New() error = %v, want one naming %q", err, tc.want)
+				t.Errorf("NewSet() error = %v, want one naming %q", err, tc.want)
 			}
 		})
 	}
@@ -140,8 +141,8 @@ func TestMoved_everyFlatKey(t *testing.T) {
 			}
 			section, name, _ := strings.Cut(moved, ".")
 
-			if _, err := theme.New(map[string]map[string]string{section: {name: "red"}}); err != nil {
-				t.Errorf("Moved(%q) = %q, which New rejects: %v", key, moved, err)
+			if _, err := theme.NewSet(theme.ModeAuto, map[string]map[string]string{section: {name: "red"}}, nil, nil); err != nil {
+				t.Errorf("Moved(%q) = %q, which NewSet rejects: %v", key, moved, err)
 			}
 		})
 	}
@@ -152,6 +153,26 @@ func TestMoved_failed(t *testing.T) {
 		t.Run(key, func(t *testing.T) {
 			if got, ok := theme.Moved(key); ok {
 				t.Errorf("Moved(%q) = %q, true, want false", key, got)
+			}
+		})
+	}
+}
+
+func TestIsSection_success(t *testing.T) {
+	for _, name := range []string{"bar", "base", "diff", "files", "modal", "syntax"} {
+		t.Run(name, func(t *testing.T) {
+			if !theme.IsSection(name) {
+				t.Errorf("IsSection(%q) = false, want true", name)
+			}
+		})
+	}
+}
+
+func TestIsSection_failed(t *testing.T) {
+	for _, name := range []string{"colors", "light", "dark", "mode", ""} {
+		t.Run(name, func(t *testing.T) {
+			if theme.IsSection(name) {
+				t.Errorf("IsSection(%q) = true, want false", name)
 			}
 		})
 	}
@@ -193,10 +214,11 @@ func TestTheme_WithBackground(t *testing.T) {
 	})
 
 	t.Run("keeps the default hunk background over a configured card", func(t *testing.T) {
-		th, err := theme.New(map[string]map[string]string{"base": {"card": "#d8d8d8"}})
+		set, err := theme.NewSet(theme.ModeAuto, map[string]map[string]string{"base": {"card": "#d8d8d8"}}, nil, nil)
 		if err != nil {
-			t.Fatalf("New() error = %v", err)
+			t.Fatalf("NewSet() error = %v", err)
 		}
+		th := set.Dark
 
 		got := th.WithBackground(color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, false)
 
@@ -206,10 +228,11 @@ func TestTheme_WithBackground(t *testing.T) {
 	})
 
 	t.Run("keeps a configured hunk background", func(t *testing.T) {
-		th, err := theme.New(map[string]map[string]string{"diff": {"hunk_bg": "blue"}})
+		set, err := theme.NewSet(theme.ModeAuto, map[string]map[string]string{"diff": {"hunk_bg": "blue"}}, nil, nil)
 		if err != nil {
-			t.Fatalf("New() error = %v", err)
+			t.Fatalf("NewSet() error = %v", err)
 		}
+		th := set.Dark
 
 		got := th.WithBackground(color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}, false)
 
@@ -219,10 +242,11 @@ func TestTheme_WithBackground(t *testing.T) {
 	})
 
 	t.Run("keeps a configured cursor background", func(t *testing.T) {
-		th, err := theme.New(map[string]map[string]string{"base": {"cursor_bg": "blue"}})
+		set, err := theme.NewSet(theme.ModeAuto, map[string]map[string]string{"base": {"cursor_bg": "blue"}}, nil, nil)
 		if err != nil {
-			t.Fatalf("New() error = %v", err)
+			t.Fatalf("NewSet() error = %v", err)
 		}
+		th := set.Dark
 
 		got := th.WithBackground(color.RGBA{A: 0xff}, true)
 
@@ -232,10 +256,11 @@ func TestTheme_WithBackground(t *testing.T) {
 	})
 
 	t.Run("keeps the default cursor background over a configured page", func(t *testing.T) {
-		th, err := theme.New(map[string]map[string]string{"base": {"page": "#1e1e2e"}})
+		set, err := theme.NewSet(theme.ModeAuto, map[string]map[string]string{"base": {"page": "#1e1e2e"}}, nil, nil)
 		if err != nil {
-			t.Fatalf("New() error = %v", err)
+			t.Fatalf("NewSet() error = %v", err)
 		}
+		th := set.Dark
 
 		got := th.WithBackground(color.RGBA{A: 0xff}, true)
 
@@ -243,4 +268,150 @@ func TestTheme_WithBackground(t *testing.T) {
 			t.Errorf("CursorBg = %v, want the default", got.CursorBg)
 		}
 	})
+}
+
+func TestNewSet_success(t *testing.T) {
+	t.Run("layers the active profile over the common sections", func(t *testing.T) {
+		got, err := theme.NewSet(theme.ModeAuto,
+			map[string]map[string]string{"base": {"border": "magenta"}, "diff": {"added": "green", "removed": "red"}},
+			map[string]map[string]string{"diff": {"added": "#166534"}},
+			map[string]map[string]string{"diff": {"added": "#86efac", "removed": "none"}},
+		)
+		if err != nil {
+			t.Fatalf("NewSet() error = %v", err)
+		}
+
+		for name, pair := range map[string][2]color.Color{
+			"light.border":  {got.Light.Border, lipgloss.Magenta},
+			"light.added":   {got.Light.Added, lipgloss.Color("#166534")},
+			"light.removed": {got.Light.Removed, lipgloss.Red},
+			"light.hunk":    {got.Light.Hunk, theme.Default().Hunk},
+			"dark.border":   {got.Dark.Border, lipgloss.Magenta},
+			"dark.added":    {got.Dark.Added, lipgloss.Color("#86efac")},
+			"dark.removed":  {got.Dark.Removed, lipgloss.NoColor{}},
+		} {
+			if !sameColor(pair[0], pair[1]) {
+				t.Errorf("%s = %v, want %v", name, pair[0], pair[1])
+			}
+		}
+		if got.Mode != theme.ModeAuto {
+			t.Errorf("Mode = %q, want %q", got.Mode, theme.ModeAuto)
+		}
+	})
+
+	t.Run("applies the common sections to both profiles when none is configured", func(t *testing.T) {
+		common := map[string]map[string]string{"base": {"border": "red", "page": "#1e1e2e"}}
+
+		got, err := theme.NewSet(theme.ModeDark, common, nil, nil)
+		if err != nil {
+			t.Fatalf("NewSet() error = %v", err)
+		}
+
+		if got.Light != got.Dark || got.Dark.Border != lipgloss.Red || !sameColor(got.Dark.Page, lipgloss.Color("#1e1e2e")) {
+			t.Errorf("NewSet() = %+v, want equal profiles with the common colours", got)
+		}
+	})
+
+	t.Run("disables auto shading only for the profile that sets the colour", func(t *testing.T) {
+		got, err := theme.NewSet(theme.ModeAuto, nil,
+			map[string]map[string]string{"diff": {"hunk_bg": "blue"}},
+			map[string]map[string]string{"base": {"cursor_bg": "blue"}},
+		)
+		if err != nil {
+			t.Fatalf("NewSet() error = %v", err)
+		}
+		bg := color.RGBA{R: 0xff, G: 0xff, B: 0xff, A: 0xff}
+
+		light := got.Light.WithBackground(bg, false)
+		dark := got.Dark.WithBackground(bg, false)
+
+		if light.HunkBg != lipgloss.Blue || sameColor(light.CursorBg, theme.Default().CursorBg) {
+			t.Errorf("light HunkBg = %v, CursorBg = %v, want blue and a derived cursor", light.HunkBg, light.CursorBg)
+		}
+		if dark.CursorBg != lipgloss.Blue || sameColor(dark.HunkBg, theme.Default().HunkBg) {
+			t.Errorf("dark CursorBg = %v, HunkBg = %v, want blue and a derived hunk", dark.CursorBg, dark.HunkBg)
+		}
+	})
+
+	t.Run("computes auto shading on the merged page", func(t *testing.T) {
+		got, err := theme.NewSet(theme.ModeAuto,
+			map[string]map[string]string{"base": {"page": "#1e1e2e"}},
+			map[string]map[string]string{"base": {"page": "none"}},
+			nil,
+		)
+		if err != nil {
+			t.Fatalf("NewSet() error = %v", err)
+		}
+
+		light := got.Light.WithBackground(color.RGBA{A: 0xff}, true)
+		dark := got.Dark.WithBackground(color.RGBA{A: 0xff}, true)
+
+		if sameColor(light.CursorBg, theme.Default().CursorBg) {
+			t.Errorf("light CursorBg = %v, want a derived cursor", light.CursorBg)
+		}
+		if dark.CursorBg != theme.Default().CursorBg {
+			t.Errorf("dark CursorBg = %v, want the default", dark.CursorBg)
+		}
+	})
+}
+
+func TestNewSet_failure(t *testing.T) {
+	valid := map[string]map[string]string{"diff": {"added": "green"}}
+	for name, tc := range map[string]struct {
+		mode                theme.Mode
+		common, light, dark map[string]map[string]string
+		want                string
+	}{
+		"unknown mode":            {mode: "dusk", want: `unknown theme mode "dusk"; supported: auto, light, dark`},
+		"invalid common colour":   {mode: theme.ModeAuto, common: map[string]map[string]string{"diff": {"added": "nope"}}, want: "theme.diff.added: unknown colour"},
+		"invalid inactive colour": {mode: theme.ModeDark, light: map[string]map[string]string{"diff": {"added": "nope"}}, dark: valid, want: "theme.light.diff.added: unknown colour"},
+		"unknown profile colour":  {mode: theme.ModeLight, dark: map[string]map[string]string{"diff": {"addd": "red"}}, want: "unknown colour theme.dark.diff.addd"},
+		"unknown profile section": {mode: theme.ModeAuto, dark: map[string]map[string]string{"foo": {"added": "red"}}, want: "unknown section theme.dark.foo; use bar, base, diff, files, modal or syntax"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := theme.NewSet(tc.mode, tc.common, tc.light, tc.dark)
+
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Errorf("NewSet() error = %v, want one naming %q", err, tc.want)
+			}
+		})
+	}
+}
+
+func TestSet_Resolve(t *testing.T) {
+	light := theme.Default()
+	light.Added = lipgloss.Red
+	dark := theme.Default()
+	dark.Added = lipgloss.Blue
+
+	for name, tc := range map[string]struct {
+		mode theme.Mode
+		dark bool
+		want color.Color
+	}{
+		"auto on light terminal":  {mode: theme.ModeAuto, dark: false, want: lipgloss.Red},
+		"auto on dark terminal":   {mode: theme.ModeAuto, dark: true, want: lipgloss.Blue},
+		"light on dark terminal":  {mode: theme.ModeLight, dark: true, want: lipgloss.Red},
+		"light on light terminal": {mode: theme.ModeLight, dark: false, want: lipgloss.Red},
+		"dark on light terminal":  {mode: theme.ModeDark, dark: false, want: lipgloss.Blue},
+		"dark on dark terminal":   {mode: theme.ModeDark, dark: true, want: lipgloss.Blue},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := theme.Set{Light: light, Dark: dark, Mode: tc.mode}
+
+			got := s.Resolve(tc.dark)
+
+			if got.Added != tc.want {
+				t.Errorf("Resolve(%v).Added = %v, want %v", tc.dark, got.Added, tc.want)
+			}
+		})
+	}
+}
+
+func TestDefaultSet_success(t *testing.T) {
+	got := theme.DefaultSet()
+
+	if got.Light != theme.Default() || got.Dark != theme.Default() || got.Mode != theme.ModeAuto {
+		t.Errorf("DefaultSet() = %+v, want both profiles Default() in auto mode", got)
+	}
 }

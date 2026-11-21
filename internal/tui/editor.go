@@ -4,13 +4,23 @@ import (
 	"context"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/diff"
 )
 
+const editorHoldTimeout = 300 * time.Millisecond
+
 type EditorFinishedMsg struct {
 	Err error
+}
+
+type queryBackgroundMsg struct{}
+
+type holdTimeoutMsg struct {
+	seq int
 }
 
 func (m Model) WithEditor(editor func(ctx context.Context, path string) *exec.Cmd) Model {
@@ -40,16 +50,52 @@ func (m *Model) openEditor() tea.Cmd {
 	file, _ := m.currentFile()
 	cmd := m.editor(m.ctx, filepath.Join(m.root, file.Path()))
 	m.reloading = true
-	return tea.ExecProcess(cmd, func(err error) tea.Msg {
+	run := tea.ExecProcess(cmd, func(err error) tea.Msg {
 		return EditorFinishedMsg{Err: err}
+	})
+	if m.autoTheme() {
+		run = tea.Sequence(tea.Raw(ansi.ResetModeLightDark), run)
+	}
+	if m.bgPending == 0 {
+		return run
+	}
+	m.held = run
+	m.holdSeq++
+	seq := m.holdSeq
+	return tea.Tick(editorHoldTimeout, func(time.Time) tea.Msg {
+		return holdTimeoutMsg{seq: seq}
 	})
 }
 
+func (m *Model) requestBackground() tea.Cmd {
+	m.bgPending++
+	return tea.RequestBackgroundColor
+}
+
+func (m *Model) backgroundAnswered() tea.Cmd {
+	m.bgPending = max(m.bgPending-1, 0)
+	if m.bgPending > 0 {
+		return nil
+	}
+	return m.releaseEditor()
+}
+
+func (m *Model) releaseEditor() tea.Cmd {
+	run := m.held
+	m.held = nil
+	return run
+}
+
 func (m *Model) editorFinished(msg EditorFinishedMsg) tea.Cmd {
+	var cmd tea.Cmd
 	if msg.Err != nil {
 		m.reloading = false
 		m.status = "editor: " + msg.Err.Error()
-		return nil
+	} else {
+		cmd = m.reload()
 	}
-	return m.reload()
+	if m.autoTheme() {
+		return tea.Batch(cmd, tea.Raw(ansi.SetModeLightDark), m.requestBackground())
+	}
+	return cmd
 }

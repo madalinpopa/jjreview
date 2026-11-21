@@ -27,6 +27,7 @@ func (m Model) View() tea.View {
 	}
 	v := tea.NewView(fit(content, m.width, m.height))
 	v.AltScreen = true
+	v.ReportFocus = m.autoTheme()
 	return v
 }
 

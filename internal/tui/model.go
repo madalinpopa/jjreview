@@ -7,6 +7,8 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
+	uv "github.com/charmbracelet/ultraviolet"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/llm"
@@ -29,7 +31,13 @@ type Model struct {
 	src         Source
 	gen         llm.Provider
 	rev         string
+	themes      theme.Set
 	pal         theme.Theme
+	dark        bool
+	bgAnswered  bool
+	bgPending   int
+	held        tea.Cmd
+	holdSeq     int
 	keys        keyMap
 	loaded      bool
 	reloading   bool
@@ -69,7 +77,9 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		src:         src,
 		gen:         gen,
 		rev:         rev,
+		themes:      theme.DefaultSet(),
 		pal:         theme.Default(),
+		dark:        true,
 		keys:        newKeyMap(),
 		contents:    map[contentKey]string{},
 		contentErrs: map[contentKey]error{},
@@ -81,13 +91,19 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 	return m
 }
 
-func (m Model) WithTheme(t theme.Theme) Model {
-	m.pal = t
+func (m Model) WithTheme(s theme.Set) Model {
+	m.themes = s
+	m.dark = true
+	m.pal = s.Resolve(true)
 	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(load(m.ctx, m.src, m.rev), tea.RequestBackgroundColor)
+	cmds := []tea.Cmd{load(m.ctx, m.src, m.rev), func() tea.Msg { return queryBackgroundMsg{} }}
+	if m.autoTheme() {
+		cmds = append(cmds, tea.Raw(ansi.SetModeLightDark))
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -96,8 +112,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.resizeModal()
+	case queryBackgroundMsg:
+		cmd = m.requestBackground()
 	case tea.BackgroundColorMsg:
-		m.pal = m.pal.WithBackground(msg.Color, msg.IsDark())
+		cmd = m.backgroundAnswered()
+		if msg.Color == nil {
+			break
+		}
+		m.bgAnswered = true
+		m.setProfile(msg.IsDark())
+		m.pal = m.themes.Resolve(m.dark).WithBackground(msg.Color, msg.IsDark())
+	case holdTimeoutMsg:
+		if msg.seq == m.holdSeq && m.held != nil {
+			m.bgPending = 0
+			cmd = m.releaseEditor()
+		}
+	case uv.DarkColorSchemeEvent:
+		cmd = m.schemeChanged(true)
+	case uv.LightColorSchemeEvent:
+		cmd = m.schemeChanged(false)
+	case tea.FocusMsg:
+		if m.autoTheme() {
+			cmd = m.requestBackground()
+		}
 	case loadedMsg:
 		cmd = m.applyLoad(msg)
 	case revisionMsg:
@@ -157,6 +194,35 @@ func (m Model) Message() string {
 		return ""
 	}
 	return m.modal.input.Value()
+}
+
+func (m Model) autoTheme() bool {
+	return m.themes.Mode == theme.ModeAuto
+}
+
+func (m *Model) schemeChanged(dark bool) tea.Cmd {
+	if !m.autoTheme() {
+		return nil
+	}
+	if !m.bgAnswered {
+		m.setProfile(dark)
+	}
+	return m.requestBackground()
+}
+
+func (m *Model) setProfile(dark bool) {
+	if !m.autoTheme() || dark == m.dark {
+		return
+	}
+	old := m.pal
+	m.dark = dark
+	m.pal = m.themes.Resolve(dark)
+	if !sameColors(highlightColors(old), highlightColors(m.pal)) {
+		clear(m.highlights)
+	}
+	if m.modal != nil {
+		m.modal.input.SetStyles(inputStyles(m.pal))
+	}
 }
 
 func (m *Model) applyLoad(msg loadedMsg) tea.Cmd {

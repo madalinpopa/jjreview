@@ -68,6 +68,19 @@ type Theme struct {
 	autoHunk   bool
 }
 
+type Mode string
+
+const (
+	ModeAuto  Mode = "auto"
+	ModeLight Mode = "light"
+	ModeDark  Mode = "dark"
+)
+
+type Set struct {
+	Light, Dark Theme
+	Mode        Mode
+}
+
 func Default() Theme {
 	none := lipgloss.NoColor{}
 	return Theme{
@@ -117,20 +130,65 @@ func Default() Theme {
 	}
 }
 
-func New(sections map[string]map[string]string) (Theme, error) {
+func NewSet(mode Mode, common, light, dark map[string]map[string]string) (Set, error) {
+	switch mode {
+	case ModeAuto, ModeLight, ModeDark:
+	default:
+		return Set{}, fmt.Errorf("unknown theme mode %q; supported: %s, %s, %s", mode, ModeAuto, ModeLight, ModeDark)
+	}
+	base := layer{prefix: "theme.", sections: common}
+	l, err := build(base, layer{prefix: "theme.light.", sections: light})
+	if err != nil {
+		return Set{}, err
+	}
+	d, err := build(base, layer{prefix: "theme.dark.", sections: dark})
+	if err != nil {
+		return Set{}, err
+	}
+	return Set{Light: l, Dark: d, Mode: mode}, nil
+}
+
+func DefaultSet() Set {
+	return Set{Light: Default(), Dark: Default(), Mode: ModeAuto}
+}
+
+func (s Set) Resolve(dark bool) Theme {
+	switch s.Mode {
+	case ModeLight:
+		return s.Light
+	case ModeDark:
+		return s.Dark
+	}
+	if dark {
+		return s.Dark
+	}
+	return s.Light
+}
+
+type layer struct {
+	prefix   string
+	sections map[string]map[string]string
+}
+
+func build(layers ...layer) (Theme, error) {
 	t := Default()
 	fields := t.fields()
-	for _, name := range slices.Sorted(maps.Keys(sections)) {
-		section, ok := fields[name]
-		if !ok {
-			return Theme{}, fmt.Errorf("unknown section theme.%s; use %s", name, Sections())
+	var cursorSet, hunkSet bool
+	for _, l := range layers {
+		for _, name := range slices.Sorted(maps.Keys(l.sections)) {
+			section, ok := fields[name]
+			if !ok {
+				return Theme{}, fmt.Errorf("unknown section %s%s; use %s", l.prefix, name, Sections())
+			}
+			if err := apply(section, l.sections[name], l.prefix+name+"."); err != nil {
+				return Theme{}, err
+			}
 		}
-		if err := apply(section, sections[name], "theme."+name+"."); err != nil {
-			return Theme{}, err
-		}
+		_, cursor := l.sections["base"]["cursor_bg"]
+		_, hunk := l.sections["diff"]["hunk_bg"]
+		cursorSet = cursorSet || cursor
+		hunkSet = hunkSet || hunk
 	}
-	_, cursorSet := sections["base"]["cursor_bg"]
-	_, hunkSet := sections["diff"]["hunk_bg"]
 	pageUnset := t.Page == lipgloss.NoColor{}
 	cardUnset := t.Card == lipgloss.NoColor{}
 	t.autoCursor = !cursorSet && pageUnset
@@ -155,6 +213,12 @@ func Moved(key string) (string, bool) {
 		return "modal.input", true
 	}
 	return "", false
+}
+
+func IsSection(name string) bool {
+	var t Theme
+	_, ok := t.fields()[name]
+	return ok
 }
 
 func Sections() string {
