@@ -96,8 +96,9 @@ func (m Model) topBar() string {
 		m.tab(logView, m.keys.logTab, "Log"),
 		span(lipgloss.NewStyle(), " "),
 		m.pill(p.Chip, p.ChipText, "@ "+shortID(id)),
-		span(lipgloss.NewStyle(), " "),
-		span(fg(p.Title).Bold(true), "jj review"),
+	}
+	if subject, _, _ := strings.Cut(strings.TrimSpace(m.change.Description), "\n"); subject != "" {
+		left = append(left, span(lipgloss.NewStyle(), " "), span(fg(p.Title).Bold(true), subject))
 	}
 	n := pickedUnits(m.picks())
 	badge := m.pill(p.BadgeIdle, p.BadgeIdleFg, "nothing selected")

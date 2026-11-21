@@ -41,10 +41,30 @@ func TestLoad_success(t *testing.T) {
 		got := view(m)
 
 		assertContains(t, got,
-			"@ kxyzabcd", "jj review", "changes only", "nothing selected",
+			"@ kxyzabcd", "changes only", "nothing selected",
 			"FILES", "0/4 ✓", "UNIFIED DIFF", "src/ui/view.go",
 			"tab pane · j k line · space select · c commit · d diff · e edit · ? help", "file 1/4 · 1 hunk",
 		)
+	})
+
+	t.Run("shows the revision description in the top bar", func(t *testing.T) {
+		src := newSource()
+		src.change.Description = "feat: add log tab\n\nlonger body\n"
+
+		got := view(loaded(t, src))
+
+		top := lineWith(t, got, "@ kxyzabcd")
+		assertContains(t, top, "@ kxyzabcd  feat: add log tab")
+		assertMissing(t, top, "jj review", "longer body")
+	})
+
+	t.Run("leaves the title empty without a description", func(t *testing.T) {
+		src := newSource()
+		src.change.Description = ""
+
+		top := lineWith(t, view(loaded(t, src)), "@ kxyzabcd")
+
+		assertMissing(t, top, "jj review")
 	})
 
 	t.Run("sorts the file tree with directories first", func(t *testing.T) {
