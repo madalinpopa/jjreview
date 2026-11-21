@@ -23,6 +23,8 @@ const abandonTemplate = `"{\"bookmarks\":" ++ json(self.local_bookmarks().map(|b
 
 const splitTool = "jjr-apply"
 
+const globalFlags = "--no-pager --color never"
+
 var (
 	ErrNoRevision        = errors.New("revision resolved to no commits")
 	ErrMultipleRevisions = errors.New("revision resolved to multiple commits")
@@ -400,7 +402,7 @@ func (c Client) run(ctx context.Context, args ...string) ([]byte, error) {
 }
 
 func (c Client) command(ctx context.Context, args []string) *exec.Cmd {
-	cmd := exec.CommandContext(ctx, "jj", append([]string{"--no-pager", "--color", "never"}, args...)...) //nolint:gosec
+	cmd := exec.CommandContext(ctx, "jj", append(strings.Fields(globalFlags), args...)...) //nolint:gosec
 	cmd.Dir = c.dir
 	return cmd
 }
