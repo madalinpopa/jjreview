@@ -124,3 +124,42 @@ func TestRevisionNavigation_blocked(t *testing.T) {
 		})
 	}
 }
+
+func TestRevisionNavigation_fullFile(t *testing.T) {
+	tests := map[string]struct {
+		opened []string
+		keys   []string
+		want   bool
+	}{
+		"enter in the log opens another revision in changes only": {keys: reviewParent(), want: false},
+		"@ back to the working copy opens it in changes only":     {opened: reviewParent(), keys: []string{"@"}, want: false},
+		"R on the same revision keeps full file":                  {keys: []string{"R"}, want: true},
+		"@ on the working copy already shown keeps full file":     {keys: []string{"@"}, want: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			m := press(t, press(t, loaded(t, revisionSource()), tt.opened...), "f")
+
+			m = press(t, m, tt.keys...)
+
+			if got := m.FullFile(); got != tt.want {
+				t.Errorf("FullFile() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestRevisionNavigation_fullFileAfterCommit(t *testing.T) {
+	src := revisionSource()
+	rest := jj.Change{ChangeID: "rest1zzzzzzzzzz", CommitID: "restcommit1", Parents: []string{"commit1"}, Description: "wip", WorkingCopy: true}
+	src.revisions[jj.WorkingCopyRevset(rest.ChangeID)] = rest
+	m := press(t, loaded(t, src), "tab", "j", "tab", "space", "c", "ctrl+s", "f")
+
+	m = press(t, m, "R")
+
+	assertContains(t, view(m), "@ rest1zzz")
+	if !m.FullFile() {
+		t.Error("FullFile() = false, want full file kept after reloading the remainder")
+	}
+}

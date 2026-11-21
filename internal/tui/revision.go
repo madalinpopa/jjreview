@@ -70,6 +70,9 @@ func (m *Model) applyRevision(msg revisionMsg) tea.Cmd {
 	if msg.step == pickedStep {
 		m.view = reviewView
 	}
+	if change := msg.loaded.change; change.ChangeID != m.target || msg.step == pickedStep && change.CommitID != m.targetHead {
+		m.full = false
+	}
 	m.files, m.reviews = nil, nil
 	cmd := m.applyLoad(msg.loaded)
 	if msg.step != workingCopyStep {
