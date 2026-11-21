@@ -271,25 +271,32 @@ func (c Client) Diff(ctx context.Context, commitID string) ([]diff.File, error) 
 }
 
 func (c Client) Abandon(ctx context.Context, commitID string, bookmarks []string) (bool, error) {
-	rev := VisibleCommitRevset(commitID)
-	out, err := c.run(ctx, "log", "--revision="+rev, "--no-graph", "--config", "ui.log-word-wrap=false", "-T", abandonTemplate)
+	target, err := c.listed(ctx, commitID, bookmarks)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("abandon %s: %w", commitID, err)
 	}
-	if len(bytes.TrimSpace(out)) == 0 {
-		return false, fmt.Errorf("abandon %s: %w", commitID, ErrHiddenRevision)
-	}
-	var target abandonJSON
-	if err := json.Unmarshal(out, &target); err != nil {
-		return false, fmt.Errorf("abandon %s: decode output: %w", commitID, err)
-	}
-	if !slices.Equal(slices.Sorted(slices.Values(target.Bookmarks)), slices.Sorted(slices.Values(bookmarks))) {
-		return false, fmt.Errorf("abandon %s: %w", commitID, ErrBookmarksChanged)
-	}
-	if _, err := c.run(ctx, "abandon", "-r", "exactly("+rev+", 1)"); err != nil {
+	if _, err := c.run(ctx, "abandon", "-r", "exactly("+VisibleCommitRevset(commitID)+", 1)"); err != nil {
 		return false, err
 	}
 	return target.WorkingCopy, nil
+}
+
+func (c Client) listed(ctx context.Context, commitID string, bookmarks []string) (abandonJSON, error) {
+	out, err := c.run(ctx, "log", "--revision="+VisibleCommitRevset(commitID), "--no-graph", "--config", "ui.log-word-wrap=false", "-T", abandonTemplate)
+	if err != nil {
+		return abandonJSON{}, err
+	}
+	if len(bytes.TrimSpace(out)) == 0 {
+		return abandonJSON{}, ErrHiddenRevision
+	}
+	var target abandonJSON
+	if err := json.Unmarshal(out, &target); err != nil {
+		return abandonJSON{}, fmt.Errorf("decode output: %w", err)
+	}
+	if !slices.Equal(slices.Sorted(slices.Values(target.Bookmarks)), slices.Sorted(slices.Values(bookmarks))) {
+		return abandonJSON{}, ErrBookmarksChanged
+	}
+	return target, nil
 }
 
 func (c Client) Successor(ctx context.Context, changeID, commitID string) (Change, error) {
