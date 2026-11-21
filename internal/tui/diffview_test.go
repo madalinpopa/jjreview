@@ -1,6 +1,7 @@
 package tui_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -331,4 +332,45 @@ func BenchmarkToggleRemoved(b *testing.B) {
 	if got := m.Cursor(); got != n {
 		b.Fatalf("Cursor() = %d, want %d", got, n)
 	}
+}
+
+func assertRows(t *testing.T, screen string, rows ...string) {
+	t.Helper()
+	lines := strings.Split(screen, "\n")
+	start := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, rows[0]) })
+	if start < 0 || start+len(rows) > len(lines) {
+		t.Fatalf("View() has no rows %q:\n%s", rows, screen)
+	}
+	for i, want := range rows {
+		if !strings.Contains(lines[start+i], want) {
+			t.Errorf("View() row %d = %q, want it to contain %q:\n%s", start+i, lines[start+i], want, screen)
+		}
+	}
+}
+
+func TestReviewPaths_escaped(t *testing.T) {
+	src := newSource()
+	f := mainFile()
+	f.OldPath, f.NewPath = "dir\nx/a\nb.go", "dir\nx/a\nb.go"
+	src.files = []diff.File{f}
+
+	got := view(start(t, src, nil, 120, 30))
+
+	assertRows(t, got, `UNIFIED DIFF`, "├")
+	assertContains(t, lineWith(t, got, "UNIFIED DIFF"), `dir\nx/a\nb.go`)
+	assertRows(t, got, `▾ dir\nx/`, `○ a\nb.go +2 −1`, "│                   │")
+}
+
+func TestReviewPaths_controlBytesEscaped(t *testing.T) {
+	src := newSource()
+	src.files = nil
+	for _, path := range []string{"a\tb.go", "a    b.go", "c\x1bd.go", "e\x7ff.go", "g\u0085h.go"} {
+		f := mainFile()
+		f.OldPath, f.NewPath = path, path
+		src.files = append(src.files, f)
+	}
+
+	got := view(start(t, src, nil, 120, 30))
+
+	assertContains(t, got, `a\tb.go`, "a    b.go", `c\x1bd.go`, `e\x7ff.go`, `g\u0085h.go`)
 }

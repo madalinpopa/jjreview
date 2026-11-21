@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"image/color"
+	"strconv"
 	"strings"
+	"unicode"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -20,19 +22,25 @@ const (
 )
 
 type modalRows struct {
-	preview int
-	input   int
-	notes   int
+	preview       int
+	input         int
+	notes         int
+	noteInHeading bool
 }
 
 func (m Model) modalLayout() modalRows {
 	notes := len(m.noteSegs(m.modalInner()))
 	rows := modalRows{preview: 1}
 	chrome := modalChrome
-	if m.height < modalChrome+2 {
+	if m.height < modalChrome+2+min(notes, modalNoteRows) {
 		rows.preview, chrome = 0, modalCompactChrome
 	}
 	room := max(m.height-chrome-1-rows.preview, 0)
+	if notes > 0 && room == 0 {
+		rows.notes, rows.noteInHeading = 1, true
+		rows.input = 1
+		return rows
+	}
 	rows.notes = min(notes, modalNoteRows, room)
 	room -= rows.notes
 	rows.input = 1 + min(inputHeight-1, room)
@@ -66,14 +74,16 @@ func (m Model) modalView() string {
 			m.box(inner, p.Border, strings.Join(m.pickLines(boxInner(inner), rows.preview), "\n")),
 		)
 	}
-	lines = append(lines,
-		paint(inner, p.Card, []seg{
-			span(fg(p.Header), "Commit message "),
-			m.generatorNote(),
-		}, nil),
-		m.box(inner, p.Selection, mo.input.View()),
-	)
-	lines = append(lines, m.noteLines(inner, rows.notes)...)
+	heading := paint(inner, p.Card, []seg{
+		span(fg(p.Header), "Commit message "),
+		m.generatorNote(),
+	}, nil)
+	notes := m.noteLines(inner, rows.notes)
+	if rows.noteInHeading {
+		heading, notes = notes[0], nil
+	}
+	lines = append(lines, heading, m.box(inner, p.Selection, mo.input.View()))
+	lines = append(lines, notes...)
 	lines = append(lines, paint(inner, p.Card, nil, m.modalFooter(inner)))
 	return lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
@@ -116,7 +126,7 @@ func (m Model) pickItems(limit int) [][]seg {
 	var items [][]seg
 	for _, pk := range m.modal.picks {
 		f := m.files[pk.file]
-		name := span(fg(p.Strong), f.Path())
+		name := span(fg(p.Strong), escapePath(f.Path()))
 		if wholeOnly(f) {
 			if len(items) == limit {
 				return items
@@ -150,6 +160,22 @@ func (m Model) pickLines(width, rows int) []string {
 		lines[i] = paint(width, p.Input, item, nil)
 	}
 	return lines
+}
+
+func escapePath(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		switch {
+		case r == '\\':
+			b.WriteString(`\\`)
+		case unicode.IsControl(r):
+			q := strconv.QuoteRune(r)
+			b.WriteString(q[1 : len(q)-1])
+		default:
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
 }
 
 func wholeLabel(f diff.File) string {
@@ -226,9 +252,11 @@ func (m Model) modalFooter(width int) []seg {
 	key := fg(p.Key)
 	text := fg(p.Muted)
 	full := []seg{
-		span(key, "ctrl+r"), span(text, " regenerate · "),
 		span(key, "esc"), span(text, " cancel · "),
 		span(key, "ctrl+enter"), span(text, " / "), span(key, "ctrl+s"), span(text, " commit"),
+	}
+	if m.gen != nil {
+		full = append([]seg{span(key, "ctrl+r"), span(text, " regenerate · ")}, full...)
 	}
 	if segsWidth(full) <= width {
 		return full

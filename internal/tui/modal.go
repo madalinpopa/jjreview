@@ -140,8 +140,17 @@ func (m *Model) modalKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 		return m.commit()
 	}
-	if mo.generating {
+	return m.modalInput(msg)
+}
+
+func (m *Model) modalInput(msg tea.Msg) tea.Cmd {
+	mo := m.modal
+	if mo.committing || mo.generating {
 		return nil
+	}
+	if paste, ok := msg.(tea.PasteMsg); ok {
+		paste.Content = strings.NewReplacer("\r\n", "\n", "\r", "\n").Replace(paste.Content)
+		msg = paste
 	}
 	var cmd tea.Cmd
 	mo.input, cmd = mo.input.Update(msg)
@@ -213,6 +222,7 @@ func newInput(p theme.Theme) textarea.Model {
 	in := textarea.New()
 	in.ShowLineNumbers = false
 	in.Prompt = ""
+	in.KeyMap.Paste.SetEnabled(false)
 	in.SetHeight(inputHeight)
 	in.SetStyles(inputStyles(p))
 	in.Focus()

@@ -283,7 +283,7 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.clearSearch()
 	case key.Matches(msg, m.keys.quit):
 		if m.confirmDrop(msg, armed) {
-			return tea.Quit
+			return m.quit()
 		}
 	case key.Matches(msg, m.keys.down):
 		m.log.move(1)
@@ -545,9 +545,9 @@ func (m Model) logFileLine(r logRow, width int) string {
 	default:
 		file := f.files[r.file]
 		letter, style := m.fileStatus(file.Status)
-		name := file.Path()
+		name := escapePath(file.Path())
 		if file.Status == diff.StatusRenamed || file.Status == diff.StatusCopied {
-			name = file.OldPath + " → " + file.NewPath
+			name = escapePath(file.OldPath) + " → " + escapePath(file.NewPath)
 		}
 		left = append(left, span(style, letter), span(lipgloss.NewStyle(), " "), span(fg(p.Strong), name))
 	}

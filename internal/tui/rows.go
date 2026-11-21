@@ -29,7 +29,7 @@ func messageRow(text string) row {
 }
 
 func errorRow(err error) row {
-	return row{kind: rowError, hunk: -1, text: "error: " + err.Error()}
+	return row{kind: rowError, hunk: -1, text: "error: " + escapePath(err.Error())}
 }
 
 func (m Model) rows() []row {
@@ -88,9 +88,9 @@ func describeWhole(f diff.File) string {
 	case f.NewMode == symlinkMode || f.OldMode == symlinkMode:
 		return "symlink"
 	case f.Status == diff.StatusRenamed:
-		return "renamed from " + f.OldPath
+		return "renamed from " + escapePath(f.OldPath)
 	case f.Status == diff.StatusCopied:
-		return "copied from " + f.OldPath
+		return "copied from " + escapePath(f.OldPath)
 	}
 	return ""
 }

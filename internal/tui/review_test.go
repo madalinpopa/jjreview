@@ -388,7 +388,7 @@ func repeatSource(hunks ...diff.Hunk) *fakeSource {
 
 func reload(t *testing.T, m tui.Model) tui.Model {
 	t.Helper()
-	m, cmd := update(t, m, tui.EditorFinishedMsg{})
+	m, cmd := update(t, launched(t, m), tui.EditorFinishedMsg{})
 	return run(t, m, cmd)
 }
 
@@ -598,6 +598,21 @@ func TestFullMode_failed(t *testing.T) {
 	}
 	if got := len(src.requested); got != 2 {
 		t.Errorf("requested = %v, want a retry", src.requested)
+	}
+}
+
+func TestFullMode_escapedError(t *testing.T) {
+	src := newSource()
+	f := viewFile()
+	f.NewPath = "src/ui/a\nb.go"
+	src.files = []diff.File{f}
+	src.contentErr["commit1:src/ui/a\nb.go"] = errors.New("open src/ui/a\nb.go: no such file")
+
+	m := press(t, loaded(t, src), "f")
+
+	assertContains(t, view(m), `error: read src/ui/a\nb.go: open src/ui/a\nb.go: no such file`)
+	if got, want := src.requested, []string{"commit1:src/ui/a\nb.go"}; !slices.Equal(got, want) {
+		t.Errorf("requested = %q, want %q", got, want)
 	}
 }
 

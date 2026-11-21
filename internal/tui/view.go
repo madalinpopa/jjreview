@@ -252,7 +252,7 @@ func (m Model) treeLine(r treeRow, width int) string {
 func (m Model) treeSegs(r treeRow) ([]seg, []seg) {
 	p := m.pal
 	if r.dir {
-		left := []seg{span(lipgloss.NewStyle(), strings.Repeat(" ", 1+r.depth*2)), span(fg(p.Muted), "▾ "), span(fg(p.DirName), r.name)}
+		left := []seg{span(lipgloss.NewStyle(), strings.Repeat(" ", 1+r.depth*2)), span(fg(p.Muted), "▾ "), span(fg(p.DirName), escapePath(r.name))}
 		return left, []seg{span(fg(p.Muted), fmt.Sprint(r.count)), span(lipgloss.NewStyle(), " ")}
 	}
 	name, bar := fg(p.Strong), p.Card
@@ -265,7 +265,7 @@ func (m Model) treeSegs(r treeRow) ([]seg, []seg) {
 		span(lipgloss.NewStyle(), strings.Repeat(" ", r.depth*2)),
 		span(m.glyphStyle(st), st.glyph()),
 		span(lipgloss.NewStyle(), " "),
-		span(name, r.name),
+		span(name, escapePath(r.name)),
 	}
 	return left, []seg{span(fg(p.Muted), m.fileSummary(r.file)), span(lipgloss.NewStyle(), " ")}
 }
@@ -292,7 +292,7 @@ func (m Model) fileSummary(i int) string {
 func (m Model) diffCard() string {
 	var value []seg
 	if file, ok := m.currentFile(); ok {
-		value = []seg{span(fg(m.pal.Title), file.Path())}
+		value = []seg{span(fg(m.pal.Title), escapePath(file.Path()))}
 	}
 	rows := m.rows()
 	width := m.diffCardWidth()

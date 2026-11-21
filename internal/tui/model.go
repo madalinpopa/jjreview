@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"slices"
 
+	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
@@ -34,13 +35,13 @@ type Model struct {
 	themes      theme.Set
 	pal         theme.Theme
 	dark        bool
-	bgAnswered  bool
-	bgPending   int
-	bgGen       int
+	bgPending   bool
 	bgDeferred  bool
-	editing     bool
+	edit        editState
 	held        tea.Cmd
 	holdSeq     int
+	cancelEdit  context.CancelFunc
+	quitting    bool
 	keys        keyMap
 	loaded      bool
 	reloading   bool
@@ -126,14 +127,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Color == nil {
 			break
 		}
-		m.bgAnswered = true
 		m.setProfile(msg.IsDark())
 		m.pal = m.themes.Resolve(m.dark).WithBackground(msg.Color, msg.IsDark())
 	case holdTimeoutMsg:
-		if msg.seq == m.holdSeq && m.held != nil {
-			m.bgPending = 0
-			cmd = m.releaseEditor()
-		}
+		cmd = m.holdTimedOut(msg)
 	case uv.DarkColorSchemeEvent:
 		cmd = m.schemeChanged(true)
 	case uv.LightColorSchemeEvent:
@@ -143,6 +140,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.requestBackground()
 		}
 	case loadedMsg:
+		if m.edit == editReloading {
+			m.edit, m.status = editIdle, ""
+		}
 		cmd = m.applyLoad(msg)
 	case revisionMsg:
 		cmd = m.applyRevision(msg)
@@ -161,18 +161,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case EditorFinishedMsg:
 		cmd = m.editorFinished(msg)
 	case tea.KeyPressMsg:
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
-		}
+		cmd = m.keyPress(msg)
+	case tea.PasteMsg:
 		switch {
 		case m.modal != nil:
-			cmd = m.modalKey(msg)
-		case m.help:
-			m.helpKey(msg)
-		case m.view == logView:
-			cmd = m.logKey(msg)
-		default:
-			cmd = m.reviewKey(msg)
+			cmd = m.modalInput(msg)
+		case m.view == logView && m.log.searching:
+			cmd = m.updateQuery(msg)
 		}
 	default:
 		if m.view == logView && m.log.searching {
@@ -183,6 +178,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.ensureHighlight()
 	m.scroll()
 	return m, cmd
+}
+
+func (m *Model) keyPress(msg tea.KeyPressMsg) tea.Cmd {
+	switch {
+	case m.quitting:
+		return nil
+	case msg.String() == "ctrl+c":
+		return m.quit()
+	case m.edit == editRunning, m.edit == editReloading && !key.Matches(msg, m.keys.quit):
+		return nil
+	case m.modal != nil:
+		return m.modalKey(msg)
+	case m.help:
+		m.helpKey(msg)
+		return nil
+	case m.view == logView:
+		return m.logKey(msg)
+	}
+	return m.reviewKey(msg)
 }
 
 func (m Model) CurrentFile() string {
@@ -224,9 +238,7 @@ func (m *Model) schemeChanged(dark bool) tea.Cmd {
 	if !m.autoTheme() {
 		return nil
 	}
-	if !m.bgAnswered {
-		m.setProfile(dark)
-	}
+	m.setProfile(dark)
 	return m.requestBackground()
 }
 

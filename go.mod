@@ -12,6 +12,7 @@ require (
 	github.com/charmbracelet/x/ansi v0.11.10
 	github.com/microsoft/copilot-sdk/go/v2 v2.0.1
 	github.com/spf13/viper v1.21.0
+	golang.org/x/sys v0.50.0
 )
 
 require (
@@ -60,6 +61,5 @@ require (
 	go.opentelemetry.io/otel/trace v1.47.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.6 // indirect
 	golang.org/x/sync v0.25.0 // indirect
-	golang.org/x/sys v0.50.0 // indirect
 	golang.org/x/text v0.44.0 // indirect
 )

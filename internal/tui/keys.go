@@ -16,7 +16,7 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, m.keys.quit):
 		if m.confirmDrop(msg, armed) {
-			return tea.Quit
+			return m.quit()
 		}
 	case key.Matches(msg, m.keys.logTab):
 		return m.showLog()

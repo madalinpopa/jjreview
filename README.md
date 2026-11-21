@@ -22,8 +22,9 @@
 
 `jjr` shows the diff of a jj change in a terminal UI, lets you pick hunks or
 whole files, and commits the selection with `jj split`, so your jj configuration
-and `jj undo` still apply. The commit message is generated from the selected
-hunks and can be edited before committing.
+and `jj undo` still apply. When a message provider is configured, the commit
+message is generated from the selected hunks; either way, you can edit it before
+committing.
 
 The interface may change before v1.
 
@@ -148,7 +149,7 @@ Commit dialog:
 | Key | Action |
 |-----|--------|
 | `ctrl+enter` / `ctrl+s` | Commit with the message |
-| `ctrl+r` | Generate a new message |
+| `ctrl+r` | Generate a new message (only when a provider is configured) |
 | `esc` | Cancel |
 
 ### How committing works
@@ -263,6 +264,17 @@ comment = "#6e6a86"
 `mode = "light"` or `"dark"` always uses that profile. With `auto` (the
 default), `jjr` follows the terminal's background colour and switches when it
 changes. Terminals that don't report their background get the dark profile.
+
+Light/dark notifications from the terminal apply at once, and the next
+background reply refines the colours. Before opening `$EDITOR`, `jjr` waits up
+to 300 ms for an outstanding background reply. On Linux, macOS and the BSDs it
+also discards terminal input still queued, so the reply doesn't end up in the
+editor. A reply that arrives later than that, after the editor has started, can
+still reach the editor as stray input. Replies can't be matched to queries, so a
+late reply to an earlier, abandoned query can also end the wait early and let
+the newer reply reach the editor. When the editor exits, `jjr` gives up on
+any unanswered query and asks for the background again, and the next edit waits
+up to 300 ms for that reply too.
 
 ### GitHub Copilot
 

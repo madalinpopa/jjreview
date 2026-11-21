@@ -652,6 +652,18 @@ func TestLogExpand_success(t *testing.T) {
 		assertContains(t, lineWith(t, got, "src/main.go"), "│ │")
 	})
 
+	t.Run("l escapes control characters in file names", func(t *testing.T) {
+		src := revisionSource()
+		src.revFiles["childcommit"] = []diff.File{
+			{NewPath: "a\nb.go", Status: diff.StatusAdded},
+			{OldPath: "c\rd.go", NewPath: "e\nf.go", Status: diff.StatusRenamed},
+		}
+
+		got := view(press(t, loaded(t, src), "2", "j", "l"))
+
+		assertRows(t, got, "child feature", `A a\nb.go`, `R c\rd.go → e\nf.go`, "├─╯")
+	})
+
 	t.Run("l again keeps the files shown", func(t *testing.T) {
 		m := press(t, loaded(t, revisionSource()), "2", "j", "l", "l")
 

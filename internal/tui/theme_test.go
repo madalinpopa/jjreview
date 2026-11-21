@@ -1,6 +1,7 @@
 package tui_test
 
 import (
+	"errors"
 	"fmt"
 	"image/color"
 	"os/exec"
@@ -77,6 +78,17 @@ func messages(t *testing.T, cmd tea.Cmd) []tea.Msg {
 		out = append(out, messages(t, next)...)
 	}
 	return out
+}
+
+func backgroundRequests(t *testing.T, cmd tea.Cmd) int {
+	t.Helper()
+	n := 0
+	for _, msg := range messages(t, cmd) {
+		if isBackgroundRequest(msg) {
+			n++
+		}
+	}
+	return n
 }
 
 func isBackgroundRequest(msg tea.Msg) bool {
@@ -181,24 +193,22 @@ func TestTheme_success(t *testing.T) {
 					m, _ = update(t, m, tt.before)
 				}
 
-				m, cmd := update(t, m, tt.msg)
+				m, _ = update(t, m, tt.msg)
 
 				assertKeyword(t, m, tt.want)
-				if got := messages(t, cmd); !slices.ContainsFunc(got, isBackgroundRequest) {
-					t.Errorf("Update(%T) messages = %v, want a background colour request", tt.msg, got)
-				}
 			})
 		}
 	})
 
-	t.Run("auto lets the background reply pick the profile once the terminal has answered", func(t *testing.T) {
+	t.Run("auto applies notifications at once and lets the next reply refine them", func(t *testing.T) {
 		tests := map[string]struct {
-			bg   tea.BackgroundColorMsg
-			msg  tea.Msg
-			want string
+			bg          tea.BackgroundColorMsg
+			msg         tea.Msg
+			provisional string
+			refined     string
 		}{
-			"dark notification on a light background": {bg: lightBg(), msg: uv.DarkColorSchemeEvent{}, want: lightKeyword},
-			"light notification on a dark background": {bg: darkBg(), msg: uv.LightColorSchemeEvent{}, want: darkKeyword},
+			"dark notification on a light background": {bg: lightBg(), msg: uv.DarkColorSchemeEvent{}, provisional: darkKeyword, refined: lightKeyword},
+			"light notification on a dark background": {bg: darkBg(), msg: uv.LightColorSchemeEvent{}, provisional: lightKeyword, refined: darkKeyword},
 		}
 
 		for name, tt := range tests {
@@ -208,10 +218,12 @@ func TestTheme_success(t *testing.T) {
 
 				m, cmd := update(t, m, tt.msg)
 
-				assertKeyword(t, m, tt.want)
+				assertKeyword(t, m, tt.provisional)
 				if got := messages(t, cmd); !slices.ContainsFunc(got, isBackgroundRequest) {
 					t.Errorf("Update(%T) messages = %v, want a background colour request", tt.msg, got)
 				}
+				m, _ = update(t, m, tt.bg)
+				assertKeyword(t, m, tt.refined)
 			})
 		}
 	})
@@ -272,17 +284,17 @@ func TestTheme_success(t *testing.T) {
 		}
 	})
 
-	t.Run("auto requests the background on every focus", func(t *testing.T) {
+	t.Run("auto requests the background on every focus once the last query is answered", func(t *testing.T) {
 		tests := map[string][]tea.Msg{
-			"before any notification":          nil,
-			"after a dark notification":        {uv.DarkColorSchemeEvent{}},
-			"after a light notification":       {uv.LightColorSchemeEvent{}},
-			"after a notification and a reply": {uv.LightColorSchemeEvent{}, lightBg()},
+			"after the first reply":      nil,
+			"after a dark notification":  {uv.DarkColorSchemeEvent{}, darkBg()},
+			"after a light notification": {uv.LightColorSchemeEvent{}, lightBg()},
+			"after an unparsable reply":  {tea.FocusMsg{}, tea.BackgroundColorMsg{}},
 		}
 
 		for name, before := range tests {
 			t.Run(name, func(t *testing.T) {
-				m := themed(t, keywordSource(), nil, theme.ModeAuto)
+				m := answered(t, themed(t, keywordSource(), nil, theme.ModeAuto))
 				for _, msg := range before {
 					m, _ = update(t, m, msg)
 				}
@@ -411,7 +423,7 @@ func TestThemeEditor_success(t *testing.T) {
 
 		for name, msg := range tests {
 			t.Run(name, func(t *testing.T) {
-				m := press(t, themed(t, newSource(), nil, theme.ModeAuto), "tab", "j", "tab")
+				m := launched(t, press(t, themed(t, newSource(), nil, theme.ModeAuto), "tab", "j", "tab"))
 
 				_, cmd := update(t, m, msg)
 
@@ -424,7 +436,7 @@ func TestThemeEditor_success(t *testing.T) {
 	})
 
 	t.Run("explicit modes leave colour scheme reports off after the editor", func(t *testing.T) {
-		m := press(t, themed(t, newSource(), nil, theme.ModeLight), "tab", "j", "tab")
+		m := launched(t, press(t, themed(t, newSource(), nil, theme.ModeLight), "tab", "j", "tab"))
 
 		_, cmd := update(t, m, tui.EditorFinishedMsg{})
 
@@ -511,48 +523,51 @@ func TestThemeEditorHold_success(t *testing.T) {
 		assertContains(t, view(m), "working copy moved; press @ to review it")
 	})
 
-	t.Run("checks the working copy again when a query starts during the check", func(t *testing.T) {
+	t.Run("defers background queries during the working-copy check", func(t *testing.T) {
 		t.Parallel()
 		var opened []string
-		src := newSource()
-		m := withEditor(answered(t, press(t, themed(t, src, nil, theme.ModeAuto), "tab", "j", "tab")), &opened)
+		m := withEditor(answered(t, press(t, themed(t, newSource(), nil, theme.ModeAuto), "tab", "j", "tab")), &opened)
 		m, check := update(t, m, keyMsg("e"))
-		m, _ = update(t, m, tea.FocusMsg{})
-		m, held := update(t, m, check())
-		if got := messages(t, held); slices.ContainsFunc(got, isExec(t)) {
-			t.Fatalf("messages after the check = %v, want the editor held", got)
-		}
-		src.revErrs = map[string]error{jj.WorkingCopyRevset("kxyzabcdefgh"): fmt.Errorf("jj log: %w", jj.ErrNoRevision)}
-		m, recheck := update(t, m, darkBg())
 
-		m, cmd := update(t, m, recheck())
+		m, cmd := update(t, m, tea.FocusMsg{})
 
-		if got := messages(t, cmd); slices.ContainsFunc(got, isExec(t)) || len(opened) != 0 {
-			t.Errorf("messages after the second check = %v, opened = %v, want no editor", got, opened)
+		if got := messages(t, cmd); slices.ContainsFunc(got, isBackgroundRequest) {
+			t.Fatalf("Update(FocusMsg) messages = %v, want the query deferred during the check", got)
 		}
-		assertContains(t, view(m), "working copy moved; press @ to review it")
+		m, cmd = update(t, m, check())
+		if got := messages(t, cmd); !slices.ContainsFunc(got, isExec(t)) {
+			t.Fatalf("messages after the check = %v, want the editor", got)
+		}
+		_, cmd = update(t, m, tui.EditorFinishedMsg{})
+		if got := messages(t, cmd); !slices.ContainsFunc(got, isBackgroundRequest) {
+			t.Errorf("Update(EditorFinishedMsg) messages = %v, want the deferred background request", got)
+		}
 	})
 
-	t.Run("checks the working copy again when a query starts and is answered during the check", func(t *testing.T) {
+	t.Run("a failed working-copy check sends the deferred query", func(t *testing.T) {
 		t.Parallel()
-		var opened []string
-		src := newSource()
-		m := withEditor(answered(t, press(t, themed(t, src, nil, theme.ModeAuto), "tab", "j", "tab")), &opened)
-		m, check := update(t, m, keyMsg("e"))
-		m, _ = update(t, m, tea.FocusMsg{})
-		m, _ = update(t, m, darkBg())
-		m, recheck := update(t, m, check())
-		if got := messages(t, recheck); slices.ContainsFunc(got, isExec(t)) {
-			t.Fatalf("messages after the check = %v, want another check", got)
+		errs := map[string]error{
+			"working copy moved": fmt.Errorf("jj log: %w", jj.ErrNoRevision),
+			"jj failed":          errors.New("jj log: exit status 1"),
 		}
-		src.revErrs = map[string]error{jj.WorkingCopyRevset("kxyzabcdefgh"): fmt.Errorf("jj log: %w", jj.ErrNoRevision)}
 
-		m, cmd := update(t, m, recheck())
+		for name, err := range errs {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				var opened []string
+				src := newSource()
+				m := withEditor(answered(t, press(t, themed(t, src, nil, theme.ModeAuto), "tab", "j", "tab")), &opened)
+				m, check := update(t, m, keyMsg("e"))
+				m, _ = update(t, m, tea.FocusMsg{})
+				src.revErrs = map[string]error{jj.WorkingCopyRevset("kxyzabcdefgh"): err}
 
-		if got := messages(t, cmd); slices.ContainsFunc(got, isExec(t)) || len(opened) != 0 {
-			t.Errorf("messages after the second check = %v, opened = %v, want no editor", got, opened)
+				_, cmd := update(t, m, check())
+
+				if got := messages(t, cmd); slices.ContainsFunc(got, isExec(t)) || !slices.ContainsFunc(got, isBackgroundRequest) {
+					t.Errorf("messages after the failed check = %v, want the deferred background request and no editor", got)
+				}
+			})
 		}
-		assertContains(t, view(m), "working copy moved; press @ to review it")
 	})
 
 	t.Run("defers background queries once the editor is queued", func(t *testing.T) {
@@ -630,6 +645,173 @@ func TestThemeEditorHold_success(t *testing.T) {
 			t.Errorf("messages after a stale timeout = %v, want the editor still held", got)
 		}
 	})
+	t.Run("the query sent on handback holds the next edit", func(t *testing.T) {
+		t.Parallel()
+		var opened []string
+		m, hold := update(t, pendingEditor(t, &opened), keyMsg("e"))
+		m, check := update(t, m, hold())
+		m, _ = update(t, m, check())
+		m, _ = update(t, m, tui.EditorFinishedMsg{Err: exec.ErrNotFound})
+
+		_, cmd := edit(t, m)
+
+		if got := messages(t, cmd); slices.ContainsFunc(got, isExec(t)) {
+			t.Errorf("Update(e) messages = %v, want the editor held for the fresh query", got)
+		}
+	})
+
+	t.Run("a late reply during the editor defers its query until the editor exits", func(t *testing.T) {
+		t.Parallel()
+		var opened []string
+		m, hold := update(t, pendingEditor(t, &opened), keyMsg("e"))
+		m, _ = update(t, m, tea.FocusMsg{})
+		m, check := update(t, m, hold())
+		m, cmd := update(t, m, check())
+		if got := messages(t, cmd); !slices.ContainsFunc(got, isExec(t)) {
+			t.Fatalf("messages after the check = %v, want the editor", got)
+		}
+
+		m, cmd = update(t, m, darkBg())
+
+		if got := messages(t, cmd); slices.ContainsFunc(got, isBackgroundRequest) {
+			t.Errorf("Update(BackgroundColorMsg) messages = %v, want no background request while editing", got)
+		}
+		_, cmd = update(t, m, tui.EditorFinishedMsg{})
+		got := messages(t, cmd)
+		if n := len(slices.DeleteFunc(slices.Clone(got), func(msg tea.Msg) bool { return !isBackgroundRequest(msg) })); n != 1 {
+			t.Errorf("Update(EditorFinishedMsg) messages = %v, want exactly one background request", got)
+		}
+		if !slices.Contains(got, tea.Msg(tea.RawMsg{Msg: ansi.SetModeLightDark})) {
+			t.Errorf("Update(EditorFinishedMsg) messages = %v, want mode 2031 enabled", got)
+		}
+	})
+
+	t.Run("the editor handback abandons an outstanding query", func(t *testing.T) {
+		t.Parallel()
+		var opened []string
+		m, hold := update(t, pendingEditor(t, &opened), keyMsg("e"))
+		m, check := update(t, m, hold())
+		m, _ = update(t, m, check())
+
+		m, cmd := update(t, m, tui.EditorFinishedMsg{Err: exec.ErrNotFound})
+
+		if got := backgroundRequests(t, cmd); got != 1 {
+			t.Fatalf("Update(EditorFinishedMsg) background requests = %d, want a fresh one", got)
+		}
+		m, _ = update(t, m, darkBg())
+		_, cmd = update(t, m, tea.FocusMsg{})
+		if got := backgroundRequests(t, cmd); got != 1 {
+			t.Errorf("Update(FocusMsg) background requests = %d, want 1", got)
+		}
+	})
+
+	t.Run("an inherited reply after the handback sends no query", func(t *testing.T) {
+		t.Parallel()
+		var opened []string
+		m, hold := update(t, pendingEditor(t, &opened), keyMsg("e"))
+		m, check := update(t, m, hold())
+		m, _ = update(t, m, check())
+		m, cmd := update(t, m, tui.EditorFinishedMsg{Err: exec.ErrNotFound})
+		if got := backgroundRequests(t, cmd); got != 1 {
+			t.Fatalf("Update(EditorFinishedMsg) background requests = %d, want 1", got)
+		}
+
+		m, cmd = update(t, m, darkBg())
+
+		if got := backgroundRequests(t, cmd); got != 0 {
+			t.Errorf("Update(BackgroundColorMsg) background requests = %d, want 0", got)
+		}
+		_, cmd = update(t, m, tea.FocusMsg{})
+		if got := backgroundRequests(t, cmd); got != 1 {
+			t.Errorf("Update(FocusMsg) background requests = %d, want 1", got)
+		}
+	})
+
+	t.Run("a notification applies after a reply even if its query is never answered", func(t *testing.T) {
+		t.Parallel()
+		m := themed(t, keywordSource(), nil, theme.ModeAuto)
+		m, _ = update(t, m, darkBg())
+		m, _ = update(t, m, tea.FocusMsg{})
+
+		m, _ = update(t, m, uv.LightColorSchemeEvent{})
+
+		assertKeyword(t, m, lightKeyword)
+	})
+
+	t.Run("sends one background query at a time", func(t *testing.T) {
+		t.Parallel()
+		m := answered(t, themed(t, newSource(), nil, theme.ModeAuto))
+		m, cmd := update(t, m, tea.FocusMsg{})
+		if got := messages(t, cmd); !slices.ContainsFunc(got, isBackgroundRequest) {
+			t.Fatalf("Update(FocusMsg) messages = %v, want a background request", got)
+		}
+
+		m, cmd = update(t, m, tea.FocusMsg{})
+
+		if got := messages(t, cmd); slices.ContainsFunc(got, isBackgroundRequest) {
+			t.Errorf("second Update(FocusMsg) messages = %v, want no request while one is outstanding", got)
+		}
+		_, cmd = update(t, m, darkBg())
+		if got := messages(t, cmd); !slices.ContainsFunc(got, isBackgroundRequest) {
+			t.Errorf("Update(BackgroundColorMsg) messages = %v, want the deferred background request", got)
+		}
+	})
+
+	t.Run("defers background queries while the editor is held", func(t *testing.T) {
+		t.Parallel()
+		events := map[string]tea.Msg{
+			"focus":        tea.FocusMsg{},
+			"dark scheme":  uv.DarkColorSchemeEvent{},
+			"light scheme": uv.LightColorSchemeEvent{},
+		}
+
+		for name, event := range events {
+			t.Run(name, func(t *testing.T) {
+				t.Parallel()
+				var opened []string
+				m, _ := update(t, pendingEditor(t, &opened), keyMsg("e"))
+
+				m, cmd := update(t, m, event)
+
+				if got := messages(t, cmd); slices.ContainsFunc(got, isBackgroundRequest) {
+					t.Fatalf("Update(%T) messages = %v, want no background request during the hold", event, got)
+				}
+				m, check := update(t, m, darkBg())
+				m, cmd = update(t, m, check())
+				if got := messages(t, cmd); !slices.ContainsFunc(got, isExec(t)) {
+					t.Fatalf("Update(editCheckedMsg) messages = %v, want the editor", got)
+				}
+				_, cmd = update(t, m, tui.EditorFinishedMsg{})
+				if got := messages(t, cmd); !slices.ContainsFunc(got, isBackgroundRequest) {
+					t.Errorf("Update(EditorFinishedMsg) messages = %v, want the deferred background request", got)
+				}
+			})
+		}
+	})
+
+	t.Run("a timed-out hold falls back to colour scheme notifications", func(t *testing.T) {
+		t.Parallel()
+		var opened []string
+		m := withEditor(themed(t, keywordSource(), nil, theme.ModeAuto), &opened)
+		m, _ = update(t, m, lightBg())
+		m, _ = update(t, m, tea.FocusMsg{})
+		m, hold := update(t, m, keyMsg("e"))
+		m, check := update(t, m, hold())
+		m, _ = update(t, m, check())
+		m, _ = update(t, m, tui.EditorFinishedMsg{Err: exec.ErrNotFound})
+
+		m, cmd := update(t, m, uv.DarkColorSchemeEvent{})
+
+		assertKeyword(t, m, darkKeyword)
+		if got := messages(t, cmd); slices.ContainsFunc(got, isBackgroundRequest) {
+			t.Errorf("Update(DarkColorSchemeEvent) messages = %v, want no background request", got)
+		}
+		_, cmd = update(t, m, tea.FocusMsg{})
+		if got := messages(t, cmd); slices.ContainsFunc(got, isBackgroundRequest) {
+			t.Errorf("Update(FocusMsg) messages = %v, want no background request", got)
+		}
+	})
+
 	t.Run("a timeout after the reply keeps later queries pending", func(t *testing.T) {
 		t.Parallel()
 		var opened []string

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
 )
@@ -114,6 +116,74 @@ func TestCommitModal_success(t *testing.T) {
 		got := view(m)
 		assertContains(t, got, "set provider in config.toml to generate")
 		assertMissing(t, got, "ANTHROPIC_API_KEY", "generating")
+	})
+
+	t.Run("without a generator the footer leaves out regenerate", func(t *testing.T) {
+		m := start(t, newSource(), nil, 160, 30)
+
+		m = press(t, m, "tab", "j", "tab", "space", "c")
+
+		got := view(m)
+		assertContains(t, got, "esc cancel · ctrl+enter / ctrl+s commit")
+		assertMissing(t, got, "ctrl+r", "regenerate")
+	})
+
+	t.Run("pasting fills the message", func(t *testing.T) {
+		m := start(t, newSource(), nil, 120, 30)
+		m = press(t, m, "tab", "j", "tab", "space", "c")
+
+		m, _ = update(t, m, tea.PasteMsg{Content: "feat: pasted"})
+
+		if got := m.Message(); got != "feat: pasted" {
+			t.Errorf("Message() = %q, want the pasted text", got)
+		}
+	})
+
+	t.Run("pasting CRLF text keeps one line break per line", func(t *testing.T) {
+		m := start(t, newSource(), nil, 120, 30)
+		m = press(t, m, "tab", "j", "tab", "space", "c")
+
+		m, _ = update(t, m, tea.PasteMsg{Content: "feat: pasted\r\n\r\nfirst\r\nsecond\rthird"})
+
+		if got, want := m.Message(), "feat: pasted\n\nfirst\nsecond\nthird"; got != want {
+			t.Errorf("Message() = %q, want %q", got, want)
+		}
+	})
+
+	t.Run("ctrl+v keeps the selected text", func(t *testing.T) {
+		m := start(t, newSource(), nil, 120, 30)
+		m = press(t, m, "tab", "j", "tab", "space", "c", "a", "b", "c")
+		m, _ = update(t, m, tea.KeyPressMsg{Code: 'g', Mod: tea.ModCtrl})
+
+		m, _ = update(t, m, tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl})
+
+		if got := m.Message(); got != "abc" {
+			t.Errorf("Message() = %q, want the selected text kept", got)
+		}
+	})
+
+	t.Run("a paste while generating does not change the message", func(t *testing.T) {
+		m := start(t, newSource(), &fakeGenerator{text: "feat: generated"}, 120, 30)
+		m = press(t, m, "tab", "j", "tab", "space")
+		m, _ = update(t, m, keyMsg("c"))
+
+		m, _ = update(t, m, tea.PasteMsg{Content: "pasted"})
+
+		if got := m.Message(); got != "" {
+			t.Errorf("Message() = %q, want the paste ignored while generating", got)
+		}
+	})
+
+	t.Run("a paste while committing does not change the message", func(t *testing.T) {
+		m := start(t, newSource(), nil, 120, 30)
+		m = press(t, m, "tab", "j", "tab", "space", "c", "m", "s", "g")
+		m, _ = update(t, m, keyMsg("ctrl+s"))
+
+		m, _ = update(t, m, tea.PasteMsg{Content: "pasted"})
+
+		if got := m.Message(); got != "msg" {
+			t.Errorf("Message() = %q, want the paste ignored while committing", got)
+		}
 	})
 
 	t.Run("esc closes the modal and keeps the selection", func(t *testing.T) {
@@ -501,6 +571,85 @@ func TestModalLayout_success(t *testing.T) {
 		m = press(t, m, "ctrl+s")
 
 		assertContains(t, view(m), "revision changed", "esc cancel", "ctrl+s commit")
+	})
+
+	t.Run("keeps the error and footer at every short height", func(t *testing.T) {
+		for height := 8; height <= 14; height++ {
+			t.Run(fmt.Sprint(height), func(t *testing.T) {
+				src := newSource()
+				src.splitErr = stale
+				m := start(t, src, &fakeGenerator{text: "msg"}, 80, height)
+				m = press(t, m, "tab", "j", "tab", "space", "c")
+
+				m = press(t, m, "ctrl+s")
+
+				assertContains(t, view(m), "New commit", "revision changed", "esc cancel", "ctrl+s commit")
+			})
+		}
+	})
+
+	t.Run("keeps the whole recovery instruction once two note rows fit", func(t *testing.T) {
+		for height := 10; height <= 16; height++ {
+			t.Run(fmt.Sprint(height), func(t *testing.T) {
+				src := newSource()
+				src.splitErr = stale
+				m := start(t, src, &fakeGenerator{text: "msg"}, 80, height)
+				m = press(t, m, "tab", "j", "tab", "space", "c")
+
+				m = press(t, m, "ctrl+s")
+
+				assertContains(t, view(m), "revision changed", "restart", "jjr to review it again", "esc cancel", "ctrl+s commit")
+			})
+		}
+	})
+
+	t.Run("a renamed whole file escapes its source path", func(t *testing.T) {
+		src := newSource()
+		src.files = []diff.File{
+			{OldPath: "old\npart\nname.go", NewPath: "new.go", OldMode: "100644", NewMode: "100644", Status: diff.StatusRenamed},
+		}
+		m := start(t, src, &fakeGenerator{text: "msg"}, 80, 12)
+		m = press(t, m, "S")
+
+		m = press(t, m, "c")
+
+		assertContains(t, view(m), `new.go  renamed from old\npart\nname.go`, "esc cancel", "ctrl+s commit")
+	})
+
+	t.Run("literal backslashes in paths are escaped", func(t *testing.T) {
+		src := newSource()
+		src.files = []diff.File{
+			{OldPath: `old\n.go`, NewPath: `new\r.go`, OldMode: "100644", NewMode: "100644", Status: diff.StatusRenamed},
+		}
+		m := start(t, src, &fakeGenerator{text: "msg"}, 80, 12)
+		m = press(t, m, "S")
+
+		m = press(t, m, "c")
+
+		assertContains(t, view(m), `new\\r.go  renamed from old\\n.go`)
+	})
+
+	t.Run("the minimum height shows the error in place of the message heading", func(t *testing.T) {
+		m := start(t, newSource(), nil, 80, 8)
+		m = press(t, m, "tab", "j", "tab", "space", "c")
+
+		m = press(t, m, "ctrl+s")
+
+		got := view(m)
+		assertContains(t, got, "commit message is empty", "esc cancel", "ctrl+s commit")
+		assertMissing(t, got, "Commit message")
+	})
+
+	t.Run("a filename with line breaks is escaped in the preview", func(t *testing.T) {
+		src := newSource()
+		src.files[1].OldPath, src.files[1].NewPath = "src/ma\nin\r.go", "src/ma\nin\r.go"
+		src.contents["parent1:src/ma\nin\r.go"] = mainParent
+		m := start(t, src, &fakeGenerator{text: "msg"}, 80, 14)
+		m = press(t, m, "tab", "j", "tab", "space")
+
+		m = press(t, m, "c")
+
+		assertContains(t, view(m), `src/ma\nin\r.go`, "esc cancel", "ctrl+s commit")
 	})
 
 	t.Run("the stale message wins over a generation error", func(t *testing.T) {
