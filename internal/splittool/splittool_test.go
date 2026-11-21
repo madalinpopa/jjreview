@@ -127,9 +127,10 @@ func TestRun_success(t *testing.T) {
 		}
 	})
 
-	t.Run("leaves JJ-INSTRUCTIONS in right untouched", func(t *testing.T) {
+	t.Run("restores unselected changes to a tracked JJ-INSTRUCTIONS file", func(t *testing.T) {
 		left, right := t.TempDir(), t.TempDir()
-		writeFile(t, filepath.Join(right, "JJ-INSTRUCTIONS"), "help\n", 0o644)
+		writeFile(t, filepath.Join(left, "JJ-INSTRUCTIONS"), "before\n", 0o644)
+		writeFile(t, filepath.Join(right, "JJ-INSTRUCTIONS"), "after\n", 0o644)
 		spec := writeSpec(t, nil)
 
 		err := splittool.Run(spec, left, right)
@@ -137,8 +138,8 @@ func TestRun_success(t *testing.T) {
 			t.Fatalf("Run() error = %v", err)
 		}
 
-		if got := readFile(t, filepath.Join(right, "JJ-INSTRUCTIONS")); got != "help\n" {
-			t.Errorf("right/JJ-INSTRUCTIONS = %q, want %q", got, "help\n")
+		if got := readFile(t, filepath.Join(right, "JJ-INSTRUCTIONS")); got != "before\n" {
+			t.Errorf("right/JJ-INSTRUCTIONS = %q, want %q", got, "before\n")
 		}
 	})
 

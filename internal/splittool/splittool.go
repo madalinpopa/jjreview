@@ -14,10 +14,9 @@ import (
 )
 
 const (
-	instructionsFile = "JJ-INSTRUCTIONS"
-	modeRegular      = "100644"
-	modeExecutable   = "100755"
-	modeSymlink      = "120000"
+	modeRegular    = "100644"
+	modeExecutable = "100755"
+	modeSymlink    = "120000"
 )
 
 var (
@@ -48,22 +47,61 @@ func Run(specPath, left, right string) (err error) {
 	}
 	defer func() { err = errors.Join(err, closeRoot(rightRoot)) }()
 
+	for i := range entries {
+		e := &entries[i]
+		if !e.FromRight || e.Delete {
+			continue
+		}
+		if err := e.readFromRight(rightRoot); err != nil {
+			return err
+		}
+	}
 	if err := syncTree(leftRoot, rightRoot); err != nil {
 		return err
 	}
 	for _, e := range entries {
-		if e.Delete {
-			if err := deleteEntry(rightRoot, e.name); err != nil {
-				return err
-			}
+		if !e.Delete {
+			continue
+		}
+		if err := deleteEntry(rightRoot, e.name); err != nil {
+			return err
 		}
 	}
 	for _, e := range entries {
-		if !e.Delete {
-			if err := apply(leftRoot, rightRoot, e); err != nil {
-				return err
-			}
+		if e.Delete {
+			continue
 		}
+		if err := apply(leftRoot, rightRoot, e); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (e *entry) readFromRight(right *os.Root) error {
+	info, err := right.Lstat(e.name)
+	if err != nil {
+		return fmt.Errorf("stat right %s: %w", e.name, err)
+	}
+	mode := info.Mode()
+	switch {
+	case mode&fs.ModeSymlink != 0:
+		target, err := right.Readlink(e.name)
+		if err != nil {
+			return fmt.Errorf("read symlink %s: %w", e.name, err)
+		}
+		e.Content, e.Mode = target, modeSymlink
+	case mode.IsRegular():
+		content, err := right.ReadFile(e.name)
+		if err != nil {
+			return fmt.Errorf("read right %s: %w", e.name, err)
+		}
+		e.Content, e.Mode = string(content), modeRegular
+		if mode&0o100 != 0 {
+			e.Mode = modeExecutable
+		}
+	default:
+		return fmt.Errorf("read right %s: unsupported file mode %s", e.name, mode)
 	}
 	return nil
 }
@@ -143,7 +181,7 @@ func walkTracked(root *os.Root, fn func(name string, d fs.DirEntry) error) error
 			return err
 		}
 		name := filepath.FromSlash(path)
-		if name == "." || name == instructionsFile {
+		if name == "." {
 			return nil
 		}
 		return fn(name, d)
@@ -156,7 +194,7 @@ func prune(right *os.Root, want map[string]fs.FileMode) error {
 			return fmt.Errorf("scan right %s: %w", path, err)
 		}
 		name := filepath.FromSlash(path)
-		if name == "." || name == instructionsFile {
+		if name == "." {
 			return nil
 		}
 		if typ, ok := want[name]; ok && typ == d.Type() {
