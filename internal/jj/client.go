@@ -279,6 +279,10 @@ func CommitRevset(commitID string) string {
 	return "commit_id(" + quote(commitID) + ")"
 }
 
+func VisibleRevset(rev string) string {
+	return "(" + rev + ") & visible()"
+}
+
 func WorkingCopyRevset(changeID string) string {
 	return "@ & " + changeRevset(changeID)
 }
@@ -296,6 +300,11 @@ func quote(s string) string {
 }
 
 func (c Client) run(ctx context.Context, args ...string) ([]byte, error) {
+	out, _, err := c.output(ctx, args...)
+	return out, err
+}
+
+func (c Client) output(ctx context.Context, args ...string) ([]byte, string, error) {
 	cmd := exec.CommandContext(ctx, "jj", append([]string{"--no-pager", "--color", "never"}, args...)...) //nolint:gosec
 	cmd.Dir = c.dir
 	var stderr bytes.Buffer
@@ -304,11 +313,11 @@ func (c Client) run(ctx context.Context, args ...string) ([]byte, error) {
 	if err != nil {
 		subcommand := strings.Join(args[:subcommandLen(args)], " ")
 		if msg := strings.TrimSpace(stderr.String()); msg != "" {
-			return nil, fmt.Errorf("jj %s: %w: %s", subcommand, err, msg)
+			return nil, "", fmt.Errorf("jj %s: %w: %s", subcommand, err, msg)
 		}
-		return nil, fmt.Errorf("jj %s: %w", subcommand, err)
+		return nil, "", fmt.Errorf("jj %s: %w", subcommand, err)
 	}
-	return out, nil
+	return out, stderr.String(), nil
 }
 
 func subcommandLen(args []string) int {

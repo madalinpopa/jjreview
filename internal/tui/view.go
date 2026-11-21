@@ -46,6 +46,8 @@ func (m Model) screen() string {
 	switch m.view {
 	case logView:
 		body = m.logCard()
+	case bookmarksView:
+		body = m.bookmarksCard()
 	case reviewView:
 		body = lipgloss.JoinHorizontal(lipgloss.Top,
 			m.filesCard(),
@@ -90,31 +92,79 @@ func (m Model) topBar() string {
 	if id == "" {
 		id = m.rev
 	}
-	left := []seg{
-		m.tab(reviewView, m.keys.reviewTab, "Review"),
-		span(lipgloss.NewStyle(), " "),
-		m.tab(logView, m.keys.logTab, "Log"),
-		span(lipgloss.NewStyle(), " "),
-		m.pill(p.Chip, p.ChipText, "@ "+shortID(id)),
-	}
-	if subject, _, _ := strings.Cut(strings.TrimSpace(m.change.Description), "\n"); subject != "" {
-		left = append(left, span(lipgloss.NewStyle(), " "), span(fg(p.Title).Bold(true), subject))
-	}
+	gap := span(lipgloss.NewStyle(), " ")
+	revision := m.pill(p.Chip, p.ChipText, "@ "+shortID(id))
 	n := pickedUnits(m.picks())
 	badge := m.pill(p.BadgeIdle, p.BadgeIdleFg, "nothing selected")
 	if n > 0 {
 		badge = m.pill(p.BadgeSel, p.Picked, fmt.Sprintf("%d %s selected", n, plural(n, "hunk")))
 	}
 	badge.style = badge.style.Bold(true)
-	right := []seg{m.pill(p.Chip, p.Key, m.modeLabel()), span(lipgloss.NewStyle(), " "), badge}
+	var indicators []seg
 	if m.change.Immutable {
-		right = append([]seg{m.pill(p.Chip, p.Removed, "read only"), span(lipgloss.NewStyle(), " ")}, right...)
+		indicators = append(indicators, m.pill(p.Chip, p.Removed, "read only"))
 	}
-	return paint(m.width, p.Page, left, right)
+	if n > 0 {
+		indicators = append(indicators, badge)
+	}
+	optional := []seg{m.pill(p.Chip, p.Key, m.modeLabel())}
+	if n == 0 {
+		optional = append(optional, badge)
+	}
+	var left, right []seg
+	for _, short := range []bool{false, true} {
+		left = append(m.tabs(short), revision)
+		for drop := 0; drop <= len(optional)+len(indicators); drop++ {
+			right = slices.Concat(optional, indicators)[drop:]
+			if rowWidth(spaced(left), spaced(right))+1 <= m.width {
+				break
+			}
+		}
+		if rowWidth(spaced(left), spaced(right))+1 <= m.width {
+			break
+		}
+	}
+	left = spaced(left)
+	if subject, _, _ := strings.Cut(strings.TrimSpace(m.change.Description), "\n"); subject != "" {
+		left = append(left, gap, span(fg(p.Title).Bold(true), subject))
+	}
+	return paint(m.width, p.Page, left, spaced(right))
+}
+
+func spaced(segs []seg) []seg {
+	var out []seg
+	for i, s := range segs {
+		if i > 0 {
+			out = append(out, span(lipgloss.NewStyle(), " "))
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func (m Model) tabs(short bool) []seg {
+	tabs := []struct {
+		view  view
+		key   key.Binding
+		label string
+	}{
+		{reviewView, m.keys.reviewTab, "Review"},
+		{logView, m.keys.logTab, "Log"},
+		{bookmarksView, m.keys.bookmarksTab, "Bookmarks"},
+	}
+	segs := make([]seg, len(tabs))
+	for i, t := range tabs {
+		label := t.label
+		if short {
+			label = ""
+		}
+		segs[i] = m.tab(t.view, t.key, label)
+	}
+	return segs
 }
 
 func (m Model) tab(v view, b key.Binding, label string) seg {
-	text := b.Help().Key + " " + label
+	text := strings.TrimSpace(b.Help().Key + " " + label)
 	if v == m.view {
 		s := m.pill(m.pal.Chip, m.pal.Key, text)
 		s.style = s.style.Bold(true)
@@ -175,7 +225,7 @@ func (m Model) bottomBar() []string {
 }
 
 func (m Model) statusText() string {
-	if m.status != "" || m.view == logView {
+	if m.status != "" || m.view != reviewView {
 		return m.status
 	}
 	if !m.ready() {

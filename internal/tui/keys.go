@@ -20,6 +20,8 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	case key.Matches(msg, m.keys.logTab):
 		return m.showLog()
+	case key.Matches(msg, m.keys.bookmarksTab):
+		return m.showBookmarks()
 	case key.Matches(msg, m.keys.switchPane):
 		m.filesFocus = !m.filesFocus
 	case key.Matches(msg, m.keys.down):

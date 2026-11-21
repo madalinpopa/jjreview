@@ -72,9 +72,5 @@ func (m *Model) applyRevision(msg revisionMsg) tea.Cmd {
 	if msg.step != workingCopyStep {
 		return cmd
 	}
-	m.log.stale = true
-	if m.view == logView {
-		return tea.Batch(cmd, m.loadLog())
-	}
-	return cmd
+	return tea.Batch(cmd, m.invalidate())
 }

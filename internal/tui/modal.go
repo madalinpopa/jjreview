@@ -181,7 +181,7 @@ func (m *Model) applyCommitted(msg committedMsg) {
 		mo.err = msg.err
 		return
 	}
-	m.log.stale = true
+	m.markStale()
 	id := shortID(msg.selected.ChangeID)
 	before := m.rows()
 	for _, p := range mo.picks {

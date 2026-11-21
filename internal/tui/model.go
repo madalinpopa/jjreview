@@ -75,6 +75,9 @@ type Model struct {
 	reloadPath  string
 	view        view
 	log         logState
+	bookmarks   bookmarkState
+	bmModal     *bookmarkModal
+	bmDelete    *jj.Bookmark
 }
 
 func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
@@ -154,6 +157,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyLogFiles(msg)
 	case logMsg:
 		cmd = m.applyLog(msg)
+	case bookmarksMsg:
+		cmd = m.applyBookmarks(msg)
+	case bookmarkSavedMsg:
+		cmd = m.applyBookmarkSaved(msg)
+	case bookmarkDeletedMsg:
+		cmd = m.applyBookmarkDeleted(msg)
 	case committedMsg:
 		m.applyCommitted(msg)
 	case editCheckedMsg:
@@ -166,6 +175,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case m.modal != nil:
 			cmd = m.modalInput(msg)
+		case m.bmModal != nil:
+			cmd = m.bookmarkModalInput(msg)
 		case m.view == logView && m.log.searching:
 			cmd = m.updateQuery(msg)
 		}
@@ -175,6 +186,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.resizeModal()
+	m.resizeBookmarkModal()
 	m.ensureHighlight()
 	m.scroll()
 	return m, cmd
@@ -190,11 +202,17 @@ func (m *Model) keyPress(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case m.modal != nil:
 		return m.modalKey(msg)
+	case m.bmDelete != nil:
+		return m.bookmarkDeleteKey(msg)
+	case m.bmModal != nil:
+		return m.bookmarkModalKey(msg)
 	case m.help:
 		m.helpKey(msg)
 		return nil
 	case m.view == logView:
 		return m.logKey(msg)
+	case m.view == bookmarksView:
+		return m.bookmarksKey(msg)
 	}
 	return m.reviewKey(msg)
 }
@@ -340,8 +358,12 @@ func (m Model) requestContent() tea.Cmd {
 }
 
 func (m *Model) scroll() {
-	if m.view == logView {
+	switch m.view {
+	case logView:
 		m.log.keepVisible(m.logHeight())
+		return
+	case bookmarksView:
+		m.bookmarks.keepVisible(m.diffHeight())
 		return
 	}
 	m.diffTop = scrollTop(m.diffTop, m.cursor, m.diffHeight(), len(m.rows()))

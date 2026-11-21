@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"image/color"
 	"regexp"
+	"slices"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -40,6 +42,101 @@ type fakeSource struct {
 	log        []jj.LogLine
 	logErr     error
 	logCalls   int
+	bookmarks  []jj.Bookmark
+	bmLoadErr  error
+	bmCalls    int
+	bmErr      error
+	backwards  bool
+	bmWarnings string
+	renameErr  error
+	moves      []string
+	beforeMove func()
+	publishErr error
+}
+
+func (s *fakeSource) Bookmarks(context.Context) ([]jj.Bookmark, error) {
+	s.bmCalls++
+	return slices.Clone(s.bookmarks), s.bmLoadErr
+}
+
+func (s *fakeSource) bookmarkIndex(name string) int {
+	return slices.IndexFunc(s.bookmarks, func(b jj.Bookmark) bool { return b.Name == name })
+}
+
+func (s *fakeSource) sortBookmarks() {
+	slices.SortFunc(s.bookmarks, func(a, b jj.Bookmark) int { return strings.Compare(a.Name, b.Name) })
+}
+
+func fakeCommit(rev string) string {
+	return strings.TrimSuffix(strings.TrimPrefix(rev, `commit_id("`), `")`)
+}
+
+func (s *fakeSource) CreateBookmark(_ context.Context, name, rev string) (string, error) {
+	if s.bmErr != nil {
+		return "", s.bmErr
+	}
+	if s.bookmarkIndex(name) >= 0 {
+		return "", fmt.Errorf("jj bookmark create: Bookmark already exists: %s", name)
+	}
+	s.bookmarks = append(s.bookmarks, jj.Bookmark{Name: name, CommitID: fakeCommit(rev)})
+	s.sortBookmarks()
+	return s.published()
+}
+
+func (s *fakeSource) RenameBookmark(_ context.Context, oldName, newName string) (string, error) {
+	if s.renameErr != nil {
+		return "", s.renameErr
+	}
+	i := s.bookmarkIndex(oldName)
+	if i < 0 || s.bookmarkIndex(newName) >= 0 {
+		return "", fmt.Errorf("jj bookmark rename: cannot rename %s to %s", oldName, newName)
+	}
+	s.bookmarks[i].Name = newName
+	s.sortBookmarks()
+	return s.bmWarnings, nil
+}
+
+func (s *fakeSource) MoveBookmark(_ context.Context, name string, from []string, to string, allowBackwards bool) (string, error) {
+	if s.beforeMove != nil {
+		s.beforeMove()
+		s.beforeMove = nil
+	}
+	if s.bmErr != nil {
+		return "", s.bmErr
+	}
+	i := s.bookmarkIndex(name)
+	if i < 0 {
+		return "", fmt.Errorf("move %s: %w", name, jj.ErrBookmarkChanged)
+	}
+	b := s.bookmarks[i]
+	at := slices.Contains(from, b.CommitID)
+	if b.Conflict {
+		at = slices.ContainsFunc(b.Added, func(id string) bool { return slices.Contains(from, id) })
+	}
+	switch {
+	case !at:
+		return "", fmt.Errorf("move %s: %w", name, jj.ErrBookmarkChanged)
+	case s.backwards && !allowBackwards:
+		return "", fmt.Errorf("move %s: %w", name, jj.ErrBookmarkBackwards)
+	}
+	s.moves = append(s.moves, to)
+	s.bookmarks[i] = jj.Bookmark{Name: name, CommitID: to}
+	return s.published()
+}
+
+func (s *fakeSource) published() (string, error) {
+	if s.publishErr != nil {
+		return "", s.publishErr
+	}
+	return s.bmWarnings, nil
+}
+
+func (s *fakeSource) DeleteBookmark(_ context.Context, name string) (string, error) {
+	if s.bmErr != nil {
+		return "", s.bmErr
+	}
+	s.bookmarks = slices.DeleteFunc(s.bookmarks, func(b jj.Bookmark) bool { return b.Name == name })
+	return s.published()
 }
 
 func (s *fakeSource) Log(context.Context) ([]jj.LogLine, error) {
@@ -55,6 +152,12 @@ func (s *fakeSource) Change(_ context.Context, rev string) (jj.Change, error) {
 	s.changeRevs = append(s.changeRevs, rev)
 	if err, ok := s.revErrs[rev]; ok {
 		return jj.Change{}, err
+	}
+	if inner, ok := strings.CutSuffix(rev, ") & visible()"); ok {
+		rev = strings.TrimPrefix(inner, "(")
+		if err, ok := s.revErrs[rev]; ok {
+			return jj.Change{}, err
+		}
 	}
 	if change, ok := s.revisions[rev]; ok {
 		return change, nil

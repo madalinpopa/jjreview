@@ -98,7 +98,7 @@ hunk in the file.
 
 | Key | Action |
 |-----|--------|
-| `1` / `2` | Show the review tab / the log tab |
+| `1` / `2` / `3` | Show the review tab / the log tab / the bookmarks tab |
 | `tab` | Switch between the file pane and the diff pane |
 | `j` / `k` | Next / previous file in the file pane, next / previous line in the diff pane |
 | `ctrl+d` / `ctrl+u` (`pgdown` / `pgup`) | Half a page down / up in the focused pane |
@@ -143,6 +143,57 @@ included, contains it, ignoring case.
 | `q` | Quit |
 
 `enter` drops the selection, so it asks you to press it again first.
+
+Bookmarks tab:
+
+The bookmarks tab lists the local bookmarks with the change ID, commit ID and
+subject of their target. A bar marks the bookmark on the revision under review.
+Each tracked remote shows `✓` when it is in sync, or how many commits the local
+bookmark is ahead (`↑`) or behind (`↓`); a count jj could only bound is shown as
+a minimum, such as `↑10+`. Conflicted bookmarks are marked too.
+
+| Key | Action |
+|-----|--------|
+| `j` / `k` | Next / previous bookmark |
+| `ctrl+d` / `ctrl+u` (`pgdown` / `pgup`) | Scroll half a page down / up |
+| `g` / `G` (`home` / `end`) | First / last bookmark |
+| `enter` | Review the target revision of the bookmark; on the revision already under review it just switches to the review and keeps the selection, on another revision it asks before dropping selected hunks |
+| `n` | Create a bookmark; the target defaults to the commit under review (`commit_id("…")`) |
+| `e` | Rename the bookmark or move it to another revision; a conflicted bookmark has to be resolved with `jj bookmark set` first |
+| `d` | Delete the bookmark: a box shows it and its target, `y` deletes it and any other key cancels |
+| `R` | Refresh the bookmarks |
+| `?` | Show all keys |
+| `q` | Quit |
+
+Bookmark dialog:
+
+| Key | Action |
+|-----|--------|
+| `tab` / `shift+tab` | Switch between the name and the target revision |
+| `enter` / `ctrl+s` | Save the bookmark |
+| `esc` | Cancel |
+
+The target revision is resolved to a single visible commit before anything
+changes (a working-copy snapshot that jj has since replaced is rejected; press
+`R` in the review or pick another revision),
+and the bookmark must still point where it did when the dialog opened: moves
+run `jj bookmark move --from <old target> --to <new target>`, so a bookmark
+that changed or disappeared in the meantime is left alone. jj refuses to move
+a bookmark backwards or sideways; the dialog then names the move and asks you
+to press `enter` again to make exactly that move (`--allow-backwards`). When
+you rename and move at once, the move happens first, so a refused move leaves
+the name unchanged. Warnings from jj, such as a tracked remote bookmark keeping
+the old name, are shown before the dialog closes. When jj reports an error, the
+bookmarks are read again and the dialog or status line shows what they point
+to now. After a move, jjr reads the bookmark again and only
+continues (for example with a rename) when it points at the requested commit.
+
+`R` in the log or bookmarks tab, a bookmark change, a commit and `@` mark the
+log and the bookmarks as outdated. `R` in the log or bookmarks tab and a
+bookmark change reload the tab you are looking at right away and the other
+list when you open it; they never reload the review, so press `R` in the
+review tab to pick up file changes. A commit and `@` update the review right
+away, and the log and the bookmarks reload when you open them.
 
 Commit dialog:
 

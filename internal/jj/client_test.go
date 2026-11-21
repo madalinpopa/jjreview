@@ -733,12 +733,17 @@ func TestWorkingCopyRevset_failed(t *testing.T) {
 
 func beforeSplit(t *testing.T, script string) {
 	t.Helper()
+	beforeCommand(t, "split", script)
+}
+
+func beforeCommand(t *testing.T, subcommand, script string) {
+	t.Helper()
 	jjPath, err := exec.LookPath("jj")
 	if err != nil {
 		t.Fatalf("LookPath(jj) error = %v", err)
 	}
 	bin := t.TempDir()
-	wrapper := "#!/bin/sh\nfor arg; do\n\tif [ \"$arg\" = split ]; then\n\t\t" + script + "\n\t\tbreak\n\tfi\ndone\nexec \"$" + realJJEnv + "\" \"$@\"\n"
+	wrapper := "#!/bin/sh\nfor arg; do\n\tif [ \"$arg\" = " + subcommand + " ]; then\n\t\t" + script + "\n\t\tbreak\n\tfi\ndone\nexec \"$" + realJJEnv + "\" \"$@\"\n"
 	if err := os.WriteFile(filepath.Join(bin, "jj"), []byte(wrapper), 0o700); err != nil {
 		t.Fatalf("write jj wrapper: %v", err)
 	}

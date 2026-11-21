@@ -19,6 +19,7 @@ type view int
 const (
 	reviewView view = iota
 	logView
+	bookmarksView
 )
 
 type logState struct {
@@ -252,7 +253,7 @@ func (m *Model) applyLog(msg logMsg) tea.Cmd {
 	}
 	m.log.refilter()
 	m.log.focus(m.targetHead)
-	if m.log.selectedCommit() != before && slices.Contains(m.keys.open.Keys(), m.armed) {
+	if m.view == logView && m.log.selectedCommit() != before && slices.Contains(m.keys.open.Keys(), m.armed) {
 		m.armed = ""
 		m.status = ""
 	}
@@ -273,6 +274,8 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 	switch {
 	case key.Matches(msg, m.keys.reviewTab):
 		m.view = reviewView
+	case key.Matches(msg, m.keys.bookmarksTab):
+		return m.showBookmarks()
 	case key.Matches(msg, m.keys.search):
 		if !m.log.loaded || m.log.err != nil {
 			return nil
@@ -307,7 +310,7 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 		}
 	case key.Matches(msg, m.keys.reload):
 		if !m.log.loading {
-			return m.loadLog()
+			return m.invalidate()
 		}
 	case key.Matches(msg, m.keys.help):
 		m.help = true
@@ -439,14 +442,18 @@ func (m *Model) openPicked(msg tea.KeyPressMsg, armed string) tea.Cmd {
 	if e == nil {
 		return nil
 	}
-	if e.CommitID == m.targetHead {
+	return m.openCommit(msg, armed, e.CommitID)
+}
+
+func (m *Model) openCommit(msg tea.KeyPressMsg, armed, commitID string) tea.Cmd {
+	if commitID == m.targetHead {
 		m.view = reviewView
 		return nil
 	}
 	if !m.canLoad() || !m.confirmDrop(msg, armed) {
 		return nil
 	}
-	return m.loadRevision(pickedStep, jj.CommitRevset(e.CommitID))
+	return m.loadRevision(pickedStep, jj.CommitRevset(commitID))
 }
 
 func (m Model) logCard() string {

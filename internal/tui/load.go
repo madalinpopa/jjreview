@@ -48,7 +48,7 @@ func (m *Model) reload() tea.Cmd {
 		m.reloadPath = file.Path()
 	}
 	m.reloading = true
-	m.log.stale = true
+	m.markStale()
 	rev := m.rev
 	if m.target != "" {
 		rev = jj.WorkingCopyRevset(m.target)

@@ -25,6 +25,10 @@ func (m Model) overlay() string {
 	switch {
 	case m.modal != nil:
 		return m.modalView()
+	case m.bmModal != nil:
+		return m.bookmarkModalView()
+	case m.bmDelete != nil:
+		return m.bookmarkDeleteView()
 	case m.help:
 		return m.helpView()
 	}

@@ -7,74 +7,82 @@ import (
 )
 
 type keyMap struct {
-	switchPane  key.Binding
-	down        key.Binding
-	up          key.Binding
-	halfDown    key.Binding
-	halfUp      key.Binding
-	top         key.Binding
-	bottom      key.Binding
-	nextHunk    key.Binding
-	prevHunk    key.Binding
-	nextFile    key.Binding
-	prevFile    key.Binding
-	workingCopy key.Binding
-	selectHunk  key.Binding
-	selectFile  key.Binding
-	commit      key.Binding
-	fold        key.Binding
-	foldAll     key.Binding
-	removed     key.Binding
-	removedAll  key.Binding
-	reload      key.Binding
-	edit        key.Binding
-	full        key.Binding
-	help        key.Binding
-	closeHelp   key.Binding
-	quit        key.Binding
-	reviewTab   key.Binding
-	logTab      key.Binding
-	open        key.Binding
-	search      key.Binding
-	clearSearch key.Binding
-	expand      key.Binding
-	collapse    key.Binding
+	switchPane     key.Binding
+	down           key.Binding
+	up             key.Binding
+	halfDown       key.Binding
+	halfUp         key.Binding
+	top            key.Binding
+	bottom         key.Binding
+	nextHunk       key.Binding
+	prevHunk       key.Binding
+	nextFile       key.Binding
+	prevFile       key.Binding
+	workingCopy    key.Binding
+	selectHunk     key.Binding
+	selectFile     key.Binding
+	commit         key.Binding
+	fold           key.Binding
+	foldAll        key.Binding
+	removed        key.Binding
+	removedAll     key.Binding
+	reload         key.Binding
+	edit           key.Binding
+	full           key.Binding
+	help           key.Binding
+	closeHelp      key.Binding
+	quit           key.Binding
+	reviewTab      key.Binding
+	logTab         key.Binding
+	bookmarksTab   key.Binding
+	newBookmark    key.Binding
+	editBookmark   key.Binding
+	deleteBookmark key.Binding
+	open           key.Binding
+	search         key.Binding
+	clearSearch    key.Binding
+	expand         key.Binding
+	collapse       key.Binding
 }
 
 func newKeyMap() keyMap {
 	return keyMap{
-		switchPane:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
-		down:        key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next line or file")),
-		up:          key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous line or file")),
-		halfDown:    key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "half page down")),
-		halfUp:      key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", "half page up")),
-		top:         key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first line or file")),
-		bottom:      key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last line or file")),
-		nextHunk:    key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "next hunk")),
-		prevHunk:    key.NewBinding(key.WithKeys("["), key.WithHelp("[", "previous hunk")),
-		nextFile:    key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next file")),
-		prevFile:    key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "previous file")),
-		workingCopy: key.NewBinding(key.WithKeys("@"), key.WithHelp("@", "working-copy revision")),
-		selectHunk:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "select the hunk (the file in the file pane)")),
-		selectFile:  key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "select every hunk in the file")),
-		commit:      key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commit the selected hunks")),
-		fold:        key.NewBinding(key.WithKeys("z", "enter"), key.WithHelp("z enter", "fold the hunk")),
-		foldAll:     key.NewBinding(key.WithKeys("Z"), key.WithHelp("Z", "fold all hunks")),
-		removed:     key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "show removed lines of the hunk")),
-		removedAll:  key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "show removed lines of all hunks")),
-		reload:      key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "reload the change")),
-		edit:        key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "open in $EDITOR")),
-		full:        key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full file / changes only")),
-		help:        key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "toggle this help")),
-		closeHelp:   key.NewBinding(key.WithKeys("?", "esc", "q"), key.WithHelp("? / esc", "close")),
-		quit:        key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
-		reviewTab:   key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "review tab")),
-		logTab:      key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "log tab")),
-		open:        key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "review the revision")),
-		search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search by ID or description")),
-		expand:      key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "show the files of the revision")),
-		collapse:    key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "hide the files of the revision")),
-		clearSearch: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear the search")),
+		switchPane:     key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
+		down:           key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next line or file")),
+		up:             key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous line or file")),
+		halfDown:       key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "half page down")),
+		halfUp:         key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", "half page up")),
+		top:            key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first line or file")),
+		bottom:         key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last line or file")),
+		nextHunk:       key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "next hunk")),
+		prevHunk:       key.NewBinding(key.WithKeys("["), key.WithHelp("[", "previous hunk")),
+		nextFile:       key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next file")),
+		prevFile:       key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "previous file")),
+		workingCopy:    key.NewBinding(key.WithKeys("@"), key.WithHelp("@", "working-copy revision")),
+		selectHunk:     key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "select the hunk (the file in the file pane)")),
+		selectFile:     key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "select every hunk in the file")),
+		commit:         key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commit the selected hunks")),
+		fold:           key.NewBinding(key.WithKeys("z", "enter"), key.WithHelp("z enter", "fold the hunk")),
+		foldAll:        key.NewBinding(key.WithKeys("Z"), key.WithHelp("Z", "fold all hunks")),
+		removed:        key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "show removed lines of the hunk")),
+		removedAll:     key.NewBinding(key.WithKeys("D"), key.WithHelp("D", "show removed lines of all hunks")),
+		reload:         key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "reload the change")),
+		edit:           key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "open in $EDITOR")),
+		full:           key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full file / changes only")),
+		help:           key.NewBinding(key.WithKeys("?"), key.WithHelp("?", "toggle this help")),
+		closeHelp:      key.NewBinding(key.WithKeys("?", "esc", "q"), key.WithHelp("? / esc", "close")),
+		quit:           key.NewBinding(key.WithKeys("q"), key.WithHelp("q", "quit")),
+		reviewTab:      key.NewBinding(key.WithKeys("1"), key.WithHelp("1", "review tab")),
+		logTab:         key.NewBinding(key.WithKeys("2"), key.WithHelp("2", "log tab")),
+		bookmarksTab:   key.NewBinding(key.WithKeys("3"), key.WithHelp("3", "bookmarks tab")),
+		newBookmark:    key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new bookmark on a revision")),
+		editBookmark:   key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit the bookmark: rename or move it")),
+		deleteBookmark: key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete the bookmark")),
+		open:           key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "review the revision")),
+		search:         key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search by ID or description")),
+		expand:         key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "show the files of the revision")),
+		collapse:       key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "hide the files of the revision")),
+		clearSearch:    key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear the search")),
 	}
 }
 
@@ -96,8 +104,11 @@ func describe(b key.Binding) keyHint {
 }
 
 func (m Model) keyHints() []keyHint {
-	if m.view == logView {
+	switch m.view {
+	case logView:
 		return m.logHints()
+	case bookmarksView:
+		return m.bookmarkHints()
 	}
 	move := hint("line", m.keys.down, m.keys.up)
 	if m.filesFocus {
@@ -123,7 +134,7 @@ func (m Model) logHints() []keyHint {
 		return []keyHint{hint("apply", m.keys.open), hint("clear", m.keys.clearSearch)}
 	}
 	hints := []keyHint{
-		hint("tabs", m.keys.reviewTab, m.keys.logTab),
+		hint("tabs", m.keys.reviewTab, m.keys.logTab, m.keys.bookmarksTab),
 		hint("revision", m.keys.down, m.keys.up),
 		hint("review", m.keys.open),
 		hint("files", m.keys.expand, m.keys.collapse),
@@ -135,13 +146,42 @@ func (m Model) logHints() []keyHint {
 	return append(hints, hint("refresh", m.keys.reload), hint("help", m.keys.help))
 }
 
+func (m Model) bookmarkHints() []keyHint {
+	return []keyHint{
+		hint("tabs", m.keys.reviewTab, m.keys.logTab, m.keys.bookmarksTab),
+		hint("bookmark", m.keys.down, m.keys.up),
+		hint("review", m.keys.open),
+		hint("new", m.keys.newBookmark),
+		hint("edit", m.keys.editBookmark),
+		hint("delete", m.keys.deleteBookmark),
+		hint("refresh", m.keys.reload),
+		hint("help", m.keys.help),
+	}
+}
+
 type helpSection struct {
 	title string
 	hints []keyHint
 }
 
 func (m Model) helpSections() []helpSection {
-	views := helpSection{title: "Views", hints: []keyHint{describe(m.keys.reviewTab), describe(m.keys.logTab)}}
+	views := helpSection{title: "Views", hints: []keyHint{describe(m.keys.reviewTab), describe(m.keys.logTab), describe(m.keys.bookmarksTab)}}
+	if m.view == bookmarksView {
+		return []helpSection{
+			views,
+			{title: "Bookmarks", hints: []keyHint{
+				hint("next / previous bookmark", m.keys.down, m.keys.up),
+				hint("half page down / up", m.keys.halfDown, m.keys.halfUp),
+				hint("first / last bookmark", m.keys.top, m.keys.bottom),
+				hint("review the target revision", m.keys.open),
+				describe(m.keys.newBookmark),
+				describe(m.keys.editBookmark),
+				hint("delete the bookmark (y confirms)", m.keys.deleteBookmark),
+				hint("refresh the bookmarks", m.keys.reload),
+			}},
+			{title: "Other", hints: []keyHint{describe(m.keys.help), describe(m.keys.quit)}},
+		}
+	}
 	if m.view == logView {
 		return []helpSection{
 			views,

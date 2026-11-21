@@ -13,5 +13,10 @@ type Source interface {
 	FileContent(ctx context.Context, rev, path string) (string, error)
 	WorkspaceRoot(ctx context.Context) (string, error)
 	Log(ctx context.Context) ([]jj.LogLine, error)
+	Bookmarks(ctx context.Context) ([]jj.Bookmark, error)
+	CreateBookmark(ctx context.Context, name, rev string) (string, error)
+	RenameBookmark(ctx context.Context, oldName, newName string) (string, error)
+	MoveBookmark(ctx context.Context, name string, from []string, to string, allowBackwards bool) (string, error)
+	DeleteBookmark(ctx context.Context, name string) (string, error)
 	Split(ctx context.Context, changeID, commitID, message string, files []jj.SplitFile) (selected, rest jj.Change, err error)
 }
