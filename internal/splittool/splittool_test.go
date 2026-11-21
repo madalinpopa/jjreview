@@ -1,7 +1,8 @@
 package splittool_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io/fs"
 	"os"
@@ -434,12 +435,12 @@ func TestRun_failed(t *testing.T) {
 	t.Run("rejects malformed JSON", func(t *testing.T) {
 		left, right := t.TempDir(), t.TempDir()
 		spec := filepath.Join(t.TempDir(), "spec.json")
-		writeFile(t, spec, "{not json", 0o644)
+		writeFile(t, spec, "[not json", 0o644)
 
 		err := splittool.Run(spec, left, right)
 
-		if _, ok := errors.AsType[*json.SyntaxError](err); !ok {
-			t.Errorf("Run() error = %v, want *json.SyntaxError", err)
+		if _, ok := errors.AsType[*jsontext.SyntacticError](err); !ok {
+			t.Errorf("Run() error = %v, want *jsontext.SyntacticError", err)
 		}
 	})
 

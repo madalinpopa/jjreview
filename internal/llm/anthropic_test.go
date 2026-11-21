@@ -1,7 +1,8 @@
 package llm_test
 
 import (
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"io"
 	"net/http"
@@ -18,14 +19,14 @@ import (
 const samplePatch = "diff --git a/main.go b/main.go\n--- a/main.go\n+++ b/main.go\n@@ -1 +1 @@\n-package old\n+package main\n"
 
 type request struct {
-	Model       string          `json:"model"`
-	MaxTokens   int64           `json:"max_tokens"`
-	System      []textBlock     `json:"system"`
-	Messages    []message       `json:"messages"`
-	Temperature json.RawMessage `json:"temperature"`
-	TopP        json.RawMessage `json:"top_p"`
-	TopK        json.RawMessage `json:"top_k"`
-	Thinking    json.RawMessage `json:"thinking"`
+	Model       string         `json:"model"`
+	MaxTokens   int64          `json:"max_tokens"`
+	System      []textBlock    `json:"system"`
+	Messages    []message      `json:"messages"`
+	Temperature jsontext.Value `json:"temperature"`
+	TopP        jsontext.Value `json:"top_p"`
+	TopK        jsontext.Value `json:"top_k"`
+	Thinking    jsontext.Value `json:"thinking"`
 }
 
 type textBlock struct {
@@ -160,7 +161,7 @@ func TestGenerate_success(t *testing.T) {
 	if strings.Contains(user, "truncated") {
 		t.Errorf("user message mentions truncation for a small patch: %q", user)
 	}
-	for name, field := range map[string]json.RawMessage{
+	for name, field := range map[string]jsontext.Value{
 		"temperature": req.Temperature,
 		"top_p":       req.TopP,
 		"top_k":       req.TopK,

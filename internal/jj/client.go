@@ -3,7 +3,8 @@ package jj
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -114,7 +115,7 @@ func writeSplitSpec(files []SplitFile) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("create spec: %w", err)
 	}
-	err = json.NewEncoder(spec).Encode(files)
+	err = json.MarshalWrite(spec, files)
 	if closeErr := spec.Close(); err == nil {
 		err = closeErr
 	}
@@ -157,10 +158,10 @@ func (c Client) Change(ctx context.Context, rev string) (Change, error) {
 
 func decodeCommits(out []byte) ([]changeJSON, error) {
 	var commits []changeJSON
-	dec := json.NewDecoder(bytes.NewReader(out))
+	dec := jsontext.NewDecoder(bytes.NewReader(out))
 	for {
 		var commit changeJSON
-		err := dec.Decode(&commit)
+		err := json.UnmarshalDecode(dec, &commit)
 		if errors.Is(err, io.EOF) {
 			return commits, nil
 		}

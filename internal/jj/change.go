@@ -1,6 +1,9 @@
 package jj
 
-import "encoding/json"
+import (
+	"encoding/json/jsontext"
+	"encoding/json/v2"
+)
 
 type Change struct {
 	ChangeID    string
@@ -26,13 +29,13 @@ type splitFileJSON struct {
 	Delete  bool
 }
 
-func (f SplitFile) MarshalJSON() ([]byte, error) {
-	return json.Marshal(splitFileJSON{Path: f.Path, Content: []byte(f.Content), Mode: f.Mode, Delete: f.Delete})
+func (f SplitFile) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return json.MarshalEncode(enc, splitFileJSON{Path: f.Path, Content: []byte(f.Content), Mode: f.Mode, Delete: f.Delete})
 }
 
-func (f *SplitFile) UnmarshalJSON(data []byte) error {
+func (f *SplitFile) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	var w splitFileJSON
-	if err := json.Unmarshal(data, &w); err != nil {
+	if err := json.UnmarshalDecode(dec, &w); err != nil {
 		return err
 	}
 	*f = SplitFile{Path: w.Path, Content: string(w.Content), Mode: w.Mode, Delete: w.Delete}
