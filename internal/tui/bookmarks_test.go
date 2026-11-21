@@ -1166,3 +1166,39 @@ func TestBookmarkEdit_hiddenTarget(t *testing.T) {
 	assertContains(t, boxText(t, view(m), "Edit bookmark"), "no longer visible")
 	assertBookmarks(t, src, "feature=childcommit", "main=parentcommit", "split=", "todo=commit1")
 }
+
+func TestBookmarksQuit_success(t *testing.T) {
+	t.Parallel()
+
+	t.Run("q from the bookmarks tab drops a held editor", func(t *testing.T) {
+		t.Parallel()
+		var opened []string
+		m, hold := update(t, pendingEditor(t, &opened), keyMsg("e"))
+		m = press(t, m, "3")
+		m, cmd := update(t, m, keyMsg("q"))
+		if _, ok := cmd().(tea.QuitMsg); !ok {
+			t.Fatalf("Update(q) cmd() = %T, want tea.QuitMsg", cmd())
+		}
+
+		var got []tea.Msg
+		for _, msg := range []tea.Msg{darkBg(), hold()} {
+			m, cmd = update(t, m, msg)
+			got = append(got, messages(t, cmd)...)
+		}
+
+		if len(got) != 0 || len(opened) != 0 {
+			t.Errorf("messages after quitting = %v, opened = %v, want nothing", got, opened)
+		}
+	})
+
+	t.Run("keys after q from the bookmarks tab are ignored", func(t *testing.T) {
+		t.Parallel()
+		m := press(t, loaded(t, bookmarkSource()), "3", "q")
+
+		_, cmd := update(t, m, keyMsg("2"))
+
+		if cmd != nil {
+			t.Errorf("Update(2) after quitting messages = %v, want nil cmd", messages(t, cmd))
+		}
+	})
+}

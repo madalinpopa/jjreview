@@ -182,7 +182,7 @@ func (m *Model) bookmarksKey(msg tea.KeyPressMsg) tea.Cmd {
 		return m.showLog()
 	case key.Matches(msg, m.keys.quit):
 		if m.confirmDrop(msg, armed) {
-			return tea.Quit
+			return m.quit()
 		}
 	case key.Matches(msg, m.keys.down):
 		m.bookmarks.move(1)
