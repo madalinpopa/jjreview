@@ -66,6 +66,8 @@ const (
 
 const logMinDescription = 20
 
+const defaultWorkspace = "default"
+
 func newLogState() logState {
 	return logState{query: newSearchInput(), expanded: map[string]bool{}, files: map[string]logFiles{}}
 }
@@ -564,6 +566,11 @@ func (m Model) logLine(i, width int) string {
 		id = id.Bold(true)
 	}
 	left = append(left, ui.Span(id, ui.ShortID(e.ChangeID)), ui.Span(lipgloss.NewStyle(), " "))
+	for _, w := range e.Workspaces {
+		if w != defaultWorkspace {
+			left = append(left, ui.Pill(p.Chip, p.Added, w+"@"), ui.Span(lipgloss.NewStyle(), " "))
+		}
+	}
 	for _, b := range e.Bookmarks {
 		left = append(left, ui.Pill(p.Chip, p.Key, b), ui.Span(lipgloss.NewStyle(), " "))
 	}

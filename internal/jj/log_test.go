@@ -1,6 +1,7 @@
 package jj_test
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -69,6 +70,43 @@ func TestLog_success(t *testing.T) {
 			gotEntry.Timestamp = ""
 			if !reflect.DeepEqual(gotEntry, *want[i].Entry) {
 				t.Errorf("Log()[%d].Entry = %+v, want %+v", i, gotEntry, *want[i].Entry)
+			}
+		}
+	})
+
+	t.Run("lists the workspaces whose working copy each revision is", func(t *testing.T) {
+		dir := newRepo(t)
+		root := t.TempDir()
+		ui := filepath.Join(root, "ui")
+		api := filepath.Join(root, "api")
+		runJJ(t, dir, "workspace", "add", "--name", "p1-ui", ui)
+		runJJ(t, dir, "workspace", "add", "--name", "p2-api", api)
+		shared := changeID(t, ui, "@")
+		runJJ(t, api, "edit", shared)
+		runJJ(t, dir, "new", "-m", "parent")
+		parent := changeID(t, dir, "@")
+		runJJ(t, dir, "new")
+
+		got, err := newClient(t, dir).Log(t.Context())
+		if err != nil {
+			t.Fatalf("Log() error = %v", err)
+		}
+
+		workspaces := map[string][]string{}
+		for _, line := range got {
+			if line.Entry != nil {
+				workspaces[line.Entry.ChangeID] = line.Entry.Workspaces
+			}
+		}
+		want := map[string][]string{
+			changeID(t, dir, "@"):      {"default"},
+			parent:                     nil,
+			shared:                     {"p1-ui", "p2-api"},
+			changeID(t, dir, "root()"): nil,
+		}
+		for id, names := range want {
+			if !reflect.DeepEqual(workspaces[id], names) {
+				t.Errorf("Log() entry %s Workspaces = %q, want %q", id, workspaces[id], names)
 			}
 		}
 	})

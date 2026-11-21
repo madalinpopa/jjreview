@@ -449,6 +449,35 @@ func TestLogView_success(t *testing.T) {
 		assertContains(t, lineWith(t, got, "│ ○  wxyzchil"), "bob · 1 hour ago")
 	})
 
+	t.Run("a revision checked out in other workspaces shows their names", func(t *testing.T) {
+		src := revisionSource()
+		src.log[1].Entry.Workspaces = []string{"p1-ui", "p2-api"}
+
+		got := view(press(t, start(t, src, nil, 120, 20), "2"))
+
+		assertContains(t, lineWith(t, got, "│ ○  wxyzchil"), "p1-ui@", "p2-api@", "feature", "bob · 1 hour ago")
+	})
+
+	t.Run("workspace names count toward the width that drops the metadata", func(t *testing.T) {
+		src := revisionSource()
+		src.log[1].Entry.Workspaces = []string{"p1-ui"}
+
+		got := view(press(t, start(t, src, nil, 60, 20), "2"))
+
+		line := lineWith(t, got, "│ ○  wxyzchil")
+		assertContains(t, line, "p1-ui@", "child")
+		assertMissing(t, line, "1 hour ago")
+	})
+
+	t.Run("the default workspace name is not shown", func(t *testing.T) {
+		src := revisionSource()
+		src.log[0].Entry.Workspaces = []string{"default"}
+
+		got := view(press(t, start(t, src, nil, 120, 20), "2"))
+
+		assertMissing(t, lineWith(t, got, "@  kxyzabcd"), "default")
+	})
+
 	t.Run("the key bar lists the log keys", func(t *testing.T) {
 		got := view(press(t, loaded(t, revisionSource()), "2"))
 
