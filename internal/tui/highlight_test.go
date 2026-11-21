@@ -87,7 +87,7 @@ func TestHighlight_success(t *testing.T) {
 		th := theme.Default()
 		th.Syntax.Keyword = lipgloss.BrightRed
 		th.Added = lipgloss.BrightYellow
-		m := tui.New(t.Context(), src, nil, "@").WithTheme(th)
+		m := tui.New(t.Context(), src, nil, "@").WithTheme(theme.Set{Light: th, Dark: th, Mode: theme.ModeAuto})
 		m, _ = update(t, m, tea.WindowSizeMsg{Width: 120, Height: 30})
 		m = press(t, run(t, m, m.Init()), "j")
 

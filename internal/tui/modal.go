@@ -207,6 +207,12 @@ func newInput(p theme.Theme) textarea.Model {
 	in.ShowLineNumbers = false
 	in.Prompt = ""
 	in.SetHeight(inputHeight)
+	in.SetStyles(inputStyles(p))
+	in.Focus()
+	return in
+}
+
+func inputStyles(p theme.Theme) textarea.Styles {
 	base := lipgloss.NewStyle().Background(p.Input)
 	state := textarea.StyleState{
 		Base:        base,
@@ -217,11 +223,9 @@ func newInput(p theme.Theme) textarea.Model {
 		Prompt:      base,
 		Selection:   base.Reverse(true),
 	}
-	in.SetStyles(textarea.Styles{
+	return textarea.Styles{
 		Focused: state,
 		Blurred: state,
 		Cursor:  textarea.CursorStyle{Color: p.Selection, Shape: tea.CursorBar},
-	})
-	in.Focus()
-	return in
+	}
 }

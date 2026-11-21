@@ -2,12 +2,15 @@ package tui
 
 import (
 	"image/color"
+	"reflect"
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/madalinpopa/jjreview/internal/diff"
+	"github.com/madalinpopa/jjreview/internal/theme"
 )
 
 type fileHighlight struct {
@@ -168,4 +171,16 @@ func (m Model) codeSegs(r row) []seg {
 		}
 	}
 	return nil
+}
+
+func highlightColors(p theme.Theme) []color.Color {
+	s := p.Syntax
+	return []color.Color{p.Text, s.Type, s.Keyword, s.Function, s.String, s.Literal, s.Comment}
+}
+
+func sameColors(a, b []color.Color) bool {
+	return slices.EqualFunc(a, b, func(x, y color.Color) bool {
+		t := reflect.TypeOf(x)
+		return t == reflect.TypeOf(y) && (t == nil || t.Comparable() && x == y)
+	})
 }

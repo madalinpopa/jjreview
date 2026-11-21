@@ -108,7 +108,7 @@ func TestEditor_reloading(t *testing.T) {
 
 	t.Run("c does not open the commit modal before the editor finishes", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, newSource()), "tab", "j", "tab", "space"), &opened)
+		m := withEditor(answered(t, press(t, loaded(t, newSource()), "tab", "j", "tab", "space")), &opened)
 
 		m = press(t, m, "e", "e", "c")
 
@@ -119,7 +119,7 @@ func TestEditor_reloading(t *testing.T) {
 
 	t.Run("c opens the commit modal again after an editor error", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, newSource()), "tab", "j", "tab", "space"), &opened)
+		m := withEditor(answered(t, press(t, loaded(t, newSource()), "tab", "j", "tab", "space")), &opened)
 		m = press(t, m, "e", "e")
 		m, _ = update(t, m, tui.EditorFinishedMsg{Err: errors.New("exit status 2")})
 
@@ -132,7 +132,7 @@ func TestEditor_reloading(t *testing.T) {
 
 	t.Run("c does not open the commit modal until the reload arrives", func(t *testing.T) {
 		var opened []string
-		m := withEditor(press(t, loaded(t, newSource()), "tab", "j", "tab", "space"), &opened)
+		m := withEditor(answered(t, press(t, loaded(t, newSource()), "tab", "j", "tab", "space")), &opened)
 		m = press(t, m, "e", "e")
 		m, reload := update(t, m, tui.EditorFinishedMsg{})
 
@@ -153,7 +153,7 @@ func TestEditor_reloading(t *testing.T) {
 	t.Run("a failed reload stops reloading", func(t *testing.T) {
 		var opened []string
 		src := newSource()
-		m := withEditor(press(t, loaded(t, src), "tab", "j", "tab", "space"), &opened)
+		m := withEditor(answered(t, press(t, loaded(t, src), "tab", "j", "tab", "space")), &opened)
 		m = press(t, m, "e", "e")
 		m, reload := update(t, m, tui.EditorFinishedMsg{})
 		src.err = errors.New("revision not found")
