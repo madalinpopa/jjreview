@@ -12,20 +12,88 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/theme"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
-type bookmarkState struct {
-	items   []jj.Bookmark
-	loaded  bool
-	loading bool
-	stale   bool
-	err     error
-	cursor  int
-	top     int
-	seq     int
-	want    string
-	armed   bookmarkRef
+type bookmarkSource interface {
+	Bookmarks(ctx context.Context) ([]jj.Bookmark, error)
+	CreateBookmark(ctx context.Context, name, rev string) (string, error)
+	RenameBookmark(ctx context.Context, oldName, newName string) (string, error)
+	MoveBookmark(ctx context.Context, name string, from []string, to string, allowBackwards bool) (string, error)
+	DeleteBookmark(ctx context.Context, name string) (string, error)
+	Change(ctx context.Context, rev string) (jj.Change, error)
+}
+
+type bookmarkKeys struct {
+	down     key.Binding
+	up       key.Binding
+	halfDown key.Binding
+	halfUp   key.Binding
+	top      key.Binding
+	bottom   key.Binding
+	open     key.Binding
+	create   key.Binding
+	edit     key.Binding
+	remove   key.Binding
+	reload   key.Binding
+}
+
+func newBookmarkKeys() bookmarkKeys {
+	return bookmarkKeys{
+		down:     key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next bookmark")),
+		up:       key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous bookmark")),
+		halfDown: key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "half page down")),
+		halfUp:   key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", "half page up")),
+		top:      key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first bookmark")),
+		bottom:   key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last bookmark")),
+		open:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "review the target revision")),
+		create:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new bookmark on a revision")),
+		edit:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit the bookmark: rename or move it")),
+		remove:   key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete the bookmark (y confirms)")),
+		reload:   key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh the bookmarks")),
+	}
+}
+
+type bookmarkEnv struct {
+	pal    theme.Theme
+	width  int
+	height int
+	body   int
+	list   int
+	modal  int
+	head   string
+	active bool
+}
+
+type bookmarkIntent struct {
+	status     string
+	refresh    bool
+	retarget   bool
+	open       string
+	sameTarget bool
+}
+
+type bookmarksModel struct {
+	ctx      context.Context
+	src      bookmarkSource
+	keys     bookmarkKeys
+	items    []jj.Bookmark
+	loaded   bool
+	loading  bool
+	stale    bool
+	err      error
+	cursor   int
+	top      int
+	seq      int
+	want     string
+	armed    bookmarkRef
+	modal    *bookmarkModal
+	deleting *jj.Bookmark
+}
+
+func newBookmarksModel(ctx context.Context, src bookmarkSource) bookmarksModel {
+	return bookmarksModel{ctx: ctx, src: src, keys: newBookmarkKeys()}
 }
 
 type bookmarkRef struct {
@@ -55,57 +123,56 @@ type bookmarkDeletedMsg struct {
 	err      error
 }
 
-func (m Model) BookmarkCursor() string {
-	return m.bookmarks.selectedName()
-}
-
-func (b bookmarkState) selected() *jj.Bookmark {
+func (b bookmarksModel) selected() *jj.Bookmark {
 	if b.cursor < 0 || b.cursor >= len(b.items) {
 		return nil
 	}
 	return &b.items[b.cursor]
 }
 
-func (b bookmarkState) selectedName() string {
+func (b bookmarksModel) selectedName() string {
 	if s := b.selected(); s != nil {
 		return s.Name
 	}
 	return ""
 }
 
-func (b bookmarkState) selectedRef() bookmarkRef {
+func (b bookmarksModel) selectedRef() bookmarkRef {
 	if s := b.selected(); s != nil {
 		return refOf(*s)
 	}
 	return bookmarkRef{}
 }
 
-func (b *bookmarkState) move(delta int) {
+func (b bookmarksModel) overlayOpen() bool {
+	return b.modal != nil || b.deleting != nil
+}
+
+func (b *bookmarksModel) move(delta int) {
 	b.cursor = max(min(b.cursor+delta, len(b.items)-1), 0)
 }
 
-func (b *bookmarkState) keepVisible(height int) {
+func (b *bookmarksModel) keepVisible(height int) {
 	b.top = ui.ScrollTop(b.top, b.cursor, height, len(b.items))
 }
 
-func (b *bookmarkState) scrollPage(delta, height int) {
+func (b *bookmarksModel) scrollPage(delta, height int) {
 	b.top = min(max(b.top+delta, 0), max(len(b.items)-height, 0))
 	b.move(delta)
 }
 
-func (m *Model) showBookmarks() tea.Cmd {
-	m.view = bookmarksView
-	if !m.bookmarks.loading && (!m.bookmarks.loaded || m.bookmarks.stale) {
-		return m.loadBookmarks()
+func (b *bookmarksModel) show() tea.Cmd {
+	if !b.loading && (!b.loaded || b.stale) {
+		return b.load()
 	}
 	return nil
 }
 
-func (m *Model) loadBookmarks() tea.Cmd {
-	m.bookmarks.seq++
-	m.bookmarks.loading = true
-	m.bookmarks.stale = false
-	seq, ctx, src := m.bookmarks.seq, m.ctx, m.src
+func (b *bookmarksModel) load() tea.Cmd {
+	b.seq++
+	b.loading = true
+	b.stale = false
+	seq, ctx, src := b.seq, b.ctx, b.src
 	return func() tea.Msg {
 		items, err := src.Bookmarks(ctx)
 		if err != nil {
@@ -115,32 +182,26 @@ func (m *Model) loadBookmarks() tea.Cmd {
 	}
 }
 
-func (m *Model) markStale() {
-	m.log.stale = true
-	m.bookmarks.stale = true
+func (b *bookmarksModel) markStale() {
+	b.stale = true
 }
 
-func (m *Model) invalidate() tea.Cmd {
-	m.markStale()
-	switch m.view {
-	case logView:
-		return m.loadLog()
-	case bookmarksView:
-		return m.loadBookmarks()
+func (b *bookmarksModel) update(msg tea.Msg, env bookmarkEnv) (tea.Cmd, bookmarkIntent) {
+	switch msg := msg.(type) {
+	case bookmarksMsg:
+		return b.applyList(msg, env)
+	case bookmarkSavedMsg:
+		return nil, b.applySaved(msg)
+	case bookmarkDeletedMsg:
+		return nil, b.applyDeleted(msg)
 	}
-	return nil
+	return nil, bookmarkIntent{}
 }
 
-func (m *Model) refreshBookmarks(name string) tea.Cmd {
-	m.bookmarks.want = name
-	return m.invalidate()
-}
-
-func (m *Model) applyBookmarks(msg bookmarksMsg) tea.Cmd {
-	if msg.seq != m.bookmarks.seq {
-		return nil
+func (b *bookmarksModel) applyList(msg bookmarksMsg, env bookmarkEnv) (tea.Cmd, bookmarkIntent) {
+	if msg.seq != b.seq {
+		return nil, bookmarkIntent{}
 	}
-	b := &m.bookmarks
 	before := b.selectedName()
 	want := cmp.Or(b.want, before)
 	b.loading = false
@@ -155,115 +216,105 @@ func (m *Model) applyBookmarks(msg bookmarksMsg) tea.Cmd {
 	if !b.stale {
 		b.want = ""
 	}
-	if m.view == bookmarksView && b.selectedRef() != b.armed && slices.Contains(m.keys.open.Keys(), m.armed) {
-		m.armed = ""
-		m.status = ""
+	in := bookmarkIntent{retarget: env.active && b.selectedRef() != b.armed}
+	if b.stale && env.active {
+		return b.load(), in
 	}
-	if b.stale && m.view == bookmarksView {
-		return m.loadBookmarks()
-	}
-	return nil
+	return nil, in
 }
 
-func (m *Model) bookmarksKey(msg tea.KeyPressMsg) tea.Cmd {
-	m.status = ""
-	armed := m.armed
-	m.armed = ""
+func (b *bookmarksModel) key(msg tea.KeyPressMsg, env bookmarkEnv) (tea.Cmd, bookmarkIntent) {
 	switch {
-	case key.Matches(msg, m.keys.reviewTab):
-		m.view = reviewView
-	case key.Matches(msg, m.keys.logTab):
-		return m.showLog()
-	case key.Matches(msg, m.keys.quit):
-		if m.confirmDrop(msg, armed) {
-			return m.quit()
-		}
-	case key.Matches(msg, m.keys.down):
-		m.bookmarks.move(1)
-	case key.Matches(msg, m.keys.up):
-		m.bookmarks.move(-1)
-	case key.Matches(msg, m.keys.halfDown):
-		m.bookmarks.scrollPage(m.halfPage(), m.diffHeight())
-	case key.Matches(msg, m.keys.halfUp):
-		m.bookmarks.scrollPage(-m.halfPage(), m.diffHeight())
-	case key.Matches(msg, m.keys.top):
-		m.bookmarks.move(-len(m.bookmarks.items))
-	case key.Matches(msg, m.keys.bottom):
-		m.bookmarks.move(len(m.bookmarks.items))
-	case key.Matches(msg, m.keys.open):
-		return m.openBookmark(msg, armed)
-	case key.Matches(msg, m.keys.newBookmark):
-		return m.openBookmarkModal(nil)
-	case key.Matches(msg, m.keys.editBookmark):
-		b := m.bookmarks.selected()
+	case b.deleting != nil:
+		return b.deleteKey(msg), bookmarkIntent{}
+	case b.modal != nil:
+		return b.modalKey(msg), bookmarkIntent{}
+	}
+	half := max(env.list/2, 1)
+	switch {
+	case key.Matches(msg, b.keys.down):
+		b.move(1)
+	case key.Matches(msg, b.keys.up):
+		b.move(-1)
+	case key.Matches(msg, b.keys.halfDown):
+		b.scrollPage(half, env.list)
+	case key.Matches(msg, b.keys.halfUp):
+		b.scrollPage(-half, env.list)
+	case key.Matches(msg, b.keys.top):
+		b.move(-len(b.items))
+	case key.Matches(msg, b.keys.bottom):
+		b.move(len(b.items))
+	case key.Matches(msg, b.keys.open):
+		return nil, b.open()
+	case key.Matches(msg, b.keys.create):
+		return b.openModal(nil, env), bookmarkIntent{}
+	case key.Matches(msg, b.keys.edit):
+		s := b.selected()
 		switch {
-		case b == nil:
-		case b.Conflict:
-			m.status = b.Name + " is conflicted; resolve it with jj bookmark set"
+		case s == nil:
+		case s.Conflict:
+			return nil, bookmarkIntent{status: s.Name + " is conflicted; resolve it with jj bookmark set"}
 		default:
-			return m.openBookmarkModal(b)
+			return b.openModal(s, env), bookmarkIntent{}
 		}
-	case key.Matches(msg, m.keys.deleteBookmark):
-		m.confirmDelete()
-	case key.Matches(msg, m.keys.reload):
-		if !m.bookmarks.loading {
-			return m.invalidate()
+	case key.Matches(msg, b.keys.remove):
+		if s := b.selected(); s != nil {
+			b.deleting = new(*s)
 		}
-	case key.Matches(msg, m.keys.help):
-		m.help = true
-		m.helpTop = 0
+	case key.Matches(msg, b.keys.reload):
+		return nil, bookmarkIntent{refresh: !b.loading}
 	}
-	return nil
+	return nil, bookmarkIntent{}
 }
 
-func (m *Model) openBookmark(msg tea.KeyPressMsg, armed string) tea.Cmd {
-	b := m.bookmarks.selected()
-	if b == nil {
-		return nil
+func (b *bookmarksModel) open() bookmarkIntent {
+	s := b.selected()
+	switch {
+	case s == nil:
+		return bookmarkIntent{}
+	case s.CommitID == "":
+		return bookmarkIntent{status: s.Name + " is conflicted: it has no single target"}
 	}
-	if b.CommitID == "" {
-		m.status = b.Name + " is conflicted: it has no single target"
-		return nil
-	}
-	ref := m.bookmarks.selectedRef()
-	if ref != m.bookmarks.armed {
-		armed = ""
-	}
-	cmd := m.openCommit(msg, armed, b.CommitID)
-	m.bookmarks.armed = ref
-	return cmd
+	ref := b.selectedRef()
+	in := bookmarkIntent{open: s.CommitID, sameTarget: ref == b.armed}
+	b.armed = ref
+	return in
 }
 
-func (m *Model) confirmDelete() {
-	if b := m.bookmarks.selected(); b != nil {
-		m.bmDelete = new(*b)
-	}
-}
-
-func (m *Model) bookmarkDeleteKey(msg tea.KeyPressMsg) tea.Cmd {
-	b := *m.bmDelete
-	m.bmDelete = nil
+func (b *bookmarksModel) deleteKey(msg tea.KeyPressMsg) tea.Cmd {
+	d := *b.deleting
+	b.deleting = nil
 	if msg.String() != "y" {
 		return nil
 	}
-	ref, ctx, src := refOf(b), m.ctx, m.src
+	ref, ctx, src := refOf(d), b.ctx, b.src
 	return func() tea.Msg {
 		return removeBookmark(ctx, src, ref)
 	}
 }
 
-func (m Model) bookmarkDeleteView() string {
-	p := m.pal
-	b := m.bmDelete
-	inner := m.modalInner()
+func (b bookmarksModel) overlay(env bookmarkEnv) string {
+	switch {
+	case b.modal != nil:
+		return b.modalView(env)
+	case b.deleting != nil:
+		return b.deleteView(env)
+	}
+	return ""
+}
+
+func (b bookmarksModel) deleteView(env bookmarkEnv) string {
+	p := env.pal
+	d := b.deleting
+	inner := env.modal
 	lines := []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "Delete bookmark")}, nil)}
-	for line := range strings.SplitSeq(ansi.Hardwrap(ui.EscapePath(b.Name), inner, true), "\n") {
+	for line := range strings.SplitSeq(ansi.Hardwrap(ui.EscapePath(d.Name), inner, true), "\n") {
 		lines = append(lines, ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Key).Bold(true), line)}, nil))
 	}
 	target := []ui.Seg{ui.Span(ui.Fg(p.Removed), "conflicted")}
-	if !b.Conflict {
+	if !d.Conflict {
 		gap := ui.Span(lipgloss.NewStyle(), " ")
-		target = []ui.Seg{ui.Span(ui.Fg(p.Title), ui.ShortID(b.ChangeID)), gap, ui.Span(ui.Fg(p.Muted), ui.ShortID(b.CommitID)), gap, ui.Description(p, b.Description, false)}
+		target = []ui.Seg{ui.Span(ui.Fg(p.Title), ui.ShortID(d.ChangeID)), gap, ui.Span(ui.Fg(p.Muted), ui.ShortID(d.CommitID)), gap, ui.Description(p, d.Description, false)}
 	}
 	lines = append(lines,
 		ui.Paint(inner, p.Card, target, nil),
@@ -278,7 +329,31 @@ func (m Model) bookmarkDeleteView() string {
 		Render(strings.Join(lines, "\n"))
 }
 
-func removeBookmark(ctx context.Context, src Source, ref bookmarkRef) bookmarkDeletedMsg {
+func (b bookmarksModel) hints() []ui.KeyHint {
+	return []ui.KeyHint{
+		ui.Hint("bookmark", b.keys.down, b.keys.up),
+		ui.Hint("review", b.keys.open),
+		ui.Hint("new", b.keys.create),
+		ui.Hint("edit", b.keys.edit),
+		ui.Hint("delete", b.keys.remove),
+		ui.Hint("refresh", b.keys.reload),
+	}
+}
+
+func (b bookmarksModel) help() []ui.KeyHint {
+	return []ui.KeyHint{
+		ui.Hint("next / previous bookmark", b.keys.down, b.keys.up),
+		ui.Hint("half page down / up", b.keys.halfDown, b.keys.halfUp),
+		ui.Hint("first / last bookmark", b.keys.top, b.keys.bottom),
+		ui.Describe(b.keys.open),
+		ui.Describe(b.keys.create),
+		ui.Describe(b.keys.edit),
+		ui.Describe(b.keys.remove),
+		ui.Describe(b.keys.reload),
+	}
+}
+
+func removeBookmark(ctx context.Context, src bookmarkSource, ref bookmarkRef) bookmarkDeletedMsg {
 	if _, err := checkBookmark(ctx, src, ref, "you pressed d"); err != nil {
 		return bookmarkDeletedMsg{name: ref.name, refresh: true, err: fmt.Errorf("%w; nothing deleted", err)}
 	}
@@ -289,7 +364,7 @@ func removeBookmark(ctx context.Context, src Source, ref bookmarkRef) bookmarkDe
 	return bookmarkDeletedMsg{name: ref.name, warnings: warnings, refresh: true}
 }
 
-func checkBookmark(ctx context.Context, src Source, ref bookmarkRef, since string) ([]jj.Bookmark, error) {
+func checkBookmark(ctx context.Context, src bookmarkSource, ref bookmarkRef, since string) ([]jj.Bookmark, error) {
 	items, err := src.Bookmarks(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("check bookmark %s: %w", ref.name, err)
@@ -304,7 +379,7 @@ func checkBookmark(ctx context.Context, src Source, ref bookmarkRef, since strin
 	return items, nil
 }
 
-func observe(ctx context.Context, src Source, names ...string) string {
+func observe(ctx context.Context, src bookmarkSource, names ...string) string {
 	items, err := src.Bookmarks(ctx)
 	if err != nil {
 		return "could not re-read the bookmarks: " + err.Error()
@@ -324,72 +399,71 @@ func observe(ctx context.Context, src Source, names ...string) string {
 	return "now: " + strings.Join(parts, ", ")
 }
 
-func (m *Model) applyBookmarkDeleted(msg bookmarkDeletedMsg) tea.Cmd {
-	m.status = "✓ deleted " + msg.name
+func (b *bookmarksModel) applyDeleted(msg bookmarkDeletedMsg) bookmarkIntent {
+	in := bookmarkIntent{status: "✓ deleted " + msg.name}
 	if msg.err != nil {
-		m.status = msg.err.Error()
+		in.status = msg.err.Error()
 	} else if msg.warnings != "" {
-		m.status += " · " + strings.Join(strings.Fields(msg.warnings), " ")
+		in.status += " · " + strings.Join(strings.Fields(msg.warnings), " ")
 	}
-	if !msg.refresh {
-		return nil
+	if msg.refresh {
+		b.want = ""
+		in.refresh = true
 	}
-	return m.refreshBookmarks("")
+	return in
 }
 
-func (m Model) bookmarksCard() string {
-	p := m.pal
-	inner := max(m.width-2, 0)
+func (b bookmarksModel) view(env bookmarkEnv) string {
+	p := env.pal
+	inner := max(env.width-2, 0)
 	var body []string
 	var value []ui.Seg
-	b := m.bookmarks
 	switch {
 	case b.err != nil:
 		body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  error: "+b.err.Error())}, nil)}
 	case !b.loaded:
-		body = []string{ui.Message(m.pal, "loading…", inner)}
+		body = []string{ui.Message(p, "loading…", inner)}
 	case len(b.items) == 0:
-		body = []string{ui.Message(m.pal, "no bookmarks", inner)}
+		body = []string{ui.Message(p, "no bookmarks", inner)}
 	default:
 		value = []ui.Seg{ui.Span(ui.Fg(p.Title), fmt.Sprintf("bookmark %d/%d", b.cursor+1, len(b.items)))}
 		names := 0
 		for _, item := range b.items {
 			names = max(names, min(lipgloss.Width(item.Name), bookmarkNameWidth))
 		}
-		for i := b.top; i < len(b.items) && len(body) < m.diffHeight(); i++ {
-			body = append(body, m.bookmarkLine(i, names, inner))
+		for i := b.top; i < len(b.items) && len(body) < env.list; i++ {
+			body = append(body, b.line(env, i, names, inner))
 		}
 	}
-	return ui.Card(m.pal, m.width, m.bodyHeight(), "Bookmarks", true, value, body)
+	return ui.Card(p, env.width, env.body, "Bookmarks", true, value, body)
 }
 
-func (m Model) bookmarkLine(i, names, width int) string {
-	p := m.pal
-	b := m.bookmarks.items[i]
+func (b bookmarksModel) line(env bookmarkEnv, i, names, width int) string {
+	p := env.pal
+	item := b.items[i]
 	bg := p.Card
-	if i == m.bookmarks.cursor {
+	if i == b.cursor {
 		bg = p.CursorBg
 	}
 	bar := bg
-	if b.CommitID != "" && b.CommitID == m.targetHead {
+	if item.CommitID != "" && item.CommitID == env.head {
 		bar = p.Selection
 	}
 	gap := ui.Span(lipgloss.NewStyle(), " ")
-	pad := strings.Repeat(" ", max(names-lipgloss.Width(b.Name), 0)+1)
-	left := []ui.Seg{ui.Span(ui.Fg(bar), ui.BarGlyph(bar)), ui.Pill(p.Chip, p.Key, b.Name), ui.Span(lipgloss.NewStyle(), pad)}
-	right := clipSegs(m.bookmarkMarkers(b), width-ui.Width(left[:2])-1)
-	if b.CommitID != "" {
+	pad := strings.Repeat(" ", max(names-lipgloss.Width(item.Name), 0)+1)
+	left := []ui.Seg{ui.Span(ui.Fg(bar), ui.BarGlyph(bar)), ui.Pill(p.Chip, p.Key, item.Name), ui.Span(lipgloss.NewStyle(), pad)}
+	right := clipSegs(bookmarkMarkers(p, item), width-ui.Width(left[:2])-1)
+	if item.CommitID != "" {
 		left = append(left,
-			ui.Span(ui.Fg(p.Title), ui.ShortID(b.ChangeID)), gap,
-			ui.Span(ui.Fg(p.Muted), ui.ShortID(b.CommitID)), gap,
-			ui.Description(p, b.Description, false),
+			ui.Span(ui.Fg(p.Title), ui.ShortID(item.ChangeID)), gap,
+			ui.Span(ui.Fg(p.Muted), ui.ShortID(item.CommitID)), gap,
+			ui.Description(p, item.Description, false),
 		)
 	}
 	return ui.Paint(width, bg, left, right)
 }
 
-func (m Model) bookmarkMarkers(b jj.Bookmark) []ui.Seg {
-	p := m.pal
+func bookmarkMarkers(p theme.Theme, b jj.Bookmark) []ui.Seg {
 	gap := ui.Span(lipgloss.NewStyle(), " ")
 	var segs []ui.Seg
 	if b.Conflict {

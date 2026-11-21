@@ -76,9 +76,7 @@ type Model struct {
 	reloadPath  string
 	view        view
 	log         logState
-	bookmarks   bookmarkState
-	bmModal     *bookmarkModal
-	bmDelete    *jj.Bookmark
+	bookmarks   bookmarksModel
 }
 
 func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
@@ -95,6 +93,7 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		contentErrs: map[contentKey]error{},
 		highlights:  map[highlightKey]fileHighlight{},
 		log:         newLogState(),
+		bookmarks:   newBookmarksModel(ctx, src),
 		width:       defaultWidth,
 		height:      defaultHeight,
 	}
@@ -162,12 +161,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyLogFiles(msg)
 	case logMsg:
 		cmd = m.applyLog(msg)
-	case bookmarksMsg:
-		cmd = m.applyBookmarks(msg)
-	case bookmarkSavedMsg:
-		cmd = m.applyBookmarkSaved(msg)
-	case bookmarkDeletedMsg:
-		cmd = m.applyBookmarkDeleted(msg)
+	case bookmarksMsg, bookmarkSavedMsg, bookmarkDeletedMsg:
+		cmd = m.bookmarkEffects(m.bookmarks.update(msg, m.bookmarkEnv()))
 	case committedMsg:
 		m.applyCommitted(msg)
 	case editCheckedMsg:
@@ -180,8 +175,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case m.modal != nil:
 			cmd = m.modalInput(msg)
-		case m.bmModal != nil:
-			cmd = m.bookmarkModalInput(msg)
+		case m.bookmarks.overlayOpen():
+			cmd = m.bookmarks.input(msg)
 		case m.view == logView && m.log.searching:
 			cmd = m.updateQuery(msg)
 		}
@@ -191,7 +186,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.resizeModal()
-	m.resizeBookmarkModal()
+	m.bookmarks.resize(m.bookmarkEnv())
 	m.ensureHighlight()
 	m.scroll()
 	return m, cmd
@@ -207,10 +202,8 @@ func (m *Model) keyPress(msg tea.KeyPressMsg) tea.Cmd {
 		return nil
 	case m.modal != nil:
 		return m.modalKey(msg)
-	case m.bmDelete != nil:
-		return m.bookmarkDeleteKey(msg)
-	case m.bmModal != nil:
-		return m.bookmarkModalKey(msg)
+	case m.bookmarks.overlayOpen():
+		return m.bookmarkEffects(m.bookmarks.key(msg, m.bookmarkEnv()))
 	case m.help:
 		m.helpKey(msg)
 		return nil
