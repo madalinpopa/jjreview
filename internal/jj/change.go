@@ -16,21 +16,25 @@ type Change struct {
 }
 
 type SplitFile struct {
-	Path    string
-	Content string
-	Mode    string
-	Delete  bool
+	Path      string
+	Content   string
+	Mode      string
+	Delete    bool
+	FromRight bool
 }
 
 type splitFileJSON struct {
-	Path    string
-	Content []byte
-	Mode    string
-	Delete  bool
+	Path      string
+	Content   []byte
+	Mode      string
+	Delete    bool
+	FromRight bool `json:"FromRight,omitzero"`
 }
 
 func (f SplitFile) MarshalJSONTo(enc *jsontext.Encoder) error {
-	return json.MarshalEncode(enc, splitFileJSON{Path: f.Path, Content: []byte(f.Content), Mode: f.Mode, Delete: f.Delete})
+	return json.MarshalEncode(enc, splitFileJSON{
+		Path: f.Path, Content: []byte(f.Content), Mode: f.Mode, Delete: f.Delete, FromRight: f.FromRight,
+	})
 }
 
 func (f *SplitFile) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
@@ -38,6 +42,6 @@ func (f *SplitFile) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	if err := json.UnmarshalDecode(dec, &w); err != nil {
 		return err
 	}
-	*f = SplitFile{Path: w.Path, Content: string(w.Content), Mode: w.Mode, Delete: w.Delete}
+	*f = SplitFile{Path: w.Path, Content: string(w.Content), Mode: w.Mode, Delete: w.Delete, FromRight: w.FromRight}
 	return nil
 }

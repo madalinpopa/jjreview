@@ -121,6 +121,7 @@ func (c Client) Split(ctx context.Context, changeID, commitID, message string, f
 		"--revision=exactly("+ChangeRevset(original.ChangeID)+", 1) & "+CommitRevset(original.CommitID),
 		"--message="+message,
 		"--tool", splitTool,
+		"--config", "ui.diff-instructions=false",
 		"--config", "merge-tools."+splitTool+".program="+string(program),
 		"--config", editConfig,
 	)
