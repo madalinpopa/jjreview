@@ -1,7 +1,9 @@
 <h1 align="center">jjr</h1>
 
 <p align="center">
-  Review a <a href="https://jj-vcs.github.io/jj/">jj</a> change hunk by hunk and split the hunks you select into their own commits, with messages drafted by AI.
+  Review a <a href="https://jj-vcs.github.io/jj/">jj</a> change hunk by hunk
+  and split the hunks you select into their own commits, with messages drafted
+  by AI.
 </p>
 
 <p align="center">
@@ -18,7 +20,10 @@
   </picture>
 </p>
 
-`jjr` shows the diff of a jj change in a terminal UI, lets you pick hunks or whole files, and commits the selection with `jj split`, so your jj configuration and `jj undo` still apply. The commit message is generated from the selected hunks and can be edited before committing.
+`jjr` shows the diff of a jj change in a terminal UI, lets you pick hunks or
+whole files, and commits the selection with `jj split`, so your jj configuration
+and `jj undo` still apply. The commit message is generated from the selected
+hunks and can be edited before committing.
 
 The interface may change before v1.
 
@@ -36,9 +41,14 @@ Go 1.27.4 or newer:
 go install github.com/madalinpopa/jjreview/cmd/jjr@latest
 ```
 
-Prebuilt archives for Linux and macOS (amd64, arm64) are attached to each [release](https://github.com/madalinpopa/jjreview/releases).
+Prebuilt archives for Linux and macOS (amd64, arm64) are attached to each
+[release](https://github.com/madalinpopa/jjreview/releases).
 
-`jjr` requires jj 0.47 or newer in `PATH`. Generated commit messages need an Anthropic API key in the config file, in `ANTHROPIC_API_KEY`, or a profile created with `ant auth login`. Without credentials the message box starts empty and you write the message yourself. Alternatively, set `provider = "copilot"` to generate messages with a signed-in [GitHub Copilot CLI](https://github.com/github/copilot-cli).
+`jjr` requires jj 0.47 or newer in `PATH`. To generate commit messages, provide
+an Anthropic API key (in the config file, in `ANTHROPIC_API_KEY`, or through
+`ant auth login`), or set `provider = "copilot"` to use a signed-in
+[GitHub Copilot CLI](https://github.com/github/copilot-cli). Without either, you
+write the message yourself.
 
 ## Quick start
 
@@ -47,7 +57,8 @@ export ANTHROPIC_API_KEY=<your-api-key>
 jjr
 ```
 
-1. Move to a hunk and press `space` to select it, or press `space` on a file in the file pane to select the whole file.
+1. Move to a hunk and press `space` to select it, or press `space` on a file in
+   the file pane to select the whole file.
 2. Press `c`. The commit dialog lists the selection and drafts a message.
 3. Edit the message if needed and press `ctrl+s` to commit.
 
@@ -78,7 +89,10 @@ jjr -R ~/src/app # review a repository elsewhere
 
 ### Keys
 
-The file tree is on the left and the unified diff of the current file on the right. The diff shows each hunk as it reads after the change: added and context lines only. Press `d` on a hunk to see its removed lines too, or `D` for every hunk in the file.
+The file tree is on the left and the unified diff of the current file on the
+right. The diff shows each hunk as it reads after the change: added and context
+lines only. Press `d` on a hunk to see its removed lines too, or `D` for every
+hunk in the file.
 
 | Key | Action |
 |-----|--------|
@@ -88,8 +102,8 @@ The file tree is on the left and the unified diff of the current file on the rig
 | `g` / `G` (`home` / `end`) | First / last file in the file pane, first / last line in the diff pane |
 | `]` / `[` | Next hunk / start of the current or previous hunk |
 | `J` / `K` | Next / previous file from either pane |
-| `ctrl+n` / `ctrl+p` | Review the child / parent revision; selections in the current revision are dropped |
-| `@` | Review the working-copy revision again; selections in the current revision are dropped |
+| `ctrl+n` / `ctrl+p` | Review the child / parent revision |
+| `@` | Go back to the working-copy revision |
 | `space` | Select the hunk under the cursor (in the file pane: the whole file) |
 | `S` | Select every open hunk in the file |
 | `z` / `enter` | Fold or unfold the hunk under the cursor |
@@ -97,15 +111,16 @@ The file tree is on the left and the unified diff of the current file on the rig
 | `d` | Show or hide the removed lines of the hunk under the cursor |
 | `D` | Show or hide the removed lines of every hunk in the file |
 | `c` | Commit the selected hunks |
-| `R` | Reload the change to pick up edits made outside jjr; stays on the current file and drops selections |
-| `e` | Open the current file in `$VISUAL` / `$EDITOR` (default `vi`); the change reloads when the editor exits. Only on the working-copy revision |
+| `R` | Reload to pick up edits made outside jjr |
+| `e` | Edit the current file in `$VISUAL` / `$EDITOR` (default `vi`); working-copy revision only |
 | `f` | Switch between changes only and the full file |
-| `?` | Show every key in a popup (`j` / `k` scroll it when it does not fit); the bottom bar lists only the essentials |
+| `?` | Show all keys |
 | `q` | Quit |
 
-`q`, `ctrl+n`, `ctrl+p`, `@`, `R` and `e` drop the selected hunks, so with a selection they first ask you to press the same key again. `ctrl+c` always quits at once.
+`q`, `ctrl+n`, `ctrl+p`, `@`, `R` and `e` drop the selection, so they ask you to
+press the key again first. `ctrl+c` quits immediately.
 
-In the commit dialog the message is generated from the selected hunks and can be edited freely:
+Commit dialog:
 
 | Key | Action |
 |-----|--------|
@@ -115,11 +130,18 @@ In the commit dialog the message is generated from the selected hunks and can be
 
 ### How committing works
 
-Committing runs `jj split` on the reviewed change. The selected hunks stay in the original change, which gets the new message; the rest moves to a new child change that keeps the original description, and later commits split from it. Committed hunks stay on screen, folded, dimmed and marked with the new change ID. Use `jj undo` to revert a commit made by mistake.
+Committing runs `jj split` on the reviewed change. The selected hunks stay in
+the original change, which gets the new message; the rest moves to a new child
+change that keeps the original description, and later commits split from it.
+Committed hunks stay on screen, folded, dimmed and marked with the new change
+ID. Use `jj undo` to revert a commit made by mistake.
 
 ## Configuration
 
-The config file is `$XDG_CONFIG_HOME/jjr/config.toml`, or `~/.config/jjr/config.toml` when `XDG_CONFIG_HOME` is not set. Every setting is optional; a missing file means the defaults below. Keep the file private (`chmod 600`) if it holds an API key.
+The config file is `$XDG_CONFIG_HOME/jjr/config.toml`, or
+`~/.config/jjr/config.toml` when `XDG_CONFIG_HOME` is not set. Every setting is
+optional; a missing file means the defaults below. Keep the file private
+(`chmod 600`) if it holds an API key.
 
 ```toml
 provider = "anthropic"
@@ -186,11 +208,20 @@ literal = "yellow"
 comment = "bright-black"
 ```
 
-A colour is `none` (the terminal default), one of the 16 ANSI names (`black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white` and their `bright-` forms), a number from 0 to 255, `#rgb` or `#rrggbb`. ANSI names and 0-15 follow the terminal theme. Unknown keys and invalid colours stop `jjr` with an error naming the key; a colour set directly under `[theme]` names the section it now belongs to. When neither `base.cursor_bg` nor `base.page` is set and the terminal reports its background colour, `jjr` shades the cursor line slightly from that background instead of using `bright-black`. Likewise, on a light terminal background with none of `diff.hunk_bg`, `base.card` or `base.page` set, hunk headers get a slightly darker shade of that background.
+A colour is `none` (terminal default), an ANSI name such as `red` or
+`bright-blue`, a number from 0 to 255, `#rgb` or `#rrggbb`. ANSI names and 0-15
+follow the terminal theme. Unknown keys and invalid colours stop `jjr` with an
+error.
+
+If the terminal reports its background, `jjr` derives the cursor line from it
+when `base.cursor_bg` and `base.page` are unset, and on light backgrounds
+derives hunk headers when `diff.hunk_bg`, `base.card` and `base.page` are unset.
 
 ### Light and dark profiles
 
-Colours under `[theme.<section>]` apply to both profiles. `[theme.light.<section>]` and `[theme.dark.<section>]` override them for one profile, so each colour comes from the defaults, then the shared section, then the profile:
+Colours under `[theme.<section>]` apply to both profiles;
+`[theme.light.<section>]` and `[theme.dark.<section>]` override them for one
+profile:
 
 ```toml
 [theme]
@@ -206,19 +237,29 @@ cursor_bg = "#e8e4df"
 comment = "#6e6a86"
 ```
 
-`mode = "light"` or `"dark"` always uses that profile. With `auto`, `jjr` picks the profile from the background colour the terminal reports, and uses the dark profile until it answers or when it never does. It checks again whenever the terminal reports a colour scheme change (mode 2031) or regains focus, if the terminal reports focus, and after the external editor closes; the reported background decides the profile, and a scheme change switches immediately only in terminals that have never answered. Opening the editor waits up to 300 ms for an outstanding answer. In rare cases an answer arrives later than that and reaches the editor, or arrives after `jjr` has exited and shows up as stray text in the shell.
+`mode = "light"` or `"dark"` always uses that profile. With `auto` (the
+default), `jjr` follows the terminal's background colour and switches when it
+changes. Terminals that don't report their background get the dark profile.
 
 ### GitHub Copilot
 
-With `provider = "copilot"`, `jjr` runs the Copilot CLI through the [GitHub Copilot SDK](https://github.com/microsoft/copilot-sdk). The CLI is looked up as `copilot` in `PATH`, or taken from `COPILOT_CLI_PATH`, and must support SDK protocol 4. When it is missing or incompatible, the message box shows the error and you write the message yourself. Sign in once by running `copilot`. Sessions run without tools, MCP servers, or custom instructions, time out after two minutes, and count against your Copilot plan.
+With `provider = "copilot"`, `jjr` uses the `copilot` CLI from `PATH`, or the
+one in `COPILOT_CLI_PATH`. Sign in once by running `copilot`. If the CLI is
+missing or too old, the message box shows the error. Requests run without tools,
+MCP servers or custom instructions, time out after two minutes, and count
+against your Copilot plan.
 
 ### Data sent to the model
 
-Only the selected hunks are sent, formatted as a unified diff, together with the commit message instructions. Nothing is sent when you write the message yourself without credentials.
+Only the selected hunks are sent, formatted as a unified diff, together with the
+commit message instructions. Nothing is sent when you write the message yourself
+without credentials.
 
 ## Development
 
-Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and [golangci-lint](https://golangci-lint.run). The demo GIFs are recorded with [VHS](https://github.com/charmbracelet/vhs).
+Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and
+[golangci-lint](https://golangci-lint.run). The demo GIFs are recorded with
+[VHS](https://github.com/charmbracelet/vhs).
 
 | Command | Description |
 |---------|-------------|
@@ -245,9 +286,11 @@ Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and [golangci-lint]
 
 1. Open an issue for significant changes before starting work.
 2. Create a branch from `main`.
-3. Write commits in the [Conventional Commits](https://www.conventionalcommits.org/) format.
+3. Write commits in the
+   [Conventional Commits](https://www.conventionalcommits.org/) format.
 4. Run `task check` before pushing.
-5. Open a pull request with a clear description of the change and its motivation.
+5. Open a pull request with a clear description of the change and its
+   motivation.
 
 ## License
 
