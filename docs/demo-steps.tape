@@ -44,8 +44,10 @@ Type " "
 Sleep 1s
 
 Type "c"
-Wait+Screen@60s /generated from/
-Sleep 3s
+Wait+Screen@10s /New commit/
+Sleep 1s
+Type "fix: answer 404 for unknown codes"
+Sleep 1.5s
 Ctrl+S
 Wait+Screen@30s /created/
 Sleep 2s
@@ -66,8 +68,10 @@ Type " "
 Sleep 1s
 
 Type "c"
-Wait+Screen@60s /generated from/
-Sleep 3s
+Wait+Screen@10s /New commit/
+Sleep 1s
+Type "feat: add a read header timeout"
+Sleep 1.5s
 Ctrl+S
 Wait+Screen@30s /created/
 Sleep 2s
@@ -78,6 +82,60 @@ Tab
 Sleep 500ms
 Type "f"
 Sleep 2.5s
+
+Type "2"
+Wait+Screen@10s /rev \d+\/\d+/
+Sleep 1s
+Type@500ms "jj"
+Sleep 500ms
+Type "l"
+Wait+Screen@10s /M server.handler\.go/
+Sleep 1.5s
+Type "h"
+Sleep 500ms
+Type "/"
+Sleep 300ms
+Type@120ms "fix"
+Sleep 1s
+Enter
+Sleep 800ms
+Enter
+Wait+Screen@10s /@ \w+ +fix: answer 404/
+Sleep 2s
+Type "2"
+Sleep 800ms
+Type "a"
+Wait+Screen@10s /any other key cancels/
+Sleep 2s
+Escape
+Sleep 800ms
+
+Type "3"
+Wait+Screen@10s /bookmark \d+\/\d+/
+Sleep 1s
+Type "n"
+Wait+Screen@10s /New bookmark/
+Sleep 500ms
+Type "fix-404"
+Sleep 500ms
+Enter
+Wait+Screen@10s /saved fix-404/
+Sleep 1.5s
+Type "e"
+Wait+Screen@10s /Edit bookmark/
+Sleep 500ms
+Ctrl+U
+Type "fix-not-found"
+Sleep 500ms
+Enter
+Wait+Screen@10s /saved fix-not-found/
+Sleep 1.5s
+Type "d"
+Wait+Screen@10s /Delete bookmark/
+Sleep 1.5s
+Type "y"
+Wait+Screen@10s /deleted fix-not-found/
+Sleep 1.5s
 
 Type "q"
 Sleep 500ms

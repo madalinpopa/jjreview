@@ -138,6 +138,7 @@ func (m *Memory) Put(code, url string) error {
 EOF
 
 jj describe --quiet -m "feat: add url shortener"
+jj bookmark create --quiet main -r @
 jj new --quiet
 
 cat >>README.md <<'EOF'
