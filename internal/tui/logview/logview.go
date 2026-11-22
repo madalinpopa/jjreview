@@ -538,7 +538,7 @@ func (l *Model) browseKey(in intent, env tab.Env) (tea.Cmd, tab.Effect) {
 		return nil, l.startSquash(env)
 	case openIntent:
 		if e := l.selected(); e != nil {
-			return nil, tab.Effect{Open: e.CommitID, Reopen: true}
+			return nil, tab.Effect{Open: e.CommitID, KeepArmed: true}
 		}
 	case expandIntent:
 		return l.expandFiles(), tab.Effect{}

@@ -208,3 +208,21 @@ func TestHelpOverlayResolve_success(t *testing.T) {
 		})
 	}
 }
+
+func TestRegistry_success(t *testing.T) {
+	t.Parallel()
+	m := New(t.Context(), nil, nil, "@")
+
+	for _, entry := range m.registry() {
+		t.Run(entry.label, func(t *testing.T) {
+			t.Parallel()
+			k := entry.key.Keys()[0]
+
+			got := m.keys.resolve(tea.KeyPressMsg{Code: rune(k[0]), Text: k})
+
+			if got != entry.intent {
+				t.Errorf("resolve(%q) = %v, want the %s tab intent %v", k, got, entry.label, entry.intent)
+			}
+		})
+	}
+}

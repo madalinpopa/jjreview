@@ -154,8 +154,8 @@ func TestKeyOpen_success(t *testing.T) {
 
 		_, eff := m.Key(press("enter"), env())
 
-		if eff.Open != "aaaa" || eff.Reopen {
-			t.Errorf("Key(enter) effect = %+v, want Open aaaa without Reopen", eff)
+		if eff.Open != "aaaa" || eff.KeepArmed {
+			t.Errorf("Key(enter) effect = %+v, want Open aaaa without KeepArmed", eff)
 		}
 	})
 
@@ -166,8 +166,8 @@ func TestKeyOpen_success(t *testing.T) {
 
 		_, eff := m.Key(press("enter"), env())
 
-		if eff.Open != "aaaa" || !eff.Reopen {
-			t.Errorf("Key(enter) effect = %+v, want Open aaaa and Reopen", eff)
+		if eff.Open != "aaaa" || !eff.KeepArmed {
+			t.Errorf("Key(enter) effect = %+v, want Open aaaa and KeepArmed", eff)
 		}
 	})
 
@@ -181,8 +181,8 @@ func TestKeyOpen_success(t *testing.T) {
 
 		_, eff := m.Key(press("enter"), env())
 
-		if eff.Open != "bbbb" || eff.Reopen {
-			t.Errorf("Key(enter) effect = %+v, want Open bbbb without Reopen", eff)
+		if eff.Open != "bbbb" || eff.KeepArmed {
+			t.Errorf("Key(enter) effect = %+v, want Open bbbb without KeepArmed", eff)
 		}
 	})
 }

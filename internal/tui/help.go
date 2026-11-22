@@ -27,13 +27,12 @@ func (m Model) overlay() string {
 	case m.modal != nil:
 		return m.modalView()
 	case m.bookmarks.OverlayOpen():
-		return m.bookmarks.Overlay(m.bookmarkEnv())
+		return m.bookmarks.Overlay(m.env(bookmarksView))
 	case m.help:
 		return m.helpView()
-	case m.view == logView && m.log.OverlayOpen():
-		return m.log.Overlay(m.env(logView))
-	case m.view == operationsView && m.operations.OverlayOpen():
-		return m.operations.Overlay(m.operationEnv())
+	}
+	if t, ok := m.active(); ok && t.tab.OverlayOpen() {
+		return t.tab.Overlay(m.env(t.view))
 	}
 	return ""
 }

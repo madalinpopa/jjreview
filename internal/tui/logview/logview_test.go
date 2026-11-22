@@ -340,7 +340,7 @@ func TestKey_success(t *testing.T) {
 
 		_, fx := m.Key(press("enter"), env(true))
 
-		if fx != (tab.Effect{Open: "c1", Reopen: true}) {
+		if fx != (tab.Effect{Open: "c1", KeepArmed: true}) {
 			t.Errorf("Key(enter) = %+v, want an open of c1 that keeps a pending drop armed", fx)
 		}
 	})

@@ -26,13 +26,13 @@ type Env struct {
 }
 
 type Effect struct {
-	Status   string
-	Refresh  bool
-	Retarget bool
-	Reopen   bool
-	Open     string
-	Pick     *jj.LogEntry
-	Rewrite  *Rewrite
+	Status    string
+	Refresh   bool
+	Retarget  bool
+	KeepArmed bool
+	Open      string
+	Pick      *jj.LogEntry
+	Rewrite   *Rewrite
 }
 
 type View interface {

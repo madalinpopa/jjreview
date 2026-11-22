@@ -238,7 +238,7 @@ func (b *Model) open() tab.Effect {
 		return tab.Effect{Status: s.Name + " is conflicted: it has no single target"}
 	}
 	ref := b.selectedRef()
-	eff := tab.Effect{Open: s.CommitID, Reopen: ref == b.opened}
+	eff := tab.Effect{Open: s.CommitID, KeepArmed: ref == b.opened}
 	b.opened = ref
 	return eff
 }

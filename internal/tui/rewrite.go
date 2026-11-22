@@ -109,7 +109,7 @@ func (m *Model) applyRewritten(msg rewrittenMsg) tea.Cmd {
 func (m *Model) refreshAfterRewrite() tea.Cmd {
 	cmd := m.invalidate()
 	if m.view != logView {
-		cmd = tea.Batch(cmd, m.loadLog())
+		cmd = tea.Batch(cmd, m.log.Load())
 	}
 	return cmd
 }

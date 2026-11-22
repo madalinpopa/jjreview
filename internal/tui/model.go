@@ -187,20 +187,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.modalInput(msg)
 		case m.bookmarks.OverlayOpen():
 			cmd = m.bookmarks.Paste(msg)
-		case m.view == logView:
-			cmd = m.log.Paste(msg)
+		default:
+			if t, ok := m.active(); ok {
+				cmd = t.tab.Paste(msg)
+			}
 		}
 	default:
-		if c, in, ok := m.bookmarks.Update(msg, m.bookmarkEnv()); ok {
-			cmd = m.bookmarkEffects(c, in)
-		} else if c, in, ok := m.operations.Update(msg, m.operationEnv()); ok {
-			cmd = m.operationEffects(c, in)
-		} else if c, in, ok := m.log.Update(msg, m.env(logView)); ok {
-			cmd = m.logEffects(c, in)
-		}
+		cmd = m.updateTabs(msg)
 	}
 	m.resizeModal()
-	m.bookmarks.Resize(m.bookmarkEnv())
+	m.bookmarks.Resize(m.env(bookmarksView))
 	m.ensureHighlight()
 	m.scroll()
 	return m, cmd
@@ -217,16 +213,14 @@ func (m *Model) keyPress(msg tea.KeyPressMsg) tea.Cmd {
 	case m.modal != nil:
 		return m.modalKey(msg)
 	case m.bookmarks.OverlayOpen():
-		return m.bookmarkEffects(m.bookmarks.Key(msg, m.bookmarkEnv()))
+		cmd, eff := m.bookmarks.Key(msg, m.env(bookmarksView))
+		return m.applyEffect(bookmarksView, cmd, eff)
 	case m.help:
 		m.helpKey(msg)
 		return nil
-	case m.view == logView:
-		return m.logKey(msg)
-	case m.view == bookmarksView:
-		return m.bookmarksKey(msg)
-	case m.view == operationsView:
-		return m.operationsKey(msg)
+	}
+	if t, ok := m.active(); ok {
+		return m.tabKey(t, msg)
 	}
 	return m.reviewKey(msg)
 }
@@ -373,15 +367,8 @@ func (m Model) requestContent() tea.Cmd {
 }
 
 func (m *Model) scroll() {
-	switch m.view {
-	case logView:
-		m.log.KeepVisible(m.env(logView))
-		return
-	case bookmarksView:
-		m.bookmarks.KeepVisible(m.bookmarkEnv())
-		return
-	case operationsView:
-		m.operations.KeepVisible(m.operationEnv())
+	if t, ok := m.active(); ok {
+		t.tab.KeepVisible(m.env(t.view))
 		return
 	}
 	m.diffTop = ui.ScrollTop(m.diffTop, m.cursor, m.diffHeight(), len(m.rows()))

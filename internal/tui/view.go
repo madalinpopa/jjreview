@@ -41,14 +41,9 @@ func fit(content string, width, height int) string {
 
 func (m Model) screen() string {
 	var body string
-	switch m.view {
-	case logView:
-		body = m.log.View(m.env(logView))
-	case bookmarksView:
-		body = m.bookmarks.View(m.bookmarkEnv())
-	case operationsView:
-		body = m.operations.View(m.operationEnv())
-	case reviewView:
+	if t, ok := m.active(); ok {
+		body = t.tab.View(m.env(t.view))
+	} else {
 		body = lipgloss.JoinHorizontal(lipgloss.Top,
 			m.filesCard(),
 			ui.Blank(1, m.pal.Page),
@@ -149,16 +144,7 @@ func spaced(segs []ui.Seg) []ui.Seg {
 }
 
 func (m Model) tabs(short bool) []ui.Seg {
-	tabs := []struct {
-		view  view
-		key   key.Binding
-		label string
-	}{
-		{reviewView, m.keys.reviewTab, "Review"},
-		{logView, m.keys.logTab, "Log"},
-		{bookmarksView, m.keys.bookmarksTab, "Bookmarks"},
-		{operationsView, m.keys.operationsTab, "Operations"},
-	}
+	tabs := append([]tabEntry{{view: reviewView, label: "Review", key: m.keys.reviewTab}}, m.registry()...)
 	segs := make([]ui.Seg, len(tabs))
 	for i, t := range tabs {
 		label := t.label
