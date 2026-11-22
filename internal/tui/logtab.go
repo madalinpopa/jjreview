@@ -3,7 +3,6 @@ package tui
 import (
 	"slices"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/tui/logview"
@@ -41,23 +40,8 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 		m.status = ""
 	}
 	if !m.log.Capturing() {
-		switch {
-		case key.Matches(msg, m.keys.reviewTab):
-			m.view = reviewView
-			return nil
-		case key.Matches(msg, m.keys.bookmarksTab):
-			return m.showBookmarks()
-		case key.Matches(msg, m.keys.operationsTab):
-			return m.showOperations()
-		case key.Matches(msg, m.keys.quit):
-			if m.confirmDrop(msg, armed) {
-				return m.quit()
-			}
-			return nil
-		case key.Matches(msg, m.keys.help):
-			m.help = true
-			m.helpTop = 0
-			return nil
+		if cmd, ok := m.globalKey(msg, armed); ok {
+			return cmd
 		}
 	}
 	cmd, in := m.log.Key(msg, m.logEnv())

@@ -3,7 +3,6 @@ package tui
 import (
 	"slices"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/tui/bookmarks"
 )
@@ -57,31 +56,17 @@ func (m *Model) bookmarksKey(msg tea.KeyPressMsg) tea.Cmd {
 	m.status = ""
 	armed := m.armed
 	m.armed = ""
-	switch {
-	case key.Matches(msg, m.keys.reviewTab):
-		m.view = reviewView
-	case key.Matches(msg, m.keys.logTab):
-		return m.showLog()
-	case key.Matches(msg, m.keys.operationsTab):
-		return m.showOperations()
-	case key.Matches(msg, m.keys.quit):
-		if m.confirmDrop(msg, armed) {
-			return m.quit()
-		}
-	case key.Matches(msg, m.keys.help):
-		m.help = true
-		m.helpTop = 0
-	default:
-		cmd, in := m.bookmarks.Key(msg, m.bookmarkEnv())
-		if in.Open == "" {
-			return m.bookmarkEffects(cmd, in)
-		}
-		if !in.Reopen {
-			armed = ""
-		}
-		return m.openCommit(msg, armed, in.Open)
+	if cmd, ok := m.globalKey(msg, armed); ok {
+		return cmd
 	}
-	return nil
+	cmd, in := m.bookmarks.Key(msg, m.bookmarkEnv())
+	if in.Open == "" {
+		return m.bookmarkEffects(cmd, in)
+	}
+	if !in.Reopen {
+		armed = ""
+	}
+	return m.openCommit(msg, armed, in.Open)
 }
 
 func (m *Model) bookmarkEffects(cmd tea.Cmd, in bookmarks.Intent) tea.Cmd {

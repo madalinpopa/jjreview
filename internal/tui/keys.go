@@ -13,20 +13,10 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 	m.status = ""
 	armed := m.armed
 	m.armed = ""
+	if cmd, ok := m.globalKey(msg, armed); ok {
+		return cmd
+	}
 	switch {
-	case key.Matches(msg, m.keys.quit):
-		if m.confirmDrop(msg, armed) {
-			return m.quit()
-		}
-	case key.Matches(msg, m.keys.logTab):
-		return m.showLog()
-	case key.Matches(msg, m.keys.bookmarksTab):
-		return m.showBookmarks()
-	case key.Matches(msg, m.keys.operationsTab):
-		return m.showOperations()
-	case key.Matches(msg, m.keys.help):
-		m.help = true
-		m.helpTop = 0
 	case key.Matches(msg, m.reviewKeys.switchPane):
 		m.filesFocus = !m.filesFocus
 	case key.Matches(msg, m.reviewKeys.down):

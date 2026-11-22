@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestKeyScopes_noSharedKeys(t *testing.T) {
@@ -71,6 +72,33 @@ func TestKeyScopes_noSharedKeys(t *testing.T) {
 						owner[k] = binding
 					}
 				}
+			}
+		})
+	}
+}
+
+func TestGlobalResolve_success(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		msg  tea.KeyPressMsg
+		want globalIntent
+	}{
+		"1 shows the review tab":     {msg: tea.KeyPressMsg{Code: '1', Text: "1"}, want: showReviewIntent},
+		"2 shows the log tab":        {msg: tea.KeyPressMsg{Code: '2', Text: "2"}, want: showLogIntent},
+		"3 shows the bookmarks tab":  {msg: tea.KeyPressMsg{Code: '3', Text: "3"}, want: showBookmarksIntent},
+		"4 shows the operations tab": {msg: tea.KeyPressMsg{Code: '4', Text: "4"}, want: showOperationsIntent},
+		"? opens the help":           {msg: tea.KeyPressMsg{Code: '?', Text: "?"}, want: helpIntent},
+		"q quits":                    {msg: tea.KeyPressMsg{Code: 'q', Text: "q"}, want: quitIntent},
+		"other keys stay with views": {msg: tea.KeyPressMsg{Code: 'j', Text: "j"}, want: noGlobalIntent},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := newGlobalKeyMap().resolve(tt.msg)
+
+			if got != tt.want {
+				t.Errorf("resolve(%q) = %v, want %v", tt.msg.String(), got, tt.want)
 			}
 		})
 	}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/tui/operations"
 	"github.com/madalinpopa/jjreview/internal/tui/tab"
@@ -35,23 +34,8 @@ func (m *Model) operationsKey(msg tea.KeyPressMsg) tea.Cmd {
 	m.armed = ""
 	if !m.operations.OverlayOpen() {
 		m.status = ""
-		switch {
-		case key.Matches(msg, m.keys.reviewTab):
-			m.view = reviewView
-			return nil
-		case key.Matches(msg, m.keys.logTab):
-			return m.showLog()
-		case key.Matches(msg, m.keys.bookmarksTab):
-			return m.showBookmarks()
-		case key.Matches(msg, m.keys.quit):
-			if m.confirmDrop(msg, armed) {
-				return m.quit()
-			}
-			return nil
-		case key.Matches(msg, m.keys.help):
-			m.help = true
-			m.helpTop = 0
-			return nil
+		if cmd, ok := m.globalKey(msg, armed); ok {
+			return cmd
 		}
 	}
 	in := m.operations.Key(msg, m.operationEnv())

@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -33,6 +34,71 @@ func newGlobalKeyMap() globalKeyMap {
 		scrollUp:      key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "scroll up")),
 		open:          key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "review the revision")),
 	}
+}
+
+type globalIntent int
+
+const (
+	noGlobalIntent globalIntent = iota
+	showReviewIntent
+	showLogIntent
+	showBookmarksIntent
+	showOperationsIntent
+	helpIntent
+	quitIntent
+)
+
+func (k globalKeyMap) resolve(msg tea.KeyPressMsg) globalIntent {
+	switch {
+	case key.Matches(msg, k.reviewTab):
+		return showReviewIntent
+	case key.Matches(msg, k.logTab):
+		return showLogIntent
+	case key.Matches(msg, k.bookmarksTab):
+		return showBookmarksIntent
+	case key.Matches(msg, k.operationsTab):
+		return showOperationsIntent
+	case key.Matches(msg, k.help):
+		return helpIntent
+	case key.Matches(msg, k.quit):
+		return quitIntent
+	}
+	return noGlobalIntent
+}
+
+func (m *Model) globalKey(msg tea.KeyPressMsg, armed string) (tea.Cmd, bool) {
+	switch m.keys.resolve(msg) {
+	case showReviewIntent:
+		if m.view == reviewView {
+			return nil, false
+		}
+		m.view = reviewView
+	case showLogIntent:
+		if m.view == logView {
+			return nil, false
+		}
+		return m.showLog(), true
+	case showBookmarksIntent:
+		if m.view == bookmarksView {
+			return nil, false
+		}
+		return m.showBookmarks(), true
+	case showOperationsIntent:
+		if m.view == operationsView {
+			return nil, false
+		}
+		return m.showOperations(), true
+	case helpIntent:
+		m.help = true
+		m.helpTop = 0
+	case quitIntent:
+		if m.confirmDrop(msg, armed) {
+			return m.quit(), true
+		}
+	default:
+		return nil, false
+	}
+	return nil, true
 }
 
 func (m Model) keyHints() []ui.KeyHint {
