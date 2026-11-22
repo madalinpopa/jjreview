@@ -98,10 +98,15 @@ lines only. Press `d` on a hunk to see its removed lines too, or `D` for every
 hunk in the file. A hunk that is selected in part always shows its removed
 lines, so a replaced line is never committed without you seeing both sides.
 
-A selected line is marked `●`. A hunk header shows `○` when nothing in it is
+A selected line has its line number and sign drawn as a solid block in the
+`picked` colour. A hunk header shows `○` when nothing in it is
 selected, `◐` when some of its lines are, `●` when all of them are and `✓` once
 it is committed. Binary files, symlinks and files without hunks can only be
 selected whole.
+
+Lines wider than the diff pane are cut at its edge: `l` and `h` scroll the code
+sideways while the line numbers and signs stay in place, and `‹` / `›` mark the
+edge that hides text.
 
 | Key | Action |
 |-----|--------|
@@ -112,6 +117,7 @@ selected whole.
 | `g` / `G` (`home` / `end`) | First / last file in the file pane, first / last line in the diff pane |
 | `]` / `[` | Next hunk / start of the current or previous hunk |
 | `J` / `K` | Next / previous file from either pane |
+| `h` / `l` | Scroll the diff left / right by 8 columns; a new file starts at the first column again |
 | `@` | Go back to the working-copy revision |
 | `s` | Select the changed line under the cursor |
 | `v` | Start a line range at the cursor: move to extend it, `s` or `space` selects its changed lines (or unselects them when all are selected), `esc` or `v` cancels |

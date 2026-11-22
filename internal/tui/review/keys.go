@@ -57,6 +57,7 @@ func (m *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 		return nil, Effect{Edit: true}
 	case fullIntent:
 		m.full = !m.full
+		m.diffLeft = 0
 		m.cursor = firstRow(m.rows(env))
 		return m.requestContent(env), Effect{}
 	case commitIntent:
@@ -77,7 +78,7 @@ func (m *Model) hunkKey(env Env, intent intent) string {
 		m.toggleFold(env)
 	case removedIntent:
 		if m.filesFocus {
-			return m.keys.removed.Help().Key + " works in the diff pane; press " + m.keys.switchPane.Help().Key
+			return m.diffOnly(m.keys.removed)
 		}
 		return m.toggleRemoved(env)
 	case removedAllIntent:
@@ -89,6 +90,8 @@ func (m *Model) hunkKey(env Env, intent intent) string {
 		return m.startRange(env)
 	case selectLineIntent, selectHunkIntent, selectFileIntent:
 		return m.toggleSelect(env, intent)
+	case scrollLeftIntent, scrollRightIntent:
+		return m.scrollCode(env, intent)
 	}
 	return ""
 }
@@ -109,7 +112,7 @@ func (m Model) linesBlocked(b key.Binding) string {
 	file, _ := m.currentFile()
 	switch {
 	case m.filesFocus:
-		return b.Help().Key + " works in the diff pane; press " + m.keys.switchPane.Help().Key
+		return m.diffOnly(b)
 	case wholeOnly(file):
 		return wholeFileStatus + m.keys.selectFile.Help().Key
 	}
@@ -129,7 +132,7 @@ func (m *Model) startRange(env Env) string {
 
 func (m *Model) rangeKey(env Env, intent intent) (string, bool) {
 	switch intent {
-	case downIntent, upIntent, halfDownIntent, halfUpIntent, topIntent, bottomIntent, nextHunkIntent, prevHunkIntent:
+	case downIntent, upIntent, halfDownIntent, halfUpIntent, topIntent, bottomIntent, nextHunkIntent, prevHunkIntent, scrollLeftIntent, scrollRightIntent:
 		return "", false
 	case selectLineIntent, selectHunkIntent:
 		m.ranging = false
@@ -338,6 +341,7 @@ func (m *Model) moveFile(env Env, delta int) tea.Cmd {
 		return nil
 	}
 	m.fileIdx = next
+	m.diffLeft = 0
 	m.cursor = firstRow(m.rows(env))
 	return m.requestContent(env)
 }

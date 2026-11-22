@@ -13,14 +13,14 @@ import (
 
 const gapIndent = "       "
 
-func (m Model) diffLine(p theme.Theme, r row, selected, ranged bool, width int) string {
+func (m Model) diffLine(p theme.Theme, r row, selected, ranged bool, number, width int) string {
 	switch r.kind {
 	case rowHunk:
 		return m.hunkLine(p, r.hunk, selected, width)
 	case rowLine:
-		return m.codeLine(p, r, selected, ranged, width)
+		return m.codeLine(p, r, selected, ranged, number, width)
 	case rowGap:
-		return ui.Paint(width, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Faint), gapIndent+r.text)}, nil)
+		return ui.Paint(width, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Faint), strings.Repeat(" ", number-minNumberWidth)+gapIndent+r.text)}, nil)
 	case rowError:
 		return ui.Paint(width, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  "+r.text)}, nil)
 	}
@@ -97,14 +97,14 @@ func (m Model) lineState(r row) (lineState, bool) {
 	return st, done || st == lineDone
 }
 
-func (m Model) codeLine(p theme.Theme, r row, selected, ranged bool, width int) string {
+func (m Model) codeLine(p theme.Theme, r row, selected, ranged bool, number, width int) string {
 	l := r.line
-	bg, bar, sign, text, signText := p.Card, p.Card, p.Muted, p.Text, "  "
+	bg, bar, sign, text := p.Card, p.Card, p.Muted, p.Text
 	switch l.Kind {
 	case diff.LineAdded:
-		bg, bar, sign, signText = p.AddedBg, p.Added, p.Added, "+ "
+		bg, bar, sign = p.AddedBg, p.Added, p.Added
 	case diff.LineRemoved:
-		bg, bar, sign, signText = p.RemovedBg, p.Removed, p.Removed, "- "
+		bg, bar, sign = p.RemovedBg, p.Removed, p.Removed
 	}
 	code := m.codeSegs(r)
 	gutter := p.Faint
@@ -112,33 +112,48 @@ func (m Model) codeLine(p theme.Theme, r row, selected, ranged bool, width int) 
 	if dim {
 		bar, sign, text, gutter, code = dimmed(bar, p), p.Dim, p.Dim, p.Dim, nil
 	}
-	mark := " "
-	if st == linePicked {
-		mark = "●"
-	}
 	if ranged {
 		bg = p.CursorBg
 	}
 	if selected {
 		bg, bar = p.CursorBg, p.Selection
 	}
-	number := ""
-	if l.Kind != diff.LineRemoved && l.NewNo > 0 {
-		number = fmt.Sprint(l.NewNo)
-	}
-	left := []ui.Seg{
-		ui.Span(ui.Fg(bar), ui.BarGlyph(bar)),
-		ui.Span(ui.Fg(gutter), fmt.Sprintf("%4s", number)),
-		ui.Span(ui.Fg(p.Picked), mark),
-		ui.Span(ui.Fg(sign), signText),
-	}
 	if code == nil {
 		code = []ui.Seg{ui.Span(ui.Fg(text), l.Text)}
 	}
-	for _, c := range code {
-		left = append(left, ui.Span(c.Style, expandTabs(c.Text)))
+	code, before, after := m.visibleCode(code, width-gutterWidth(number))
+	left := append([]ui.Seg{ui.Span(ui.Fg(bar), ui.BarGlyph(bar))}, gutterSegs(p, l, number, gutter, sign, st == linePicked, before)...)
+	left = append(left, code...)
+	if after {
+		left = append(left, ui.Span(ui.Fg(p.Muted), hiddenRight))
 	}
 	return ui.Paint(width, bg, left, nil)
+}
+
+func gutterSegs(p theme.Theme, l diff.Line, width int, gutter, sign color.Color, picked, hidden bool) []ui.Seg {
+	number, signText := "", " "
+	switch l.Kind {
+	case diff.LineAdded:
+		signText = "+"
+	case diff.LineRemoved:
+		signText = "-"
+	}
+	if l.Kind != diff.LineRemoved && l.NewNo > 0 {
+		number = fmt.Sprint(l.NewNo)
+	}
+	number = fmt.Sprintf("%*s", width, number)
+	edge := ui.Span(ui.Fg(sign), " ")
+	if hidden {
+		edge = ui.Span(ui.Fg(p.Muted), hiddenLeft)
+	}
+	if picked {
+		return []ui.Seg{ui.Span(ui.Fg(p.Picked).Reverse(true), number+" "+signText), edge}
+	}
+	segs := []ui.Seg{ui.Span(ui.Fg(gutter), number), ui.Span(lipgloss.NewStyle(), " ")}
+	if hidden {
+		return append(segs, ui.Span(ui.Fg(sign), signText), edge)
+	}
+	return append(segs, ui.Span(ui.Fg(sign), signText+" "))
 }
 
 func expandTabs(s string) string {

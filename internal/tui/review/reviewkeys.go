@@ -28,6 +28,8 @@ type keyMap struct {
 	reload      key.Binding
 	edit        key.Binding
 	full        key.Binding
+	scrollLeft  key.Binding
+	scrollRight key.Binding
 }
 
 func newKeyMap() keyMap {
@@ -52,6 +54,8 @@ func newKeyMap() keyMap {
 		reload:      key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "reload the change")),
 		edit:        key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "open in $EDITOR")),
 		full:        key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full file / changes only")),
+		scrollLeft:  key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "scroll the diff left")),
+		scrollRight: key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "scroll the diff right")),
 	}
 }
 
@@ -76,6 +80,9 @@ func (m Model) Hints(c jj.Change) []ui.KeyHint {
 		hints = append(hints, ui.Hint("diff", k.removedAll))
 	} else {
 		hints = append(hints, ui.Hint("diff", k.removed))
+		if m.overflow > 0 {
+			hints = append(hints, ui.Hint("scroll", k.scrollLeft, k.scrollRight))
+		}
 	}
 	if c.WorkingCopy {
 		hints = append(hints, ui.Hint("edit", k.edit))
@@ -94,7 +101,8 @@ func (m Model) Help(c jj.Change) ([]HelpSection, []ui.KeyHint) {
 	if !c.Immutable {
 		review = []ui.KeyHint{ui.Hint(k.selectLine.Help().Desc+" / "+k.selectRange.Help().Desc, k.selectLine, k.selectRange), ui.Describe(k.selectHunk), ui.Describe(k.selectFile), ui.Describe(k.commit)}
 	}
-	review = append(review, ui.Describe(k.fold), ui.Describe(k.foldAll), ui.Describe(k.removed), ui.Describe(k.removedAll))
+	review = append(review, ui.Describe(k.fold), ui.Describe(k.foldAll), ui.Describe(k.removed), ui.Describe(k.removedAll),
+		ui.Hint("scroll the diff left / right", k.scrollLeft, k.scrollRight))
 	sections := []HelpSection{
 		{Title: "Navigation", Hints: []ui.KeyHint{
 			ui.Describe(k.switchPane),
@@ -146,6 +154,8 @@ func Bindings() map[string]key.Binding {
 		"reload":      k.reload,
 		"edit":        k.edit,
 		"full":        k.full,
+		"scrollLeft":  k.scrollLeft,
+		"scrollRight": k.scrollRight,
 	}
 }
 
@@ -178,6 +188,8 @@ const (
 	cancelRangeIntent
 	selectHunkIntent
 	selectFileIntent
+	scrollLeftIntent
+	scrollRightIntent
 )
 
 func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
@@ -232,6 +244,10 @@ func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
 		return selectHunkIntent
 	case key.Matches(msg, k.selectFile):
 		return selectFileIntent
+	case key.Matches(msg, k.scrollLeft):
+		return scrollLeftIntent
+	case key.Matches(msg, k.scrollRight):
+		return scrollRightIntent
 	}
 	return noIntent
 }

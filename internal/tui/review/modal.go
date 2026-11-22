@@ -26,6 +26,7 @@ const (
 
 	lineKeyStatus        = "%s selects a changed line; %s selects the hunk"
 	rangeStatus          = "selecting a range"
+	fitsStatus           = "every line fits the pane"
 	rangeEmptyStatus     = "no changed lines to select in the range"
 	lineDoneStatus       = "line already committed"
 	wholeFileStatus      = "this file can only be selected whole; press "

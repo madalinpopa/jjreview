@@ -135,9 +135,10 @@ func (m Model) diffCard(env Env) string {
 	rows := m.rows(env)
 	width := m.diffCardWidth(env.Width)
 	inner := max(width-2, 0)
+	number := numberWidth(rows)
 	var body []string
 	for i := m.diffTop; i < len(rows) && len(body) < env.ListHeight; i++ {
-		body = append(body, m.diffLine(env.Theme, rows[i], i == m.cursor, m.inRange(i), inner))
+		body = append(body, m.diffLine(env.Theme, rows[i], i == m.cursor, m.inRange(i), number, inner))
 	}
 	return ui.Card(env.Theme, width, env.BodyHeight, "Unified diff", !m.filesFocus, value, body)
 }

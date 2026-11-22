@@ -59,7 +59,35 @@ func TestLineSelect_success(t *testing.T) {
 
 		got := view(m)
 		assertContains(t, got, "▾ ◐ @@ -3,2 +3,2 @@", "+1 −0 of +1 −1", "1 hunk selected (1 line)", "◐ main.go")
-		assertContains(t, lineWith(t, got, "new line"), "4●+ new line")
+		assertContains(t, lineWith(t, got, "new line"), "4 + new line")
+		assertPicked(t, m, "new line")
+	})
+
+	t.Run("a picked line keeps the columns of an unpicked one", func(t *testing.T) {
+		plain := onMain(t, newSource())
+		picked := press(t, plain, "s", "d")
+
+		got := lineWith(t, view(picked), "new line")
+		if want := lineWith(t, view(press(t, plain, "d")), "new line"); got != want {
+			t.Errorf("View() picked line = %q, want the text of the unpicked line %q", got, want)
+		}
+		assertMissing(t, got, "●")
+	})
+
+	t.Run("only the picked line has the gutter block", func(t *testing.T) {
+		m := press(t, onMain(t, newSource()), "s")
+
+		assertUnpicked(t, m, "- old line", "keep")
+	})
+
+	t.Run("a picked line under the cursor keeps the gutter block", func(t *testing.T) {
+		m := press(t, onMain(t, newSource()), "s")
+		if c := m.Cursor(); c != 4 {
+			t.Fatalf("Cursor() = %d, want 4, on the picked line", c)
+		}
+
+		assertPicked(t, press(t, m, "g"), "new line")
+		assertPicked(t, m, "new line")
 	})
 
 	t.Run("a partly selected hunk header keeps its plain background", func(t *testing.T) {
@@ -76,6 +104,7 @@ func TestLineSelect_success(t *testing.T) {
 		got := view(m)
 		assertContains(t, got, "▾ ○ @@ -3,2 +3,2 @@", "nothing selected", "○ main.go", "4 + new line")
 		assertMissing(t, got, " of +1 −1", "- old line")
+		assertUnpicked(t, m, "new line")
 	})
 
 	t.Run("a partly selected hunk shows its removed lines", func(t *testing.T) {
@@ -93,7 +122,9 @@ func TestLineSelect_success(t *testing.T) {
 		m := press(t, onMain(t, newSource()), "space", "s")
 
 		got := view(m)
-		assertContains(t, got, "●- old line", "1 hunk selected (1 line)")
+		assertContains(t, got, "- old line", "1 hunk selected (1 line)")
+		assertPicked(t, m, "- old line")
+		assertUnpicked(t, m, "new line")
 		assertMissing(t, got, "removed lines not selected")
 	})
 
@@ -126,14 +157,16 @@ func TestLineSelect_success(t *testing.T) {
 
 		got := view(m)
 		assertContains(t, got, "▾ ◐ @@ -3,2 +3,2 @@", "+0 −1 of +1 −1", "1 hunk selected (1 line)")
-		assertContains(t, lineWith(t, got, "- old line"), "●- old line")
+		assertContains(t, lineWith(t, got, "- old line"), "     - old line")
+		assertPicked(t, m, "- old line")
 	})
 
 	t.Run("space completes a partly selected hunk then clears it", func(t *testing.T) {
 		m := press(t, onMain(t, newSource()), "s", "space")
 
 		got := view(m)
-		assertContains(t, got, "▾ ● @@ -3,2 +3,2 @@", "1 hunk selected", "●+ new line")
+		assertContains(t, got, "▾ ● @@ -3,2 +3,2 @@", "1 hunk selected", "4 + new line")
+		assertPicked(t, m, "new line")
 		assertMissing(t, got, "(1 line)", " of +1 −1", "- old line")
 
 		got = view(press(t, m, "space"))
@@ -161,7 +194,8 @@ func TestLineSelect_success(t *testing.T) {
 
 		got := view(m)
 		assertContains(t, got, "1 hunk selected")
-		assertContains(t, lineWith(t, got, "new line"), "4●+ new line")
+		assertContains(t, lineWith(t, got, "new line"), "4 + new line")
+		assertPicked(t, m, "new line")
 	})
 
 	t.Run("s selects a line in the full file", func(t *testing.T) {
@@ -169,7 +203,8 @@ func TestLineSelect_success(t *testing.T) {
 
 		got := view(m)
 		assertContains(t, got, "1 hunk selected (1 line)", "- old line")
-		assertContains(t, lineWith(t, got, "new line"), "4●+ new line")
+		assertContains(t, lineWith(t, got, "new line"), "4 + new line")
+		assertPicked(t, m, "new line")
 	})
 
 	t.Run("quitting names the selected lines", func(t *testing.T) {
@@ -321,7 +356,8 @@ func TestLineCommit_display(t *testing.T) {
 
 		got := view(m)
 		assertContains(t, got, "▾ ○ @@ -3,2 +3,2 @@", "+1 −1 ✓ 1/2 kxyzabcd", "- old line", "4 + new line", "nothing selected", "○ main.go")
-		assertMissing(t, got, "▸ ✓ @@ -3,2 +3,2 @@", "●+ new line")
+		assertMissing(t, got, "▸ ✓ @@ -3,2 +3,2 @@")
+		assertUnpicked(t, m, "new line")
 		if c := m.Cursor(); c != 4 {
 			t.Errorf("Cursor() = %d, want 4, still on the committed line", c)
 		}
@@ -452,6 +488,32 @@ func rawLineWith(t *testing.T, m tui.Model, needle string) string {
 	return ""
 }
 
+var gutterBlock = regexp.MustCompile(`\x1b\[([0-9;]*)m *[0-9]* [+-]\x1b\[m`)
+
+func gutterPicked(t *testing.T, m tui.Model, needle string) bool {
+	t.Helper()
+	match := gutterBlock.FindStringSubmatch(rawLineWith(t, m, needle))
+	return match != nil && hasSGR(match[1], "7") && hasSGR(match[1], "34")
+}
+
+func assertPicked(t *testing.T, m tui.Model, needles ...string) {
+	t.Helper()
+	for _, needle := range needles {
+		if !gutterPicked(t, m, needle) {
+			t.Errorf("View() line %q has no reversed blue (SGR 7 and 34) gutter block: %q", needle, rawLineWith(t, m, needle))
+		}
+	}
+}
+
+func assertUnpicked(t *testing.T, m tui.Model, needles ...string) {
+	t.Helper()
+	for _, needle := range needles {
+		if gutterPicked(t, m, needle) {
+			t.Errorf("View() line %q has the gutter block of a picked line: %q", needle, rawLineWith(t, m, needle))
+		}
+	}
+}
+
 func TestLineRange_success(t *testing.T) {
 	t.Run("v then s selects the changed lines between the anchor and the cursor", func(t *testing.T) {
 		m := press(t, onMain(t, newSource()), "v", "G")
@@ -461,8 +523,10 @@ func TestLineRange_success(t *testing.T) {
 
 		got := view(m)
 		assertContains(t, got, "2 hunks selected (2 lines)", "- old line", "1 removed line not selected", "s space select")
-		assertContains(t, lineWith(t, got, "new line"), "4●+ new line")
-		assertContains(t, lineWith(t, got, "+ y"), "11●+ y")
+		assertContains(t, lineWith(t, got, "new line"), "4 + new line")
+		assertPicked(t, m, "new line")
+		assertContains(t, lineWith(t, got, "+ y"), "11 + y")
+		assertPicked(t, m, "+ y")
 		if m.Cursor() != before+1 {
 			t.Errorf("Cursor() = %d, want %d: the line under the cursor moved down by the removed line", m.Cursor(), before+1)
 		}
@@ -488,7 +552,8 @@ func TestLineRange_success(t *testing.T) {
 		got := view(m)
 		assertContains(t, got, "2 hunks selected (3 lines)", "- p", "1 removed line not selected")
 		assertMissing(t, got, "- x")
-		assertContains(t, lineWith(t, got, "+ q"), "10●+ q")
+		assertContains(t, lineWith(t, got, "+ q"), "10 + q")
+		assertPicked(t, m, "+ q")
 	})
 
 	t.Run("space applies the range", func(t *testing.T) {
@@ -514,8 +579,10 @@ func TestLineRange_success(t *testing.T) {
 		m := press(t, onMain(t, newSource()), "s", "v", "G", "s")
 
 		got := view(m)
-		assertContains(t, lineWith(t, got, "new line"), "4●+ new line")
-		assertContains(t, lineWith(t, got, "+ y"), "11●+ y")
+		assertContains(t, lineWith(t, got, "new line"), "4 + new line")
+		assertPicked(t, m, "new line")
+		assertContains(t, lineWith(t, got, "+ y"), "11 + y")
+		assertPicked(t, m, "+ y")
 	})
 
 	t.Run("a fully selected range is cleared", func(t *testing.T) {
@@ -574,9 +641,11 @@ func TestLineRange_cancel(t *testing.T) {
 			assertContains(t, view(m), "nothing selected", "s space select")
 			assertMissing(t, view(m), "select range", "selecting a range")
 
-			got := view(press(t, m, "s"))
+			m = press(t, m, "s")
+			got := view(m)
 			assertContains(t, got, "1 hunk selected")
-			assertContains(t, lineWith(t, got, "+ y"), "11●+ y")
+			assertContains(t, lineWith(t, got, "+ y"), "11 + y")
+			assertPicked(t, m, "+ y")
 		})
 	}
 

@@ -76,6 +76,8 @@ type Model struct {
 	ranging     bool
 	anchor      int
 	diffTop     int
+	diffLeft    int
+	overflow    int
 	listTop     int
 	treeWidth   int
 	full        bool
@@ -101,6 +103,7 @@ func New(ctx context.Context, src Source, gen llm.Provider) Model {
 func (m *Model) Load(files []diff.File, focus string, env Env) tea.Cmd {
 	prevFiles, prevReviews := m.files, m.reviews
 	m.ranging = false
+	m.diffLeft = 0
 	m.files = slices.Clone(files)
 	slices.SortStableFunc(m.files, compareTree)
 	m.reviews = make([]fileReview, len(m.files))
@@ -168,6 +171,7 @@ func (m *Model) Sync(env Env) {
 func (m *Model) KeepVisible(env Env) {
 	m.diffTop = ui.ScrollTop(m.diffTop, m.cursor, env.ListHeight, len(m.rows(env)))
 	m.listTop = ui.ScrollTop(m.listTop, m.currentTreeRow(), env.ListHeight, len(m.treeRows()))
+	m.overflow = m.maxLeft(env)
 }
 
 func (m Model) CurrentFile() (diff.File, bool) {
