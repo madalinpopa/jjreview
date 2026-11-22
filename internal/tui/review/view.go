@@ -27,17 +27,20 @@ func (m Model) Overlay(env Env) string {
 	return m.modalView(env)
 }
 
-func (m Model) Status(loaded bool) string {
+func (m Model) Status(env Env) string {
 	if m.ranging {
 		return rangeStatus
 	}
-	if _, ok := m.currentFile(); !loaded || !ok {
+	if _, ok := m.currentFile(); !env.Loaded || env.Err != nil || !ok {
 		return ""
 	}
 	n := len(m.files[m.fileIdx].Hunks)
 	text := fmt.Sprintf("file %d/%d · %d %s", m.fileIdx+1, len(m.files), n, ui.Plural(n, "hunk"))
 	if folded := m.currentReview().foldedCount(); folded > 0 && n > 0 {
 		text += fmt.Sprintf(" (%d folded)", folded)
+	}
+	if m.needle != "" {
+		text += " · " + m.searchStatus(env)
 	}
 	return text
 }
@@ -137,6 +140,11 @@ func (m Model) diffCard(env Env) string {
 	inner := max(width-2, 0)
 	number := numberWidth(rows)
 	var body []string
+	if m.searching {
+		q := m.query
+		q.SetStyles(ui.SearchStyles(env.Theme))
+		body = []string{ui.Paint(inner, env.Theme.Card, []ui.Seg{ui.Span(lipgloss.NewStyle(), " "), ui.Span(lipgloss.NewStyle(), q.View())}, nil)}
+	}
 	for i := m.diffTop; i < len(rows) && len(body) < env.ListHeight; i++ {
 		body = append(body, m.diffLine(env.Theme, rows[i], i == m.cursor, m.inRange(i), number, inner))
 	}

@@ -6,6 +6,7 @@ import (
 	"maps"
 	"slices"
 
+	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/madalinpopa/jjreview/internal/diff"
@@ -84,6 +85,12 @@ type Model struct {
 	filesFocus  bool
 	modal       *commitModal
 	genSeq      int
+	queryKeys   queryKeyMap
+	query       textinput.Model
+	searching   bool
+	needle      string
+	hit         *hit
+	seek        int
 }
 
 func New(ctx context.Context, src Source, gen llm.Provider) Model {
@@ -92,6 +99,8 @@ func New(ctx context.Context, src Source, gen llm.Provider) Model {
 		src:         src,
 		gen:         gen,
 		keys:        newKeyMap(),
+		queryKeys:   newQueryKeyMap(),
+		query:       ui.NewSearchInput(),
 		contents:    map[contentKey]string{},
 		contentErrs: map[contentKey]error{},
 		highlights:  map[highlightKey]fileHighlight{},
@@ -104,6 +113,7 @@ func (m *Model) Load(files []diff.File, focus string, env Env) tea.Cmd {
 	prevFiles, prevReviews := m.files, m.reviews
 	m.ranging = false
 	m.diffLeft = 0
+	m.hit, m.seek = nil, 0
 	m.files = slices.Clone(files)
 	slices.SortStableFunc(m.files, compareTree)
 	m.reviews = make([]fileReview, len(m.files))
@@ -165,11 +175,12 @@ func (m *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 
 func (m *Model) Sync(env Env) {
 	m.resizeModal(env)
+	m.resizeQuery(env)
 	m.ensureHighlight(env)
 }
 
 func (m *Model) KeepVisible(env Env) {
-	m.diffTop = ui.ScrollTop(m.diffTop, m.cursor, env.ListHeight, len(m.rows(env)))
+	m.diffTop = ui.ScrollTop(m.diffTop, m.cursor, m.diffHeight(env), len(m.rows(env)))
 	m.listTop = ui.ScrollTop(m.listTop, m.currentTreeRow(), env.ListHeight, len(m.treeRows()))
 	m.overflow = m.maxLeft(env)
 }
@@ -217,7 +228,7 @@ func (m *Model) applyContent(env Env, msg contentMsg) {
 	if msg.err != nil {
 		m.contentErrs[msg.key] = msg.err
 		if file, ok := m.currentFile(); ok && contentKeyOf(env, file) == msg.key {
-			m.cursor = 0
+			m.cursor, m.seek = 0, 0
 		}
 		return
 	}
@@ -226,6 +237,7 @@ func (m *Model) applyContent(env Env, msg contentMsg) {
 	maps.DeleteFunc(m.highlights, func(k highlightKey, _ fileHighlight) bool { return k.full })
 	if file, ok := m.currentFile(); ok && m.full && contentKeyOf(env, file) == msg.key {
 		m.cursor = firstRow(m.rows(env))
+		m.seekMatch(env)
 	}
 }
 

@@ -121,6 +121,7 @@ func (m Model) codeLine(p theme.Theme, r row, selected, ranged bool, number, wid
 	if code == nil {
 		code = []ui.Seg{ui.Span(ui.Fg(text), l.Text)}
 	}
+	code = m.markMatches(p, r, code)
 	code, before, after := m.visibleCode(code, width-gutterWidth(number))
 	left := append([]ui.Seg{ui.Span(ui.Fg(bar), ui.BarGlyph(bar))}, gutterSegs(p, l, number, gutter, sign, st == linePicked, before)...)
 	left = append(left, code...)

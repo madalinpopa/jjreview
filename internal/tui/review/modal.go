@@ -223,10 +223,13 @@ func (m *Model) resizeModal(env Env) {
 }
 
 func (m *Model) Paste(msg tea.PasteMsg) tea.Cmd {
-	if m.modal == nil {
-		return nil
+	switch {
+	case m.modal != nil:
+		return m.modalInput(msg)
+	case m.searching:
+		return m.queryInput(msg)
 	}
-	return m.modalInput(msg)
+	return nil
 }
 
 func newInput(p theme.Theme) textarea.Model {

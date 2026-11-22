@@ -129,7 +129,7 @@ func TestLoad_keepsFoldsUnlessReset(t *testing.T) {
 			}
 			m.Load(files(), "", e)
 
-			if got := m.Status(true); got != tt.want {
+			if got := m.Status(e); got != tt.want {
 				t.Errorf("Status() = %q, want %q", got, tt.want)
 			}
 		})

@@ -186,7 +186,7 @@ func (m Model) statusText() string {
 	if m.status != "" || m.view != reviewView {
 		return m.status
 	}
-	return m.review.Status(m.loaded && m.err == nil)
+	return m.review.Status(review.Env{Change: m.change, Loaded: m.loaded, Err: m.err})
 }
 
 func (m Model) modalWidth() int {

@@ -17,6 +17,9 @@ func (m *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	if m.modal != nil {
 		return m.modalKey(msg, env), Effect{}
 	}
+	if m.searching {
+		return m.searchKey(msg, env)
+	}
 	intent := m.keys.resolve(msg)
 	if m.ranging {
 		if status, done := m.rangeKey(env, intent); done {
@@ -58,11 +61,20 @@ func (m *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	case fullIntent:
 		m.full = !m.full
 		m.diffLeft = 0
+		m.seek = 0
 		m.cursor = firstRow(m.rows(env))
 		return m.requestContent(env), Effect{}
 	case commitIntent:
 		cmd, status := m.openModal(env)
 		return cmd, Effect{Status: status}
+	case searchIntent:
+		return m.openSearch(env), Effect{}
+	case nextMatchIntent:
+		return m.findNext(env, 1)
+	case prevMatchIntent:
+		return m.findNext(env, -1)
+	case dismissIntent:
+		m.clearSearch()
 	default:
 		return nil, Effect{Status: m.hunkKey(env, intent)}
 	}
@@ -139,7 +151,7 @@ func (m *Model) rangeKey(env Env, intent intent) (string, bool) {
 		return m.selectRange(env), true
 	}
 	m.ranging = false
-	return "", intent == selectRangeIntent || intent == cancelRangeIntent
+	return "", intent == selectRangeIntent || intent == dismissIntent
 }
 
 func (m Model) rangeBounds(n int) (lo, hi int) {
@@ -342,6 +354,7 @@ func (m *Model) moveFile(env Env, delta int) tea.Cmd {
 	}
 	m.fileIdx = next
 	m.diffLeft = 0
+	m.seek = 0
 	m.cursor = firstRow(m.rows(env))
 	return m.requestContent(env)
 }

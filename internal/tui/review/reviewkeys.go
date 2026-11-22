@@ -30,6 +30,21 @@ type keyMap struct {
 	full        key.Binding
 	scrollLeft  key.Binding
 	scrollRight key.Binding
+	search      key.Binding
+	nextMatch   key.Binding
+	prevMatch   key.Binding
+}
+
+type queryKeyMap struct {
+	submit key.Binding
+	cancel key.Binding
+}
+
+func newQueryKeyMap() queryKeyMap {
+	return queryKeyMap{
+		submit: key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "search")),
+		cancel: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel")),
+	}
 }
 
 func newKeyMap() keyMap {
@@ -56,11 +71,18 @@ func newKeyMap() keyMap {
 		full:        key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full file / changes only")),
 		scrollLeft:  key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "scroll the diff left")),
 		scrollRight: key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "scroll the diff right")),
+		search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search the diff")),
+		nextMatch:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next match")),
+		prevMatch:   key.NewBinding(key.WithKeys("N"), key.WithHelp("N", "previous match")),
 	}
 }
 
 func (m Model) Hints(c jj.Change) []ui.KeyHint {
 	k := m.keys
+	if m.searching {
+		q := m.queryKeys
+		return []ui.KeyHint{ui.Hint("search", q.submit), ui.Hint("cancel", q.cancel)}
+	}
 	move := ui.Hint("line", k.Down, k.Up)
 	if m.ranging {
 		return []ui.KeyHint{move, ui.Hint("select range", k.selectLine, k.selectHunk), ui.Hint("cancel", k.cancelRange, k.selectRange)}
@@ -84,6 +106,9 @@ func (m Model) Hints(c jj.Change) []ui.KeyHint {
 			hints = append(hints, ui.Hint("scroll", k.scrollLeft, k.scrollRight))
 		}
 	}
+	if m.needle != "" {
+		hints = append(hints, ui.Hint("match", k.nextMatch, k.prevMatch), ui.Hint("clear", k.cancelRange))
+	}
 	if c.WorkingCopy {
 		hints = append(hints, ui.Hint("edit", k.edit))
 	}
@@ -102,7 +127,8 @@ func (m Model) Help(c jj.Change) ([]HelpSection, []ui.KeyHint) {
 		review = []ui.KeyHint{ui.Hint(k.selectLine.Help().Desc+" / "+k.selectRange.Help().Desc, k.selectLine, k.selectRange), ui.Describe(k.selectHunk), ui.Describe(k.selectFile), ui.Describe(k.commit)}
 	}
 	review = append(review, ui.Describe(k.fold), ui.Describe(k.foldAll), ui.Describe(k.removed), ui.Describe(k.removedAll),
-		ui.Hint("scroll the diff left / right", k.scrollLeft, k.scrollRight))
+		ui.Hint("scroll the diff left / right", k.scrollLeft, k.scrollRight),
+		ui.Hint(k.search.Help().Desc+"; next / previous match", k.search, k.nextMatch, k.prevMatch))
 	sections := []HelpSection{
 		{Title: "Navigation", Hints: []ui.KeyHint{
 			ui.Describe(k.switchPane),
@@ -156,6 +182,9 @@ func Bindings() map[string]key.Binding {
 		"full":        k.full,
 		"scrollLeft":  k.scrollLeft,
 		"scrollRight": k.scrollRight,
+		"search":      k.search,
+		"nextMatch":   k.nextMatch,
+		"prevMatch":   k.prevMatch,
 	}
 }
 
@@ -185,11 +214,14 @@ const (
 	foldAllIntent
 	selectLineIntent
 	selectRangeIntent
-	cancelRangeIntent
+	dismissIntent
 	selectHunkIntent
 	selectFileIntent
 	scrollLeftIntent
 	scrollRightIntent
+	searchIntent
+	nextMatchIntent
+	prevMatchIntent
 )
 
 func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
@@ -239,7 +271,7 @@ func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
 	case key.Matches(msg, k.selectRange):
 		return selectRangeIntent
 	case key.Matches(msg, k.cancelRange):
-		return cancelRangeIntent
+		return dismissIntent
 	case key.Matches(msg, k.selectHunk):
 		return selectHunkIntent
 	case key.Matches(msg, k.selectFile):
@@ -248,6 +280,30 @@ func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
 		return scrollLeftIntent
 	case key.Matches(msg, k.scrollRight):
 		return scrollRightIntent
+	case key.Matches(msg, k.search):
+		return searchIntent
+	case key.Matches(msg, k.nextMatch):
+		return nextMatchIntent
+	case key.Matches(msg, k.prevMatch):
+		return prevMatchIntent
 	}
 	return noIntent
+}
+
+type queryIntent int
+
+const (
+	typeQueryIntent queryIntent = iota
+	submitSearchIntent
+	cancelSearchIntent
+)
+
+func (k queryKeyMap) resolve(msg tea.KeyPressMsg) queryIntent {
+	switch {
+	case key.Matches(msg, k.submit):
+		return submitSearchIntent
+	case key.Matches(msg, k.cancel):
+		return cancelSearchIntent
+	}
+	return typeQueryIntent
 }

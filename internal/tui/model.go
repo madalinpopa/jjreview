@@ -149,7 +149,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = m.keyPress(msg)
 	case tea.PasteMsg:
 		switch {
-		case m.review.ModalOpen():
+		case m.review.ModalOpen(), m.view == reviewView && m.review.Searching():
 			cmd = m.review.Paste(msg)
 		case m.bookmarks.OverlayOpen():
 			cmd = m.bookmarks.Paste(msg)

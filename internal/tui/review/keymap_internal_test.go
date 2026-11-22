@@ -54,7 +54,10 @@ func TestReviewResolve_success(t *testing.T) {
 		"Z folds all hunks":                 {msg: tea.KeyPressMsg{Code: 'Z', Text: "Z"}, want: foldAllIntent},
 		"s selects the line":                {msg: tea.KeyPressMsg{Code: 's', Text: "s"}, want: selectLineIntent},
 		"v starts a range":                  {msg: tea.KeyPressMsg{Code: 'v', Text: "v"}, want: selectRangeIntent},
-		"esc cancels a range":               {msg: tea.KeyPressMsg{Code: tea.KeyEscape}, want: cancelRangeIntent},
+		"esc cancels a range or the search": {msg: tea.KeyPressMsg{Code: tea.KeyEscape}, want: dismissIntent},
+		"/ opens the search":                {msg: tea.KeyPressMsg{Code: '/', Text: "/"}, want: searchIntent},
+		"n goes to the next match":          {msg: tea.KeyPressMsg{Code: 'n', Text: "n"}, want: nextMatchIntent},
+		"N goes to the previous match":      {msg: tea.KeyPressMsg{Code: 'N', Text: "N"}, want: prevMatchIntent},
 		"space selects the hunk":            {msg: tea.KeyPressMsg{Code: tea.KeySpace, Text: " "}, want: selectHunkIntent},
 		"S selects the file":                {msg: tea.KeyPressMsg{Code: 'S', Text: "S"}, want: selectFileIntent},
 		"h scrolls the diff left":           {msg: tea.KeyPressMsg{Code: 'h', Text: "h"}, want: scrollLeftIntent},
@@ -66,6 +69,31 @@ func TestReviewResolve_success(t *testing.T) {
 			t.Parallel()
 
 			got := newKeyMap().resolve(tt.msg)
+
+			if got != tt.want {
+				t.Errorf("resolve(%q) = %v, want %v", tt.msg.String(), got, tt.want)
+			}
+		})
+	}
+}
+
+func TestSearchResolve_success(t *testing.T) {
+	t.Parallel()
+	tests := map[string]struct {
+		msg  tea.KeyPressMsg
+		want queryIntent
+	}{
+		"enter runs the search":  {msg: tea.KeyPressMsg{Code: tea.KeyEnter}, want: submitSearchIntent},
+		"esc cancels the search": {msg: tea.KeyPressMsg{Code: tea.KeyEscape}, want: cancelSearchIntent},
+		"text goes to the query": {msg: tea.KeyPressMsg{Code: 'q', Text: "q"}, want: typeQueryIntent},
+		"n goes to the query":    {msg: tea.KeyPressMsg{Code: 'n', Text: "n"}, want: typeQueryIntent},
+		"tab goes to the query":  {msg: tea.KeyPressMsg{Code: tea.KeyTab}, want: typeQueryIntent},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			got := newQueryKeyMap().resolve(tt.msg)
 
 			if got != tt.want {
 				t.Errorf("resolve(%q) = %v, want %v", tt.msg.String(), got, tt.want)
