@@ -30,7 +30,7 @@ func (m *Model) operationsKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 	armed := m.armed
 	m.armed = ""
-	if !m.operations.OverlayOpen() {
+	if !m.operations.Captures() {
 		m.status = ""
 		if cmd, ok := m.globalKey(msg, armed); ok {
 			return cmd

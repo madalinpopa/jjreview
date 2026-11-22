@@ -422,6 +422,32 @@ func TestKey_success(t *testing.T) {
 	})
 }
 
+func TestCaptures_success(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		keys []string
+		want bool
+	}{
+		"browsing the list":               {keys: []string{"j"}, want: false},
+		"the confirmation is open":        {keys: []string{"j", "u"}, want: true},
+		"the confirmation was answered":   {keys: []string{"j", "u", "n"}, want: false},
+		"an action refused with a status": {keys: []string{"r"}, want: false},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			m := loaded(t, newSource())
+
+			press(&m, env(80, 10), tt.keys...)
+
+			if got := m.Captures(); got != tt.want {
+				t.Errorf("Captures() after %v = %t, want %t", tt.keys, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestKey_failed(t *testing.T) {
 	t.Parallel()
 

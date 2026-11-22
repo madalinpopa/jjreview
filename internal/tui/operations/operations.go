@@ -27,12 +27,7 @@ type Source interface {
 }
 
 type keyMap struct {
-	down     key.Binding
-	up       key.Binding
-	halfDown key.Binding
-	halfUp   key.Binding
-	top      key.Binding
-	bottom   key.Binding
+	ui.NavKeys
 	restore  key.Binding
 	undo     key.Binding
 	abandon  key.Binding
@@ -77,17 +72,17 @@ func (i intent) action() bool {
 
 func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
 	switch {
-	case key.Matches(msg, k.down):
+	case key.Matches(msg, k.Down):
 		return moveDownIntent
-	case key.Matches(msg, k.up):
+	case key.Matches(msg, k.Up):
 		return moveUpIntent
-	case key.Matches(msg, k.halfDown):
+	case key.Matches(msg, k.HalfDown):
 		return halfPageDownIntent
-	case key.Matches(msg, k.halfUp):
+	case key.Matches(msg, k.HalfUp):
 		return halfPageUpIntent
-	case key.Matches(msg, k.top):
+	case key.Matches(msg, k.Top):
 		return topIntent
-	case key.Matches(msg, k.bottom):
+	case key.Matches(msg, k.Bottom):
 		return bottomIntent
 	case key.Matches(msg, k.expand):
 		return expandIntent
@@ -114,12 +109,7 @@ func (k keyMap) resolveConfirm(msg tea.KeyPressMsg) intent {
 
 func newKeyMap() keyMap {
 	return keyMap{
-		down:     key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next operation")),
-		up:       key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous operation")),
-		halfDown: key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "half page down")),
-		halfUp:   key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", "half page up")),
-		top:      key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "newest operation")),
-		bottom:   key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "oldest operation")),
+		NavKeys:  ui.NewNavKeys("next operation", "previous operation", "newest operation", "oldest operation"),
 		restore:  key.NewBinding(key.WithKeys("r"), key.WithHelp("r", "restore the repo to the operation (y confirms)")),
 		undo:     key.NewBinding(key.WithKeys("u"), key.WithHelp("u", "undo the operation (y confirms)")),
 		abandon:  key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "abandon the operation from the history (y confirms)")),
@@ -153,13 +143,9 @@ type Model struct {
 	src      Source
 	keys     keyMap
 	items    []jj.Operation
-	loaded   bool
-	loading  bool
-	stale    bool
-	err      error
+	list     ui.Loader
 	cursor   int
 	top      int
-	seq      int
 	confirm  *pending
 	expanded map[string]bool
 }
@@ -199,8 +185,12 @@ func (o Model) OverlayOpen() bool {
 	return o.confirm != nil
 }
 
+func (o Model) Captures() bool {
+	return o.OverlayOpen()
+}
+
 func (o Model) Ignores(msg tea.KeyPressMsg, env Env) bool {
-	return o.confirm == nil && o.keys.resolve(msg).action() && (msg.IsRepeat || env.Lock.Busy || o.loading)
+	return o.confirm == nil && o.keys.resolve(msg).action() && (msg.IsRepeat || env.Lock.Busy || o.list.Loading())
 }
 
 func (o *Model) move(delta int) {
@@ -314,17 +304,14 @@ func (o *Model) scrollPage(delta, height, width int) {
 }
 
 func (o *Model) Show() tea.Cmd {
-	if !o.loading && (!o.loaded || o.stale) {
+	if o.list.Due() {
 		return o.Load()
 	}
 	return nil
 }
 
 func (o *Model) Load() tea.Cmd {
-	o.seq++
-	o.loading = true
-	o.stale = false
-	seq, ctx, src := o.seq, o.ctx, o.src
+	seq, ctx, src := o.list.Begin(), o.ctx, o.src
 	return func() tea.Msg {
 		items, err := src.Operations(ctx)
 		if err != nil {
@@ -335,7 +322,7 @@ func (o *Model) Load() tea.Cmd {
 }
 
 func (o *Model) MarkStale() {
-	o.stale = true
+	o.list.MarkStale()
 }
 
 func (o *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
@@ -343,13 +330,10 @@ func (o *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 	if !ok {
 		return nil, Effect{}, false
 	}
-	if loaded.seq != o.seq {
+	want := o.SelectedID()
+	if !o.list.Finish(loaded.seq, loaded.err) {
 		return nil, Effect{}, true
 	}
-	want := o.SelectedID()
-	o.loading = false
-	o.loaded = true
-	o.err = loaded.err
 	o.items = loaded.items
 	maps.DeleteFunc(o.expanded, func(id string, _ bool) bool {
 		return !slices.ContainsFunc(o.items, func(op jj.Operation) bool { return op.ID == id })
@@ -359,7 +343,7 @@ func (o *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 	} else {
 		o.cursor = max(min(o.cursor, len(o.items)-1), 0)
 	}
-	if o.stale && env.Active {
+	if o.list.Stale() && env.Active {
 		return o.Load(), Effect{}, true
 	}
 	return nil, Effect{}, true
@@ -393,7 +377,7 @@ func (o *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	case restoreIntent, undoIntent, abandonIntent:
 		return nil, o.ask(in)
 	case reloadIntent:
-		return nil, Effect{Refresh: !o.loading}
+		return nil, Effect{Refresh: !o.list.Loading()}
 	}
 	return nil, Effect{}
 }
@@ -459,11 +443,7 @@ func (o Model) Overlay(env Env) string {
 	c := o.confirm
 	inner := ui.InputBoxInner(env.ModalWidth)
 	wrap := func(style lipgloss.Style, text string) []string {
-		var out []string
-		for line := range strings.SplitSeq(ansi.Wrap(text, inner, ""), "\n") {
-			out = append(out, ui.Paint(inner, p.Card, []ui.Seg{ui.Span(style, line)}, nil))
-		}
-		return out
+		return ui.WrapLines(p, inner, style, text)
 	}
 	verb := c.action.verb()
 	lines := wrap(ui.Fg(p.Title).Bold(true), strings.ToUpper(verb[:1])+verb[1:]+" operation "+ui.ShortID(c.op.ID))
@@ -485,23 +465,11 @@ func (o Model) Overlay(env Env) string {
 		tail = append(tail, wrap(ui.Fg(p.Removed), fmt.Sprintf("Drops %d selected %s", d, ui.Plural(d, "hunk")))...)
 	}
 	footer := wrap(ui.Fg(p.Muted), o.keys.confirm.Help().Key+" "+verb+" · any other key cancels")
-	if room := max(env.Height-2-len(footer)-len(lines)-len(tail), 1); len(args) > room {
-		args = append(args[:room-1], ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Muted), "…")}, nil))
-	}
+	ellipsis := ui.Ellipsis(p, inner)
+	args = ui.TruncateLines(args, max(env.Height-2-len(footer)-len(lines)-len(tail), 1), ellipsis)
 	lines = append(append(lines, args...), tail...)
-	if room := max(env.Height-2-len(footer), 0); len(lines) > room {
-		lines = lines[:room]
-		if room > 0 {
-			lines[room-1] = ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Muted), "…")}, nil)
-		}
-	}
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(p.ModalBorder).
-		BorderBackground(p.Card).
-		Background(p.Card).
-		Padding(0, 1).
-		Render(strings.Join(append(lines, footer...), "\n"))
+	lines = ui.TruncateLines(lines, env.Height-2-len(footer), ellipsis)
+	return ui.ModalBox(p, append(lines, footer...))
 }
 
 func describe(op jj.Operation) string {
@@ -513,7 +481,7 @@ func describe(op jj.Operation) string {
 
 func (o Model) Hints() []ui.KeyHint {
 	return []ui.KeyHint{
-		ui.Hint("operation", o.keys.down, o.keys.up),
+		ui.Hint("operation", o.keys.Down, o.keys.Up),
 		ui.Hint("command", o.keys.expand, o.keys.collapse),
 		ui.Hint("restore", o.keys.restore),
 		ui.Hint("undo", o.keys.undo),
@@ -524,9 +492,9 @@ func (o Model) Hints() []ui.KeyHint {
 
 func (o Model) Help() []ui.KeyHint {
 	return []ui.KeyHint{
-		ui.Hint("next / previous operation", o.keys.down, o.keys.up),
-		ui.Hint("half page down / up", o.keys.halfDown, o.keys.halfUp),
-		ui.Hint("newest / oldest operation", o.keys.top, o.keys.bottom),
+		ui.Hint("next / previous operation", o.keys.Down, o.keys.Up),
+		ui.Hint("half page down / up", o.keys.HalfDown, o.keys.HalfUp),
+		ui.Hint("newest / oldest operation", o.keys.Top, o.keys.Bottom),
 		ui.Describe(o.keys.expand),
 		ui.Describe(o.keys.collapse),
 		ui.Describe(o.keys.restore),
@@ -542,9 +510,9 @@ func (o Model) View(env Env) string {
 	var body []string
 	var value []ui.Seg
 	switch {
-	case o.err != nil:
-		body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  error: "+o.err.Error())}, nil)}
-	case !o.loaded:
+	case o.list.Err() != nil:
+		body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  error: "+o.list.Err().Error())}, nil)}
+	case !o.list.Loaded():
 		body = []string{ui.Message(p, "loading…", inner)}
 	case len(o.items) == 0:
 		body = []string{ui.Message(p, "no operations", inner)}
