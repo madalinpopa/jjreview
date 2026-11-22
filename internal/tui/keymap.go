@@ -101,6 +101,9 @@ func (m Model) keyHints() []ui.KeyHint {
 	if t, ok := m.active(); ok {
 		return t.tab.Hints(m.tabsHint(), help)
 	}
+	if m.review.Searching() {
+		return m.review.Hints(m.change)
+	}
 	return append(m.review.Hints(m.change), help)
 }
 

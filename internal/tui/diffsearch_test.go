@@ -1,6 +1,9 @@
 package tui_test
 
 import (
+	"errors"
+	"slices"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -8,6 +11,19 @@ import (
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/tui"
 )
+
+func laterSource() *fakeSource {
+	src := searchSource()
+	src.files[2] = diff.File{OldPath: "c.txt", NewPath: "c.txt", OldMode: "100644", NewMode: "100644", Hunks: []diff.Hunk{
+		{OldStart: 2, OldLines: 1, NewStart: 2, NewLines: 3, Lines: []diff.Line{
+			{Kind: diff.LineAdded, Text: "zzz", NewNo: 2},
+			{Kind: diff.LineContext, Text: "keep", OldNo: 2, NewNo: 3},
+			{Kind: diff.LineAdded, Text: "foo again", NewNo: 4},
+		}},
+	}}
+	src.contents["commit1:c.txt"] = "foo top\nzzz\nkeep\nfoo again\n"
+	return src
+}
 
 func searchFile(path string, lines ...diff.Line) diff.File {
 	added, old := 0, 0
@@ -179,19 +195,84 @@ func TestDiffSearch_success(t *testing.T) {
 		m := press(t, onSearch(t), "f")
 
 		m = press(t, m, findKeys("keep")...)
+		m = press(t, m, "n")
 
 		assertAt(t, m, "c.txt", 1)
 		assertContains(t, view(m), "/keep 1/1")
 	})
 
-	t.Run("the full file of the next match is loaded first", func(t *testing.T) {
-		m := press(t, onSearch(t), "f")
+	t.Run("n matches a full file not loaded yet by its hunks without loading it", func(t *testing.T) {
+		src := searchSource()
+		src.contents["commit1:b.txt"] = "same\na.b\nhidden foo\n"
+		m := press(t, loaded(t, src), "f")
+		m = press(t, m, findKeys("foo")...)
+
+		m = press(t, m, "n", "n", "n")
+
+		assertAt(t, m, "c.txt", 2)
+		if slices.Contains(src.requested, "commit1:b.txt") {
+			t.Errorf("FileContent() requests = %q, want none for b.txt", src.requested)
+		}
+	})
+
+	t.Run("n matches the unchanged lines of a full file already loaded", func(t *testing.T) {
+		src := searchSource()
+		src.contents["commit1:b.txt"] = "same\na.b\nhidden foo\n"
+		m := press(t, loaded(t, src), "f", "J", "K")
 		m = press(t, m, findKeys("foo")...)
 
 		m = press(t, m, "n", "n")
 
+		assertAt(t, m, "b.txt", 2)
+		assertContains(t, view(m), "/foo 1/1")
+	})
+
+	t.Run("n finds a match in a folded hunk of a full file not loaded yet", func(t *testing.T) {
+		m := press(t, onSearch(t), "J", "J", "z", "K", "K", "f")
+		m = press(t, m, findKeys("foo")...)
+
+		m = press(t, m, "n", "n", "n")
+
 		assertAt(t, m, "c.txt", 2)
 		assertContains(t, view(m), "/foo 1/1")
+	})
+
+	t.Run("moving to a full file not loaded yet sets no current match", func(t *testing.T) {
+		m := press(t, loaded(t, laterSource()), "f")
+		m = press(t, m, findKeys("foo")...)
+
+		m = press(t, m, "n", "n")
+
+		assertAt(t, m, "c.txt", 1)
+		assertContains(t, view(m), "/foo 2 matches")
+	})
+
+	t.Run("n after the full file loads searches from the cursor", func(t *testing.T) {
+		m := press(t, loaded(t, laterSource()), "f")
+		m = press(t, m, findKeys("foo")...)
+
+		m = press(t, m, "n", "n", "n")
+
+		assertAt(t, m, "c.txt", 3)
+		assertContains(t, view(m), "/foo 2/2")
+	})
+
+	t.Run("f after leaving a match does not jump back to it", func(t *testing.T) {
+		m := press(t, onSearch(t), findKeys("bar")...)
+
+		m = press(t, m, "k", "f")
+
+		assertAt(t, m, "a.txt", 1)
+	})
+
+	t.Run("n while the full file loads changes nothing", func(t *testing.T) {
+		m := press(t, onSearch(t), findKeys("foo")...)
+		m, _ = update(t, m, keyMsg("f"))
+
+		m = press(t, m, "n")
+
+		assertAt(t, m, "a.txt", 0)
+		assertMissing(t, view(m), "no matches")
 	})
 
 	t.Run("pasted text goes to the query", func(t *testing.T) {
@@ -214,6 +295,21 @@ func TestDiffSearch_success(t *testing.T) {
 		m := press(t, onSearch(t), "/", "f", "o")
 
 		assertContains(t, view(m), "/ fo", "enter search", "esc cancel")
+		assertMissing(t, view(m), "? help")
+	})
+
+	t.Run("a long query keeps its end and the cursor in the pane", func(t *testing.T) {
+		m := press(t, onSearch(t), append(append([]string{"/"}, typeKeys(strings.Repeat("x", 150))...), "y")...)
+
+		assertContains(t, lineWith(t, view(m), "/ x"), "xy │")
+	})
+
+	t.Run("a narrower window keeps the end of the query in the pane", func(t *testing.T) {
+		m := press(t, onSearch(t), append(append([]string{"/"}, typeKeys(strings.Repeat("x", 150))...), "y")...)
+
+		m, _ = update(t, m, tea.WindowSizeMsg{Width: 100, Height: 30})
+
+		assertContains(t, lineWith(t, view(m), "/ x"), "xy │")
 	})
 
 	t.Run("the bar shows the match keys once a search is active", func(t *testing.T) {
@@ -223,8 +319,19 @@ func TestDiffSearch_success(t *testing.T) {
 		assertMissing(t, view(m), "n N match")
 	})
 
+	t.Run("the help of a read-only revision offers only clearing the search", func(t *testing.T) {
+		src := newSource()
+		src.change.Immutable = true
+
+		got := view(press(t, start(t, src, nil, 120, 60), "?"))
+
+		assertContains(t, got, "esc")
+		assertContains(t, got, "clear the search")
+		assertMissing(t, got, "cancel the range")
+	})
+
 	t.Run("the help lists the keys", func(t *testing.T) {
-		assertContains(t, view(press(t, start(t, newSource(), nil, 120, 60), "?")), "search the diff; next / previous match")
+		assertContains(t, view(press(t, start(t, newSource(), nil, 120, 60), "?")), "search the diff; next / previous match", "clear the search / cancel the range")
 	})
 }
 
@@ -335,12 +442,13 @@ func TestDiffSearch_cancel(t *testing.T) {
 		assertMissing(t, got, "selecting a range")
 	})
 
-	t.Run("an empty query clears the search", func(t *testing.T) {
+	t.Run("an empty query keeps the active search", func(t *testing.T) {
 		m := press(t, onSearch(t), findKeys("foo")...)
 
 		m = press(t, m, "/", "enter")
 
-		assertMissing(t, view(m), "/foo")
+		assertContains(t, view(m), "/foo 1/2")
+		assertMissing(t, view(m), "/ ")
 	})
 
 	t.Run("enter does not fold the hunk", func(t *testing.T) {
@@ -351,10 +459,65 @@ func TestDiffSearch_cancel(t *testing.T) {
 }
 
 func TestDiffSearch_failed(t *testing.T) {
+	t.Run("a full file that failed to load is skipped and not loaded again", func(t *testing.T) {
+		src := searchSource()
+		src.files[1].Hunks[0].Lines[1].Text = "foo b"
+		src.contentErr["commit1:b.txt"] = errors.New("boom")
+		m := press(t, loaded(t, src), "f", "J", "K")
+		m = press(t, m, findKeys("foo")...)
+
+		m = press(t, m, "n", "n")
+
+		if got := m.CurrentFile(); got != "c.txt" {
+			t.Errorf("CurrentFile() = %q, want c.txt", got)
+		}
+		if got := len(slices.DeleteFunc(slices.Clone(src.requested), func(k string) bool { return k != "commit1:b.txt" })); got != 1 {
+			t.Errorf("FileContent(b.txt) calls = %d, want 1", got)
+		}
+	})
+
+	t.Run("n after a failed reload keeps the error", func(t *testing.T) {
+		src := searchSource()
+		m := press(t, loaded(t, src), "f")
+		m = press(t, m, findKeys("foo")...)
+		src.err = errors.New("revision not found")
+		m = press(t, m, "R")
+		before := len(src.requested)
+
+		m = press(t, m, "n")
+
+		assertContains(t, view(m), "revision not found")
+		assertMissing(t, view(m), "no matches")
+		if got := len(src.requested); got != before {
+			t.Errorf("FileContent() calls after n = %d, want %d", got, before)
+		}
+	})
+
 	t.Run("n without a search names the key", func(t *testing.T) {
 		m := press(t, onSearch(t), "n")
 
 		assertContains(t, view(m), "press / to search")
 		assertAt(t, m, "a.txt", 2)
+	})
+
+	t.Run("no match in any full file keeps the place", func(t *testing.T) {
+		m := press(t, onWide(t, wideSource()), "f", "l")
+
+		m = press(t, m, findKeys("qqqq")...)
+
+		if got := m.CurrentFile(); got != "LONG.txt" {
+			t.Errorf("CurrentFile() = %q, want LONG.txt", got)
+		}
+		assertContains(t, view(m), "   2 +‹5 a010 a015", "/qqqq no matches")
+	})
+
+	t.Run("n keeps the cursor and the match when no other full file matches", func(t *testing.T) {
+		m := press(t, onSearch(t), "f")
+		m = press(t, m, findKeys("bar")...)
+
+		m = press(t, m, "k", "n")
+
+		assertAt(t, m, "a.txt", 2)
+		assertContains(t, view(m), "/bar 1/1")
 	})
 }

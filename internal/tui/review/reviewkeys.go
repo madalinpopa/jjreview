@@ -123,12 +123,15 @@ type HelpSection struct {
 func (m Model) Help(c jj.Change) ([]HelpSection, []ui.KeyHint) {
 	k := m.keys
 	var review []ui.KeyHint
+	dismiss := "clear the search"
 	if !c.Immutable {
+		dismiss += " / cancel the range"
 		review = []ui.KeyHint{ui.Hint(k.selectLine.Help().Desc+" / "+k.selectRange.Help().Desc, k.selectLine, k.selectRange), ui.Describe(k.selectHunk), ui.Describe(k.selectFile), ui.Describe(k.commit)}
 	}
 	review = append(review, ui.Describe(k.fold), ui.Describe(k.foldAll), ui.Describe(k.removed), ui.Describe(k.removedAll),
 		ui.Hint("scroll the diff left / right", k.scrollLeft, k.scrollRight),
-		ui.Hint(k.search.Help().Desc+"; next / previous match", k.search, k.nextMatch, k.prevMatch))
+		ui.Hint(k.search.Help().Desc+"; next / previous match", k.search, k.nextMatch, k.prevMatch),
+		ui.Hint(dismiss, k.cancelRange))
 	sections := []HelpSection{
 		{Title: "Navigation", Hints: []ui.KeyHint{
 			ui.Describe(k.switchPane),
