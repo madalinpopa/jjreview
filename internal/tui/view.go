@@ -8,6 +8,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -322,5 +323,19 @@ func (m Model) layout() ui.Layout {
 		BodyHeight: m.bodyHeight(),
 		ListHeight: m.diffHeight(),
 		ModalWidth: m.modalWidth(),
+	}
+}
+
+func (m Model) head() tab.Head {
+	return tab.Head{ChangeID: m.target, CommitID: m.targetHead, Title: m.headTitle(), WorkingCopy: m.change.WorkingCopy}
+}
+
+func (m Model) env(v view) tab.Env {
+	return tab.Env{
+		Layout:  m.layout(),
+		Head:    m.head(),
+		Active:  m.view == v,
+		Dropped: pickedUnits(m.picks()),
+		Lock:    m.lock(),
 	}
 }

@@ -12,13 +12,8 @@ func (m Model) BookmarkCursor() string {
 }
 
 func (m Model) bookmarkEnv() bookmarks.Env {
-	return bookmarks.Env{
-		Layout:     m.layout(),
-		Head:       m.targetHead,
-		HeadChange: m.target,
-		HeadTitle:  m.headTitle(),
-		Active:     m.view == bookmarksView,
-	}
+	e := m.env(bookmarksView)
+	return bookmarks.Env{Layout: e.Layout, Head: e.Head.CommitID, HeadChange: e.Head.ChangeID, HeadTitle: e.Head.Title, Active: e.Active}
 }
 
 func (m Model) headTitle() string {

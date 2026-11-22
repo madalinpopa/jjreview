@@ -13,13 +13,8 @@ func (m Model) LogCursor() string {
 }
 
 func (m Model) logEnv() logview.Env {
-	return logview.Env{
-		Layout:  m.layout(),
-		Head:    m.targetHead,
-		Active:  m.view == logView,
-		Dropped: pickedUnits(m.picks()),
-		Lock:    m.lock(),
-	}
+	e := m.env(logView)
+	return logview.Env{Layout: e.Layout, Head: e.Head.CommitID, Active: e.Active, Dropped: e.Dropped, Lock: e.Lock}
 }
 
 func (m *Model) showLog() tea.Cmd {

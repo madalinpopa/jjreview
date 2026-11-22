@@ -34,7 +34,7 @@ func (m *Model) rewrite(rw tab.Rewrite) tea.Cmd {
 		m.status = rw.Pending
 	}
 	ctx, src, target := m.ctx, m.src, m.target
-	head := tab.Head{CommitID: m.targetHead, WorkingCopy: m.change.WorkingCopy}
+	head := m.head()
 	return func() tea.Msg {
 		msg := rewrittenMsg{focus: rw.Focus, keep: keep}
 		r, err := rw.Run(ctx, head)

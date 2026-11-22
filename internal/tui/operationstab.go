@@ -10,12 +10,8 @@ func (m Model) OperationCursor() string {
 }
 
 func (m Model) operationEnv() operations.Env {
-	return operations.Env{
-		Layout:  m.layout(),
-		Dropped: pickedUnits(m.picks()),
-		Active:  m.view == operationsView,
-		Lock:    m.lock(),
-	}
+	e := m.env(operationsView)
+	return operations.Env{Layout: e.Layout, Dropped: e.Dropped, Active: e.Active, Lock: e.Lock}
 }
 
 func (m *Model) showOperations() tea.Cmd {
