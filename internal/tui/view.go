@@ -313,3 +313,14 @@ func (m Model) diffCard() string {
 	}
 	return ui.Card(m.pal, width, m.bodyHeight(), "Unified diff", !m.filesFocus, value, body)
 }
+
+func (m Model) layout() ui.Layout {
+	return ui.Layout{
+		Theme:      m.pal,
+		Width:      m.width,
+		Height:     m.height,
+		BodyHeight: m.bodyHeight(),
+		ListHeight: m.diffHeight(),
+		ModalWidth: m.modalWidth(),
+	}
+}

@@ -15,15 +15,10 @@ func (m Model) LogCursor() string {
 
 func (m Model) logEnv() logview.Env {
 	return logview.Env{
-		Theme:      m.pal,
-		Width:      m.width,
-		Height:     m.height,
-		BodyHeight: m.bodyHeight(),
-		ListHeight: m.diffHeight(),
-		ModalWidth: m.modalWidth(),
-		Head:       m.targetHead,
-		Active:     m.view == logView,
-		Dropped:    pickedUnits(m.picks()),
+		Layout:  m.layout(),
+		Head:    m.targetHead,
+		Active:  m.view == logView,
+		Dropped: pickedUnits(m.picks()),
 	}
 }
 

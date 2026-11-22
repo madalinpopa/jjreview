@@ -14,12 +14,7 @@ func (m Model) BookmarkCursor() string {
 
 func (m Model) bookmarkEnv() bookmarks.Env {
 	return bookmarks.Env{
-		Theme:      m.pal,
-		Width:      m.width,
-		Height:     m.height,
-		BodyHeight: m.bodyHeight(),
-		ListHeight: m.diffHeight(),
-		ModalWidth: m.modalWidth(),
+		Layout:     m.layout(),
 		Head:       m.targetHead,
 		HeadChange: m.target,
 		HeadTitle:  m.headTitle(),

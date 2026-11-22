@@ -74,15 +74,10 @@ func newKeyMap() keyMap {
 }
 
 type Env struct {
-	Theme      theme.Theme
-	Width      int
-	Height     int
-	BodyHeight int
-	ListHeight int
-	ModalWidth int
-	Head       string
-	Active     bool
-	Dropped    int
+	ui.Layout
+	Head    string
+	Active  bool
+	Dropped int
 }
 
 func (e Env) modalInner() int {

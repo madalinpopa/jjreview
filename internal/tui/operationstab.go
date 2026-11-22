@@ -16,13 +16,8 @@ func (m Model) OperationCursor() string {
 
 func (m Model) operationEnv() operations.Env {
 	return operations.Env{
-		Theme:      m.pal,
-		Width:      m.width,
-		Height:     m.height,
-		BodyHeight: m.bodyHeight(),
-		ListHeight: m.diffHeight(),
-		ModalWidth: m.modalWidth(),
-		Dropped:    pickedUnits(m.picks()),
+		Layout:  m.layout(),
+		Dropped: pickedUnits(m.picks()),
 	}
 }
 

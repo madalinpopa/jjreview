@@ -80,13 +80,8 @@ func newKeyMap() keyMap {
 }
 
 type Env struct {
-	Theme      theme.Theme
-	Width      int
-	Height     int
-	BodyHeight int
-	ListHeight int
-	ModalWidth int
-	Dropped    int
+	ui.Layout
+	Dropped int
 }
 
 type Intent struct {

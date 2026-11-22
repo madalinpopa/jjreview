@@ -56,12 +56,7 @@ func newKeyMap() keyMap {
 }
 
 type Env struct {
-	Theme      theme.Theme
-	Width      int
-	Height     int
-	BodyHeight int
-	ListHeight int
-	ModalWidth int
+	ui.Layout
 	Head       string
 	HeadChange string
 	HeadTitle  string
