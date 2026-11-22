@@ -1,78 +1,76 @@
 Source docs/demo/setup.tape
 
-Type@300ms "jjjj"
+Type@300ms "jjj"
 Sleep 500ms
-Type@300ms "kk"
-Sleep 800ms
 Type "]"
-Sleep 1s
+Sleep 800ms
 Type "["
-Sleep 1s
-Ctrl+D
-Sleep 1s
-Ctrl+U
-Sleep 1s
-Type "G"
-Sleep 1s
-Type "g"
-Sleep 1s
-
+Sleep 800ms
 Type "J"
 Sleep 1s
 Type "K"
 Sleep 1s
 
-Tab
-Sleep 800ms
-Type@700ms "jj"
+Type "d"
+Sleep 1.2s
+Type "d"
+Sleep 600ms
+Type "z"
+Sleep 1s
+Type "z"
+Sleep 600ms
+
+Type "f"
+Sleep 1.5s
+Type "f"
+Sleep 1s
+
+Type "/"
 Sleep 500ms
+Type "notfound"
+Sleep 800ms
+Enter
+Wait+Screen@10s /notfound 1\/1/
+Sleep 1.5s
+Type "n"
+Sleep 1.5s
+Type "n"
+Sleep 1.5s
+Type "N"
+Sleep 1.2s
+Type "N"
+Wait+Screen@10s /notfound 1\/1/
+Sleep 1.2s
+Escape
+Sleep 1s
+
+Type "s"
+Sleep 1.5s
 Type "k"
 Sleep 800ms
-Type "G"
-Sleep 800ms
-Type "g"
-Sleep 800ms
-Type "j"
-Sleep 800ms
-Tab
-Sleep 1s
-
-Type "d"
-Sleep 1.5s
-Type "d"
-Sleep 800ms
-Type "D"
-Sleep 1.5s
-Type "D"
-Sleep 1s
-
-Type "z"
-Sleep 1s
-Type "z"
-Sleep 800ms
-Type "Z"
-Sleep 1s
-Type "Z"
-Sleep 1s
-
-Type "f"
-Sleep 1.5s
-Type "G"
-Sleep 1s
-Type "f"
+Type "s"
 Sleep 1.5s
 
-Type "S"
-Sleep 1.5s
 Type "]"
+Sleep 600ms
+Type@250ms "jjjj"
+Sleep 500ms
+Type "v"
+Sleep 600ms
+Type@400ms "jjj"
 Sleep 800ms
-Type " "
+Type "s"
 Sleep 1.5s
 
-Tab
-Sleep 500ms
-Type "j"
+Type "J"
+Sleep 1s
+Type@300ms "lll"
+Sleep 1.5s
+Type@300ms "hhh"
 Sleep 800ms
+
+Tab
+Sleep 600ms
 Type " "
 Sleep 1.5s
 
@@ -85,21 +83,16 @@ Ctrl+S
 Wait+Screen@30s /created/
 Sleep 2s
 
-Type "g"
-Sleep 800ms
-Type "e"
+Tab
+Sleep 500ms
+Type "K"
 Sleep 2s
-Type ":q"
-Enter
-Sleep 1.5s
 
 Type "R"
 Sleep 1.5s
 
 Type "?"
 Sleep 2s
-Type@400ms "jjjjjj"
-Sleep 1s
 Escape
 Sleep 1s
 
