@@ -217,22 +217,13 @@ const minDescription = 20
 const defaultWorkspace = "default"
 
 func New(ctx context.Context, src Source) Model {
-	return Model{ctx: ctx, src: src, keys: newKeyMap(), query: newSearchInput(), expanded: map[string]bool{}, files: map[string]fileList{}, marked: map[string]bool{}}
+	return Model{ctx: ctx, src: src, keys: newKeyMap(), query: ui.NewSearchInput(), expanded: map[string]bool{}, files: map[string]fileList{}, marked: map[string]bool{}}
 }
 
 type loadedMsg struct {
 	seq   int
 	lines []jj.LogLine
 	err   error
-}
-
-func newSearchInput() textinput.Model {
-	in := textinput.New()
-	in.Prompt = "/ "
-	styles := in.Styles()
-	styles.Cursor.Blink = false
-	in.SetStyles(styles)
-	return in
 }
 
 func (l *Model) Resize(width int) {
@@ -242,21 +233,6 @@ func (l *Model) Resize(width int) {
 	q.SetValue("")
 	q.SetValue(value)
 	q.SetCursor(pos)
-}
-
-func searchStyles(p theme.Theme) textinput.Styles {
-	base := lipgloss.NewStyle().Background(p.Card)
-	state := textinput.StyleState{
-		Text:        base.Foreground(p.Strong),
-		Placeholder: base.Foreground(p.Muted),
-		Suggestion:  base.Foreground(p.Muted),
-		Prompt:      base.Foreground(p.Key),
-	}
-	return textinput.Styles{
-		Focused: state,
-		Blurred: state,
-		Cursor:  textinput.CursorStyle{Color: p.Selection, Shape: tea.CursorBar},
-	}
 }
 
 func (l Model) filtered() bool {
@@ -996,7 +972,7 @@ func (l Model) View(env tab.Env) string {
 	default:
 		if l.filtered() {
 			q := l.query
-			q.SetStyles(searchStyles(p))
+			q.SetStyles(ui.SearchStyles(p))
 			body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(lipgloss.NewStyle(), " "), ui.Span(lipgloss.NewStyle(), q.View())}, nil)}
 		}
 		at, total := l.position()
