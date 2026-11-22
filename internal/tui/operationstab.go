@@ -2,21 +2,20 @@ package tui
 
 import (
 	tea "charm.land/bubbletea/v2"
-	"github.com/madalinpopa/jjreview/internal/tui/operations"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 )
 
 func (m Model) OperationCursor() string {
 	return m.operations.SelectedID()
 }
 
-func (m Model) operationEnv() operations.Env {
-	e := m.env(operationsView)
-	return operations.Env{Layout: e.Layout, Dropped: e.Dropped, Active: e.Active, Lock: e.Lock}
+func (m Model) operationEnv() tab.Env {
+	return m.env(operationsView)
 }
 
 func (m *Model) showOperations() tea.Cmd {
 	m.view = operationsView
-	return m.operations.Show()
+	return m.operations.Show(m.operationEnv())
 }
 
 func (m *Model) operationsKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -35,7 +34,7 @@ func (m *Model) operationsKey(msg tea.KeyPressMsg) tea.Cmd {
 	return m.operationEffects(m.operations.Key(msg, env))
 }
 
-func (m *Model) operationEffects(cmd tea.Cmd, eff operations.Effect) tea.Cmd {
+func (m *Model) operationEffects(cmd tea.Cmd, eff tab.Effect) tea.Cmd {
 	switch {
 	case eff.Rewrite != nil:
 		return tea.Batch(cmd, m.rewrite(*eff.Rewrite))

@@ -55,8 +55,8 @@ func newSource() *fakeSource {
 	}}
 }
 
-func env(width, listHeight int) operations.Env {
-	return operations.Env{
+func env(width, listHeight int) tab.Env {
+	return tab.Env{
 		Theme:      theme.Default(),
 		Width:      width,
 		Height:     listHeight + ui.CardChrome + 2,
@@ -78,7 +78,7 @@ func run(t *testing.T, cmd tea.Cmd) tea.Msg {
 func loaded(t *testing.T, src *fakeSource) operations.Model {
 	t.Helper()
 	m := operations.New(t.Context(), src)
-	if _, _, ok := m.Update(run(t, m.Show()), env(80, 10)); !ok {
+	if _, _, ok := m.Update(run(t, m.Show(env(80, 10))), env(80, 10)); !ok {
 		t.Fatal("Update(list result) handled = false, want true")
 	}
 	return m
@@ -96,8 +96,8 @@ func keyMsg(k string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: rune(k[0]), Text: k}
 }
 
-func press(m *operations.Model, e operations.Env, keys ...string) operations.Effect {
-	var eff operations.Effect
+func press(m *operations.Model, e tab.Env, keys ...string) tab.Effect {
+	var eff tab.Effect
 	for _, k := range keys {
 		_, eff = m.Key(keyMsg(k), e)
 		m.KeepVisible(e)
@@ -105,11 +105,11 @@ func press(m *operations.Model, e operations.Env, keys ...string) operations.Eff
 	return eff
 }
 
-func screen(m operations.Model, e operations.Env) string {
+func screen(m operations.Model, e tab.Env) string {
 	return ansi.Strip(m.View(e))
 }
 
-func overlay(m operations.Model, e operations.Env) string {
+func overlay(m operations.Model, e tab.Env) string {
 	return ansi.Strip(m.Overlay(e))
 }
 
@@ -121,10 +121,10 @@ func TestLoad_success(t *testing.T) {
 		src := newSource()
 		m := loaded(t, src)
 
-		cmd := m.Show()
+		cmd := m.Show(env(80, 10))
 
 		if cmd != nil {
-			t.Error("Show() after a load = a command, want nil")
+			t.Error("Show(env) after a load = a command, want nil")
 		}
 		if src.calls != 1 {
 			t.Errorf("Operations() calls = %d, want 1", src.calls)
@@ -139,10 +139,10 @@ func TestLoad_success(t *testing.T) {
 		m := loaded(t, newSource())
 		m.MarkStale()
 
-		cmd := m.Show()
+		cmd := m.Show(env(80, 10))
 
 		if cmd == nil {
-			t.Error("Show() on stale operations = nil, want a load")
+			t.Error("Show(env) on stale operations = nil, want a load")
 		}
 	})
 
@@ -260,7 +260,7 @@ func TestLoad_failed(t *testing.T) {
 
 		cmd, eff, ok := m.Update(tea.WindowSizeMsg{Width: 10, Height: 10}, env(80, 10))
 
-		if ok || cmd != nil || eff != (operations.Effect{}) {
+		if ok || cmd != nil || eff != (tab.Effect{}) {
 			t.Errorf("Update(WindowSizeMsg) = (%v, %+v, %t), want (nil, {}, false)", cmd, eff, ok)
 		}
 	})
@@ -381,7 +381,7 @@ func TestKey_success(t *testing.T) {
 
 		eff := press(&m, e, "n")
 
-		if eff != (operations.Effect{}) || m.OverlayOpen() {
+		if eff != (tab.Effect{}) || m.OverlayOpen() {
 			t.Errorf("Key(n) = %+v, OverlayOpen() = %t, want nothing to run and the prompt closed", eff, m.OverlayOpen())
 		}
 	})
@@ -482,7 +482,7 @@ func TestKey_failed(t *testing.T) {
 
 		eff := press(&m, env(80, 10), "r")
 
-		if eff != (operations.Effect{}) || m.OverlayOpen() {
+		if eff != (tab.Effect{}) || m.OverlayOpen() {
 			t.Errorf("Key(r) on no operations = %+v, OverlayOpen() = %t, want nothing", eff, m.OverlayOpen())
 		}
 	})
@@ -500,7 +500,7 @@ func TestConfirm_failed(t *testing.T) {
 
 		eff := press(&m, e, "y")
 
-		if eff != (operations.Effect{}) || m.OverlayOpen() {
+		if eff != (tab.Effect{}) || m.OverlayOpen() {
 			t.Errorf("Key(y) while busy = %+v, OverlayOpen() = %t, want nothing and the prompt closed", eff, m.OverlayOpen())
 		}
 	})
@@ -875,7 +875,7 @@ func TestHelp_success(t *testing.T) {
 	m := operations.New(t.Context(), newSource())
 
 	var got []string
-	for _, h := range slices.Concat(m.Hints(), m.Help()) {
+	for _, h := range slices.Concat(m.Hints(ui.KeyHint{}, ui.KeyHint{}), m.Help()) {
 		got = append(got, h.Label)
 	}
 
@@ -883,5 +883,39 @@ func TestHelp_success(t *testing.T) {
 		if !slices.Contains(got, want) {
 			t.Errorf("Hints() and Help() labels = %v, missing %q", got, want)
 		}
+	}
+}
+
+var _ tab.View = (*operations.Model)(nil)
+
+func TestPaste_success(t *testing.T) {
+	t.Parallel()
+	m := loaded(t, newSource())
+
+	cmd := m.Paste(tea.PasteMsg{Content: "text"})
+
+	if cmd != nil {
+		t.Error("Paste() = a command, want nil")
+	}
+}
+
+func TestHints_success(t *testing.T) {
+	t.Parallel()
+	m := operations.New(t.Context(), newSource())
+	tabs := ui.KeyHint{Keys: []string{"1", "2"}, Label: "tabs"}
+	help := ui.KeyHint{Keys: []string{"?"}, Label: "help"}
+
+	hints := m.Hints(tabs, help)
+
+	var got []string
+	for _, h := range hints {
+		got = append(got, h.Label)
+	}
+	want := []string{"tabs", "operation", "command", "restore", "undo", "abandon", "refresh", "help"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("Hints(tabs, help) labels = %v, want %v", got, want)
+	}
+	if !slices.Equal(hints[0].Keys, tabs.Keys) || !slices.Equal(hints[len(hints)-1].Keys, help.Keys) {
+		t.Errorf("Hints(tabs, help) = %v, want tabs first and help last", hints)
 	}
 }

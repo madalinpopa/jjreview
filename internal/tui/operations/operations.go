@@ -120,19 +120,6 @@ func newKeyMap() keyMap {
 	}
 }
 
-type Env struct {
-	ui.Layout
-	Dropped int
-	Active  bool
-	Lock    tab.Lock
-}
-
-type Effect struct {
-	Status  string
-	Refresh bool
-	Rewrite *tab.Rewrite
-}
-
 type pending struct {
 	action intent
 	op     jj.Operation
@@ -189,7 +176,7 @@ func (o Model) Captures() bool {
 	return o.OverlayOpen()
 }
 
-func (o Model) Ignores(msg tea.KeyPressMsg, env Env) bool {
+func (o Model) Ignores(msg tea.KeyPressMsg, env tab.Env) bool {
 	return o.confirm == nil && o.keys.resolve(msg).action() && (msg.IsRepeat || env.Lock.Busy || o.list.Loading())
 }
 
@@ -253,11 +240,11 @@ func (o Model) cursorSpan(rows []row) (int, int) {
 	return start, end
 }
 
-func listWidth(env Env) int {
+func listWidth(env tab.Env) int {
 	return max(env.Width-2, 0)
 }
 
-func (o *Model) KeepVisible(env Env) {
+func (o *Model) KeepVisible(env tab.Env) {
 	height := env.ListHeight
 	rows := o.rows(listWidth(env))
 	top := min(o.top, max(len(rows)-height, 0))
@@ -303,7 +290,7 @@ func (o *Model) scrollPage(delta, height, width int) {
 	}
 }
 
-func (o *Model) Show() tea.Cmd {
+func (o *Model) Show(tab.Env) tea.Cmd {
 	if o.list.Due() {
 		return o.Load()
 	}
@@ -325,14 +312,14 @@ func (o *Model) MarkStale() {
 	o.list.MarkStale()
 }
 
-func (o *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
+func (o *Model) Update(msg tea.Msg, env tab.Env) (tea.Cmd, tab.Effect, bool) {
 	loaded, ok := msg.(loadedMsg)
 	if !ok {
-		return nil, Effect{}, false
+		return nil, tab.Effect{}, false
 	}
 	want := o.SelectedID()
 	if !o.list.Finish(loaded.seq, loaded.err) {
-		return nil, Effect{}, true
+		return nil, tab.Effect{}, true
 	}
 	o.items = loaded.items
 	maps.DeleteFunc(o.expanded, func(id string, _ bool) bool {
@@ -344,12 +331,12 @@ func (o *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 		o.cursor = max(min(o.cursor, len(o.items)-1), 0)
 	}
 	if o.list.Stale() && env.Active {
-		return o.Load(), Effect{}, true
+		return o.Load(), tab.Effect{}, true
 	}
-	return nil, Effect{}, true
+	return nil, tab.Effect{}, true
 }
 
-func (o *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
+func (o *Model) Key(msg tea.KeyPressMsg, env tab.Env) (tea.Cmd, tab.Effect) {
 	if o.confirm != nil {
 		return nil, o.confirmKey(msg, env)
 	}
@@ -377,40 +364,40 @@ func (o *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	case restoreIntent, undoIntent, abandonIntent:
 		return nil, o.ask(in)
 	case reloadIntent:
-		return nil, Effect{Refresh: !o.list.Loading()}
+		return nil, tab.Effect{Refresh: !o.list.Loading()}
 	}
-	return nil, Effect{}
+	return nil, tab.Effect{}
 }
 
-func (o *Model) ask(action intent) Effect {
+func (o *Model) ask(action intent) tab.Effect {
 	s := o.selected()
 	switch {
 	case s == nil:
-		return Effect{}
+		return tab.Effect{}
 	case action == restoreIntent && s.Current:
-		return Effect{Status: "already at operation " + ui.ShortID(s.ID)}
+		return tab.Effect{Status: "already at operation " + ui.ShortID(s.ID)}
 	case action == undoIntent && s.Root:
-		return Effect{Status: "the root operation cannot be undone"}
+		return tab.Effect{Status: "the root operation cannot be undone"}
 	case action == abandonIntent && s.Root:
-		return Effect{Status: "the root operation cannot be abandoned"}
+		return tab.Effect{Status: "the root operation cannot be abandoned"}
 	case action == abandonIntent && s.Current:
-		return Effect{Status: "the current operation cannot be abandoned; press " + o.keys.undo.Help().Key + " to undo it first"}
+		return tab.Effect{Status: "the current operation cannot be abandoned; press " + o.keys.undo.Help().Key + " to undo it first"}
 	}
 	o.confirm = &pending{action: action, op: *s}
-	return Effect{}
+	return tab.Effect{}
 }
 
-func (o *Model) confirmKey(msg tea.KeyPressMsg, env Env) Effect {
+func (o *Model) confirmKey(msg tea.KeyPressMsg, env tab.Env) tab.Effect {
 	c := o.confirm
 	o.confirm = nil
 	switch {
 	case o.keys.resolveConfirm(msg) != confirmIntent, o.SelectedID() != c.op.ID, env.Lock.Busy:
-		return Effect{}
+		return tab.Effect{}
 	case env.Lock.Reason != "":
-		return Effect{Status: env.Lock.Reason}
+		return tab.Effect{Status: env.Lock.Reason}
 	}
 	rw := o.rewrite(*c)
-	return Effect{Rewrite: &rw}
+	return tab.Effect{Rewrite: &rw}
 }
 
 func (o Model) rewrite(c pending) tab.Rewrite {
@@ -435,7 +422,7 @@ func (o Model) rewrite(c pending) tab.Rewrite {
 	}}
 }
 
-func (o Model) Overlay(env Env) string {
+func (o Model) Overlay(env tab.Env) string {
 	if o.confirm == nil {
 		return ""
 	}
@@ -479,15 +466,21 @@ func describe(op jj.Operation) string {
 	return op.Description
 }
 
-func (o Model) Hints() []ui.KeyHint {
+func (o Model) Hints(tabs, help ui.KeyHint) []ui.KeyHint {
 	return []ui.KeyHint{
+		tabs,
 		ui.Hint("operation", o.keys.Down, o.keys.Up),
 		ui.Hint("command", o.keys.expand, o.keys.collapse),
 		ui.Hint("restore", o.keys.restore),
 		ui.Hint("undo", o.keys.undo),
 		ui.Hint("abandon", o.keys.abandon),
 		ui.Hint("refresh", o.keys.reload),
+		help,
 	}
+}
+
+func (o Model) Paste(tea.PasteMsg) tea.Cmd {
+	return nil
 }
 
 func (o Model) Help() []ui.KeyHint {
@@ -504,7 +497,7 @@ func (o Model) Help() []ui.KeyHint {
 	}
 }
 
-func (o Model) View(env Env) string {
+func (o Model) View(env tab.Env) string {
 	p := env.Theme
 	inner := listWidth(env)
 	var body []string

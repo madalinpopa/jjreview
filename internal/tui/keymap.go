@@ -109,7 +109,7 @@ func (m Model) keyHints() []ui.KeyHint {
 	case bookmarksView:
 		return m.bookmarks.Hints(m.tabsHint(), help)
 	case operationsView:
-		return slices.Concat([]ui.KeyHint{m.tabsHint()}, m.operations.Hints(), []ui.KeyHint{help})
+		return m.operations.Hints(m.tabsHint(), help)
 	}
 	return append(m.reviewHints(), help)
 }
