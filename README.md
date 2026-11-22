@@ -108,6 +108,12 @@ Lines wider than the diff pane are cut at its edge: `l` and `h` scroll the code
 sideways while the line numbers and signs stay in place, and `‹` / `›` mark the
 edge that hides text.
 
+`/` searches the code lines on screen for the query as plain text, ignoring
+case. Removed lines hidden by default and lines in folded hunks are not
+searched until `d` or `z` shows them. Every match is highlighted, the current
+one in the selection colour, and the status bar shows its position in the
+file, such as `/query 3/12`.
+
 | Key | Action |
 |-----|--------|
 | `1` / `2` / `3` / `4` | Show the review tab / the log tab / the bookmarks tab / the operations tab |
@@ -119,6 +125,9 @@ edge that hides text.
 | `J` / `K` | Next / previous file from either pane |
 | `h` / `l` | Scroll the diff left / right by 8 columns; a new file starts at the first column again |
 | `@` | Go back to the working-copy revision |
+| `/` | Search the diff; `enter` jumps to the first match from the cursor on, `esc` cancels |
+| `n` / `N` | Next / previous match; past the last match of a file they move on to the next file with one and wrap around at the ends |
+| `esc` | Clear the search; while a line range is open it cancels the range instead |
 | `s` | Select the changed line under the cursor |
 | `v` | Start a line range at the cursor: move to extend it, `s` or `space` selects its changed lines (or unselects them when all are selected), `esc` or `v` cancels |
 | `space` | Select the hunk under the cursor (in the file pane: the whole file); on a hunk selected in part it selects the rest, then unselects it |
