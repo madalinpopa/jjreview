@@ -162,7 +162,7 @@ func (m *Model) Repaint(old, pal theme.Theme) {
 func (m *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 	switch msg := msg.(type) {
 	case contentMsg:
-		m.applyContent(env, msg)
+		return m.applyContent(env, msg), Effect{}, true
 	case generatedMsg:
 		m.applyGenerated(msg)
 	case committedMsg:
@@ -224,21 +224,22 @@ func (m *Model) CancelRange() {
 	m.ranging = false
 }
 
-func (m *Model) applyContent(env Env, msg contentMsg) {
+func (m *Model) applyContent(env Env, msg contentMsg) tea.Cmd {
 	if msg.err != nil {
 		m.contentErrs[msg.key] = msg.err
 		if file, ok := m.currentFile(); ok && contentKeyOf(env, file) == msg.key {
 			m.cursor, m.seek = 0, 0
 		}
-		return
+		return nil
 	}
 	delete(m.contentErrs, msg.key)
 	m.contents[msg.key] = msg.content
 	maps.DeleteFunc(m.highlights, func(k highlightKey, _ fileHighlight) bool { return k.full })
 	if file, ok := m.currentFile(); ok && m.full && contentKeyOf(env, file) == msg.key {
 		m.cursor = firstRow(m.rows(env))
-		m.seekMatch(env)
+		return m.seekMatch(env)
 	}
+	return nil
 }
 
 func (m Model) currentFile() (diff.File, bool) {
