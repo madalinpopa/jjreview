@@ -219,3 +219,37 @@ func TestReloadRetarget_success(t *testing.T) {
 		})
 	}
 }
+
+func TestOverlayOpen_success(t *testing.T) {
+	t.Parallel()
+
+	tests := map[string]struct {
+		open func(m *bookmarks.Model)
+		want bool
+	}{
+		"is closed without an overlay": {open: func(*bookmarks.Model) {}, want: false},
+		"is open while the dialog is open": {open: func(m *bookmarks.Model) {
+			m.Key(press("n"), env())
+		}, want: true},
+		"is open while the delete confirmation is open": {open: func(m *bookmarks.Model) {
+			m.Key(press("d"), env())
+		}, want: true},
+		"is open while the picker is open": {open: func(m *bookmarks.Model) {
+			m.Pick(jj.LogEntry{ChangeID: "kkkk", CommitID: "aaaa"})
+		}, want: true},
+	}
+
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			m := loaded(t, newSource())
+			tt.open(&m)
+
+			got := m.OverlayOpen()
+
+			if got != tt.want {
+				t.Errorf("OverlayOpen() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

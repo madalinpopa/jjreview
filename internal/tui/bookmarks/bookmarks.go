@@ -49,13 +49,9 @@ type Model struct {
 	src      Source
 	keys     keyMap
 	items    []jj.Bookmark
-	loaded   bool
-	loading  bool
-	stale    bool
-	err      error
+	list     ui.Loader
 	cursor   int
 	top      int
-	seq      int
 	want     string
 	opened   bookmarkRef
 	modal    *dialog
@@ -133,17 +129,14 @@ func (b *Model) scrollPage(delta, height int) {
 }
 
 func (b *Model) Show() tea.Cmd {
-	if !b.loading && (!b.loaded || b.stale) {
+	if b.list.Due() {
 		return b.Load()
 	}
 	return nil
 }
 
 func (b *Model) Load() tea.Cmd {
-	b.seq++
-	b.loading = true
-	b.stale = false
-	seq, ctx, src := b.seq, b.ctx, b.src
+	seq, ctx, src := b.list.Begin(), b.ctx, b.src
 	return func() tea.Msg {
 		items, err := src.Bookmarks(ctx)
 		if err != nil {
@@ -154,7 +147,7 @@ func (b *Model) Load() tea.Cmd {
 }
 
 func (b *Model) MarkStale() {
-	b.stale = true
+	b.list.MarkStale()
 }
 
 func (b *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
@@ -173,25 +166,21 @@ func (b *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 }
 
 func (b *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Effect) {
-	if msg.seq != b.seq {
+	want := cmp.Or(b.want, b.SelectedName())
+	if !b.list.Finish(msg.seq, msg.err) {
 		return nil, Effect{}
 	}
-	before := b.SelectedName()
-	want := cmp.Or(b.want, before)
-	b.loading = false
-	b.loaded = true
-	b.err = msg.err
 	b.items = msg.items
 	if i := slices.IndexFunc(b.items, func(item jj.Bookmark) bool { return item.Name == want }); i >= 0 {
 		b.cursor = i
 	} else {
 		b.cursor = max(min(b.cursor, len(b.items)-1), 0)
 	}
-	if !b.stale {
+	if !b.list.Stale() {
 		b.want = ""
 	}
 	eff := Effect{Retarget: env.Active && b.selectedRef() != b.opened}
-	if b.stale && env.Active {
+	if b.list.Stale() && env.Active {
 		return b.Load(), eff
 	}
 	return nil, eff
@@ -238,7 +227,7 @@ func (b *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 			b.deleting = new(*s)
 		}
 	case reloadIntent:
-		return nil, Effect{Refresh: !b.loading}
+		return nil, Effect{Refresh: !b.list.Loading()}
 	}
 	return nil, Effect{}
 }
@@ -298,18 +287,12 @@ func (b Model) deleteView(env Env) string {
 		ui.Paint(inner, p.Card, target, nil),
 		ui.Paint(inner, p.Card, nil, []ui.Seg{ui.Span(ui.Fg(p.Key), "y"), ui.Span(ui.Fg(p.Muted), " delete · any other key cancels")}),
 	)
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(p.ModalBorder).
-		BorderBackground(p.Card).
-		Background(p.Card).
-		Padding(0, 1).
-		Render(strings.Join(lines, "\n"))
+	return ui.ModalBox(p, lines)
 }
 
 func (b Model) Hints() []ui.KeyHint {
 	return []ui.KeyHint{
-		ui.Hint("bookmark", b.keys.down, b.keys.up),
+		ui.Hint("bookmark", b.keys.Down, b.keys.Up),
 		ui.Hint("review", b.keys.open),
 		ui.Hint("new", b.keys.create),
 		ui.Hint("edit", b.keys.edit),
@@ -320,9 +303,9 @@ func (b Model) Hints() []ui.KeyHint {
 
 func (b Model) Help() []ui.KeyHint {
 	return []ui.KeyHint{
-		ui.Hint("next / previous bookmark", b.keys.down, b.keys.up),
-		ui.Hint("half page down / up", b.keys.halfDown, b.keys.halfUp),
-		ui.Hint("first / last bookmark", b.keys.top, b.keys.bottom),
+		ui.Hint("next / previous bookmark", b.keys.Down, b.keys.Up),
+		ui.Hint("half page down / up", b.keys.HalfDown, b.keys.HalfUp),
+		ui.Hint("first / last bookmark", b.keys.Top, b.keys.Bottom),
 		ui.Describe(b.keys.open),
 		ui.Describe(b.keys.create),
 		ui.Describe(b.keys.edit),
@@ -397,9 +380,9 @@ func (b Model) View(env Env) string {
 	var body []string
 	var value []ui.Seg
 	switch {
-	case b.err != nil:
-		body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  error: "+b.err.Error())}, nil)}
-	case !b.loaded:
+	case b.list.Err() != nil:
+		body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  error: "+b.list.Err().Error())}, nil)}
+	case !b.list.Loaded():
 		body = []string{ui.Message(p, "loading…", inner)}
 	case len(b.items) == 0:
 		body = []string{ui.Message(p, "no bookmarks", inner)}

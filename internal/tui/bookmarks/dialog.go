@@ -379,13 +379,7 @@ func (b Model) modalView(env Env) string {
 		lines = append(lines, ui.Paint(inner, p.Card, []ui.Seg{note}, nil))
 	}
 	lines = append(lines, ui.Paint(inner, p.Card, nil, b.footer(p)))
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(p.ModalBorder).
-		BorderBackground(p.Card).
-		Background(p.Card).
-		Padding(0, 1).
-		Render(strings.Join(lines, "\n"))
+	return ui.ModalBox(p, lines)
 }
 
 func (b Model) title(p theme.Theme) []ui.Seg {

@@ -3,15 +3,11 @@ package bookmarks
 import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type keyMap struct {
-	down      key.Binding
-	up        key.Binding
-	halfDown  key.Binding
-	halfUp    key.Binding
-	top       key.Binding
-	bottom    key.Binding
+	ui.NavKeys
 	open      key.Binding
 	create    key.Binding
 	edit      key.Binding
@@ -25,12 +21,7 @@ type keyMap struct {
 
 func newKeyMap() keyMap {
 	return keyMap{
-		down:      key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next bookmark")),
-		up:        key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous bookmark")),
-		halfDown:  key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "half page down")),
-		halfUp:    key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", "half page up")),
-		top:       key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first bookmark")),
-		bottom:    key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last bookmark")),
+		NavKeys:   ui.NewNavKeys("next bookmark", "previous bookmark", "first bookmark", "last bookmark"),
 		open:      key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "review the target revision")),
 		create:    key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new bookmark on a revision")),
 		edit:      key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit the bookmark: rename or move it")),
@@ -66,17 +57,17 @@ const (
 
 func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
 	switch {
-	case key.Matches(msg, k.down):
+	case key.Matches(msg, k.Down):
 		return moveDownIntent
-	case key.Matches(msg, k.up):
+	case key.Matches(msg, k.Up):
 		return moveUpIntent
-	case key.Matches(msg, k.halfDown):
+	case key.Matches(msg, k.HalfDown):
 		return halfDownIntent
-	case key.Matches(msg, k.halfUp):
+	case key.Matches(msg, k.HalfUp):
 		return halfUpIntent
-	case key.Matches(msg, k.top):
+	case key.Matches(msg, k.Top):
 		return firstIntent
-	case key.Matches(msg, k.bottom):
+	case key.Matches(msg, k.Bottom):
 		return lastIntent
 	case key.Matches(msg, k.open):
 		return openIntent
@@ -117,13 +108,13 @@ func (k keyMap) resolvePicker(msg tea.KeyPressMsg) intent {
 		return cancelIntent
 	case key.Matches(msg, k.confirm) && !msg.IsRepeat:
 		return confirmIntent
-	case key.Matches(msg, k.down):
+	case key.Matches(msg, k.Down):
 		return moveDownIntent
-	case key.Matches(msg, k.up):
+	case key.Matches(msg, k.Up):
 		return moveUpIntent
-	case key.Matches(msg, k.top):
+	case key.Matches(msg, k.Top):
 		return firstIntent
-	case key.Matches(msg, k.bottom):
+	case key.Matches(msg, k.Bottom):
 		return lastIntent
 	case key.Matches(msg, k.open) && !msg.IsRepeat:
 		return openIntent

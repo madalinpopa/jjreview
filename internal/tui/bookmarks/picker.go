@@ -145,10 +145,10 @@ func (b Model) pickerView(env Env) string {
 	inner := env.modalInner()
 	lines := []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "Bookmark "+ui.ShortID(pk.changeID))}, nil)}
 	switch {
-	case !b.loaded || b.loading:
+	case !b.list.Loaded() || b.list.Loading():
 		lines = append(lines, ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Muted).Italic(true), "loading…")}, nil))
-	case b.err != nil:
-		lines = append(lines, ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "error: "+b.err.Error())}, nil))
+	case b.list.Err() != nil:
+		lines = append(lines, ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "error: "+b.list.Err().Error())}, nil))
 	default:
 		room := b.pickerRoom(env)
 		top := ui.ScrollTop(pk.top, pk.cursor, room, len(b.items)+1)
@@ -168,17 +168,11 @@ func (b Model) pickerView(env Env) string {
 		footer = []ui.Seg{ui.Span(ui.Fg(p.Key), "y"), ui.Span(ui.Fg(p.Muted), " move anyway · "), ui.Span(ui.Fg(p.Key), "esc"), ui.Span(ui.Fg(p.Muted), " cancel")}
 	}
 	lines = append(lines, ui.Paint(inner, p.Card, nil, footer))
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(p.ModalBorder).
-		BorderBackground(p.Card).
-		Background(p.Card).
-		Padding(0, 1).
-		Render(strings.Join(lines, "\n"))
+	return ui.ModalBox(p, lines)
 }
 
 func (b Model) listed() bool {
-	return b.loaded && !b.loading && b.err == nil
+	return b.list.Loaded() && !b.list.Loading() && b.list.Err() == nil
 }
 
 func (b Model) pickerNotes(width int) []string {
