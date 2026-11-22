@@ -338,10 +338,10 @@ func (r fileReview) toggleRemovedAll(f diff.File, full bool) {
 		if !hidesRemoved(h) {
 			continue
 		}
-		hiddenAny = hiddenAny || !r.removed[k]
+		hiddenAny = hiddenAny || !r.showsRemoved(k)
 		if full || !r.folded[k] {
 			anyShown = true
-			hiddenShown = hiddenShown || !r.removed[k]
+			hiddenShown = hiddenShown || !r.showsRemoved(k)
 		}
 	}
 	show := hiddenAny

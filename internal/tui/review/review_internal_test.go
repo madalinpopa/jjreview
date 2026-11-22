@@ -302,6 +302,37 @@ func TestFileReview_partial(t *testing.T) {
 	}
 }
 
+func TestFileReview_toggleRemovedAll(t *testing.T) {
+	t.Parallel()
+
+	t.Run("hides every removed line when a partly selected hunk already shows its own", func(t *testing.T) {
+		t.Parallel()
+		f := diff.File{OldPath: "f.txt", NewPath: "f.txt", Hunks: []diff.Hunk{
+			{OldStart: 1, OldLines: 1, NewStart: 1, NewLines: 1, Lines: []diff.Line{
+				{Kind: diff.LineRemoved, Text: "a", OldNo: 1},
+				{Kind: diff.LineAdded, Text: "A", NewNo: 1},
+			}},
+			{OldStart: 10, OldLines: 1, NewStart: 10, NewLines: 1, Lines: []diff.Line{
+				{Kind: diff.LineRemoved, Text: "j", OldNo: 10},
+				{Kind: diff.LineAdded, Text: "J", NewNo: 10},
+			}},
+		}}
+		r := newReview(f)
+		r.lines[0][1] = linePicked
+		r.removed[1] = true
+
+		r.toggleRemovedAll(f, true)
+
+		if r.showsRemoved(1) {
+			t.Errorf("showsRemoved(1) = true after toggleRemovedAll, want false")
+		}
+		r.lines[0][1] = lineOpen
+		if r.showsRemoved(0) {
+			t.Errorf("showsRemoved(0) = true once hunk 0 is no longer partly selected, want false")
+		}
+	})
+}
+
 func TestFileReview_pickedLines(t *testing.T) {
 	t.Parallel()
 	tests := map[string]struct {
