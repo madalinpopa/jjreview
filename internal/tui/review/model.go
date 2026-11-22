@@ -90,7 +90,6 @@ type Model struct {
 	searching   bool
 	needle      string
 	hit         *hit
-	seek        int
 }
 
 func New(ctx context.Context, src Source, gen llm.Provider) Model {
@@ -113,7 +112,7 @@ func (m *Model) Load(files []diff.File, focus string, env Env) tea.Cmd {
 	prevFiles, prevReviews := m.files, m.reviews
 	m.ranging = false
 	m.diffLeft = 0
-	m.hit, m.seek = nil, 0
+	m.hit = nil
 	m.files = slices.Clone(files)
 	slices.SortStableFunc(m.files, compareTree)
 	m.reviews = make([]fileReview, len(m.files))
@@ -162,7 +161,7 @@ func (m *Model) Repaint(old, pal theme.Theme) {
 func (m *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 	switch msg := msg.(type) {
 	case contentMsg:
-		return m.applyContent(env, msg), Effect{}, true
+		m.applyContent(env, msg)
 	case generatedMsg:
 		m.applyGenerated(msg)
 	case committedMsg:
@@ -224,22 +223,20 @@ func (m *Model) CancelRange() {
 	m.ranging = false
 }
 
-func (m *Model) applyContent(env Env, msg contentMsg) tea.Cmd {
+func (m *Model) applyContent(env Env, msg contentMsg) {
 	if msg.err != nil {
 		m.contentErrs[msg.key] = msg.err
 		if file, ok := m.currentFile(); ok && contentKeyOf(env, file) == msg.key {
-			m.cursor, m.seek = 0, 0
+			m.cursor = 0
 		}
-		return nil
+		return
 	}
 	delete(m.contentErrs, msg.key)
 	m.contents[msg.key] = msg.content
 	maps.DeleteFunc(m.highlights, func(k highlightKey, _ fileHighlight) bool { return k.full })
 	if file, ok := m.currentFile(); ok && m.full && contentKeyOf(env, file) == msg.key {
 		m.cursor = firstRow(m.rows(env))
-		return m.seekMatch(env)
 	}
-	return nil
 }
 
 func (m Model) currentFile() (diff.File, bool) {
@@ -258,15 +255,21 @@ func contentKeyOf(env Env, f diff.File) contentKey {
 }
 
 func (m Model) requestContent(env Env) tea.Cmd {
-	file, ok := m.currentFile()
-	if !m.full || !ok || file.Status == diff.StatusDeleted || wholeOnly(file) {
-		return nil
-	}
-	key := contentKeyOf(env, file)
-	if _, cached := m.contents[key]; cached {
+	key, ok := m.uncached(env)
+	if !ok {
 		return nil
 	}
 	return loadContent(m.ctx, m.src, key)
+}
+
+func (m Model) uncached(env Env) (contentKey, bool) {
+	file, ok := m.currentFile()
+	if !m.full || !ok || file.Status == diff.StatusDeleted || wholeOnly(file) {
+		return contentKey{}, false
+	}
+	key := contentKeyOf(env, file)
+	_, cached := m.contents[key]
+	return key, !cached
 }
 
 func loadContent(ctx context.Context, src Source, key contentKey) tea.Cmd {

@@ -14,7 +14,10 @@ import (
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
-const noSearchStatus = "press %s to search"
+const (
+	noSearchStatus  = "press %s to search"
+	noMatchesStatus = "/%s no matches"
+)
 
 type hit struct {
 	file int
@@ -47,7 +50,7 @@ func (m *Model) closeSearch() {
 }
 
 func (m *Model) clearSearch() {
-	m.needle, m.hit, m.seek = "", nil, 0
+	m.needle, m.hit = "", nil
 }
 
 func (m *Model) searchKey(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
@@ -57,10 +60,10 @@ func (m *Model) searchKey(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	case submitSearchIntent:
 		needle := m.query.Value()
 		m.closeSearch()
-		m.clearSearch()
 		if needle == "" {
 			return nil, Effect{}
 		}
+		m.clearSearch()
 		m.needle = needle
 		return m.findNext(env, 1)
 	default:
@@ -76,9 +79,16 @@ func (m *Model) queryInput(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) resizeQuery(env Env) {
-	if w := max(m.diffCardWidth(env.Width)-5, 1); m.query.Width() != w {
-		m.query.SetWidth(w)
+	q := &m.query
+	w := max(m.diffCardWidth(env.Width)-6, 1)
+	if q.Width() == w {
+		return
 	}
+	value, pos := q.Value(), q.Position()
+	q.SetWidth(w)
+	q.SetValue("")
+	q.SetValue(value)
+	q.SetCursor(pos)
 }
 
 func (m Model) diffHeight(env Env) int {
@@ -155,6 +165,9 @@ func (m *Model) findNext(env Env, step int) (tea.Cmd, Effect) {
 	if m.needle == "" {
 		return nil, Effect{Status: fmt.Sprintf(noSearchStatus, m.keys.search.Help().Key)}
 	}
+	if !m.ready(env) || m.loading(env) {
+		return nil, Effect{}
+	}
 	rows := m.rows(env)
 	nth := math.MaxInt
 	if step > 0 {
@@ -169,45 +182,61 @@ func (m *Model) findNext(env Env, step int) (tea.Cmd, Effect) {
 		m.land(env, rows, x)
 		return nil, Effect{}
 	}
-	return m.nextFile(env, step), Effect{}
+	return m.scan(env, step)
 }
 
-func (m *Model) nextFile(env Env, step int) tea.Cmd {
+func (m *Model) scan(env Env, step int) (tea.Cmd, Effect) {
 	n := len(m.files)
 	for k := 1; k <= n; k++ {
 		i := ((m.fileIdx+step*k)%n + n) % n
-		if len(m.matches(m.rowsAt(env, i))) == 0 {
+		rows := m.rowsOf(env, i)
+		edge := edgeOf(rows, step)
+		x, ok := after(m.matches(rows), edge, edge, step)
+		if !ok {
 			continue
 		}
 		cmd := m.moveFile(env, i-m.fileIdx)
-		m.seek = step
-		m.seekMatch(env)
-		return cmd
+		if !m.loading(env) {
+			m.land(env, rows, x)
+		}
+		return cmd, Effect{}
 	}
-	return nil
+	return nil, Effect{Status: fmt.Sprintf(noMatchesStatus, m.needle)}
 }
 
-func (m Model) rowsAt(env Env, i int) []row {
+func (m Model) rowsOf(env Env, i int) []row {
+	if i == m.fileIdx {
+		return m.rows(env)
+	}
 	m.fileIdx = i
-	if m.requestContent(env) != nil {
-		m.full = false
+	if m.failed(env) {
+		return nil
 	}
-	return m.rows(env)
+	if !m.loading(env) {
+		return m.rows(env)
+	}
+	file, _ := m.currentFile()
+	r := m.currentReview()
+	r.folded = make([]bool, len(r.folded))
+	return changeRows(file, r, -1)
 }
 
-func (m *Model) seekMatch(env Env) {
-	if m.seek == 0 || m.requestContent(env) != nil {
-		return
+func edgeOf(rows []row, step int) int {
+	if step < 0 {
+		return len(rows)
 	}
-	rows := m.rows(env)
-	edge := -1
-	if m.seek < 0 {
-		edge = len(rows)
-	}
-	if x, ok := after(m.matches(rows), edge, edge, m.seek); ok {
-		m.land(env, rows, x)
-	}
-	m.seek = 0
+	return -1
+}
+
+func (m Model) failed(env Env) bool {
+	key, ok := m.uncached(env)
+	_, failed := m.contentErrs[key]
+	return ok && failed
+}
+
+func (m Model) loading(env Env) bool {
+	_, ok := m.uncached(env)
+	return ok && !m.failed(env)
 }
 
 func (m *Model) land(env Env, rows []row, x match) {
@@ -224,6 +253,9 @@ func (m *Model) land(env Env, rows []row, x match) {
 }
 
 func (m Model) searchStatus(env Env) string {
+	if m.loading(env) {
+		return "/" + m.needle
+	}
 	rows := m.rows(env)
 	ms := m.matches(rows)
 	at := slices.IndexFunc(ms, func(x match) bool { return m.hitAt(rows[x.at]) == x.nth })
@@ -231,7 +263,7 @@ func (m Model) searchStatus(env Env) string {
 	case at >= 0:
 		return fmt.Sprintf("/%s %d/%d", m.needle, at+1, len(ms))
 	case len(ms) == 0:
-		return "/" + m.needle + " no matches"
+		return fmt.Sprintf(noMatchesStatus, m.needle)
 	case len(ms) == 1:
 		return "/" + m.needle + " 1 match"
 	}

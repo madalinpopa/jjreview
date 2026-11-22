@@ -61,7 +61,6 @@ func (m *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	case fullIntent:
 		m.full = !m.full
 		m.diffLeft = 0
-		m.seek = 0
 		m.cursor = firstRow(m.rows(env))
 		return m.requestContent(env), Effect{}
 	case commitIntent:
@@ -354,7 +353,7 @@ func (m *Model) moveFile(env Env, delta int) tea.Cmd {
 	}
 	m.fileIdx = next
 	m.diffLeft = 0
-	m.seek = 0
+	m.ranging = false
 	m.cursor = firstRow(m.rows(env))
 	return m.requestContent(env)
 }
