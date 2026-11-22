@@ -7,6 +7,7 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/tui/operations"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -70,23 +71,23 @@ func (m *Model) operationsKey(msg tea.KeyPressMsg) tea.Cmd {
 func (m *Model) runOperation(a operations.Action) tea.Cmd {
 	op := a.Op
 	id := ui.ShortID(op.ID)
-	workingCopy := m.change.WorkingCopy
-	return m.rewrite("", func(ctx context.Context, src Source, _ string) (rewriteResult, error) {
+	src := m.src
+	return m.rewrite(tab.Rewrite{Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
 		switch a.Kind {
 		case operations.Restore:
 			if err := src.RestoreOperation(ctx, op.ID); err != nil {
-				return rewriteResult{keepPicks: true}, fmt.Errorf("restore operation %s: %w", id, err)
+				return tab.Result{KeepPicks: true}, fmt.Errorf("restore operation %s: %w", id, err)
 			}
-			return rewriteResult{done: "restored operation " + id, replaced: workingCopy, restored: true}, nil
+			return tab.Result{Done: "restored operation " + id, Replaced: head.WorkingCopy, Restored: true}, nil
 		case operations.Undo:
 			if err := src.RevertOperation(ctx, op.ID); err != nil {
-				return rewriteResult{keepPicks: true}, fmt.Errorf("undo operation %s: %w", id, err)
+				return tab.Result{KeepPicks: true}, fmt.Errorf("undo operation %s: %w", id, err)
 			}
-			return rewriteResult{done: "undid operation " + id, replaced: workingCopy, restored: true}, nil
+			return tab.Result{Done: "undid operation " + id, Replaced: head.WorkingCopy, Restored: true}, nil
 		}
 		if err := src.AbandonOperation(ctx, op.ID); err != nil {
-			return rewriteResult{keepPicks: true}, fmt.Errorf("abandon operation %s: %w", id, err)
+			return tab.Result{KeepPicks: true}, fmt.Errorf("abandon operation %s: %w", id, err)
 		}
-		return rewriteResult{done: "abandoned operation " + id, keepPicks: true}, nil
-	})
+		return tab.Result{Done: "abandoned operation " + id, KeepPicks: true}, nil
+	}})
 }

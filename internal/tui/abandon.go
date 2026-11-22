@@ -10,6 +10,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/tui/logview"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -27,22 +28,15 @@ type rewrittenMsg struct {
 	err       error
 }
 
-type rewriteResult struct {
-	done      string
-	replaced  bool
-	restored  bool
-	warnings  string
-	keepPicks bool
-}
-
 func (m *Model) abandon(e jj.LogEntry) tea.Cmd {
-	return m.rewrite("", func(ctx context.Context, src Source, head string) (rewriteResult, error) {
+	src := m.src
+	return m.rewrite(tab.Rewrite{Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
 		workingCopy, err := src.Abandon(ctx, e.CommitID, e.Bookmarks)
 		if err != nil {
-			return rewriteResult{}, fmt.Errorf("abandon %s: %w", ui.ShortID(e.ChangeID), err)
+			return tab.Result{}, fmt.Errorf("abandon %s: %w", ui.ShortID(e.ChangeID), err)
 		}
-		return rewriteResult{done: "abandoned " + ui.ShortID(e.ChangeID), replaced: workingCopy || e.CommitID == head}, nil
-	})
+		return tab.Result{Done: "abandoned " + ui.ShortID(e.ChangeID), Replaced: workingCopy || e.CommitID == head.CommitID}, nil
+	}})
 }
 
 func (m *Model) squash(s logview.Squash) tea.Cmd {
@@ -51,29 +45,34 @@ func (m *Model) squash(s logview.Squash) tea.Cmd {
 		done = fmt.Sprintf("squashed %d revisions", n)
 	}
 	into := ui.ShortID(s.Into.ChangeID)
-	return m.rewrite(s.Into.ChangeID, func(ctx context.Context, src Source, head string) (rewriteResult, error) {
+	src := m.src
+	return m.rewrite(tab.Rewrite{Focus: s.Into.ChangeID, Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
 		warnings, err := src.Squash(ctx, s.From, s.Into)
 		if err != nil {
-			return rewriteResult{}, fmt.Errorf("squash into %s: %w", into, err)
+			return tab.Result{}, fmt.Errorf("squash into %s: %w", into, err)
 		}
-		replaced := slices.ContainsFunc(s.From, func(e jj.LogEntry) bool { return e.CommitID == head })
-		return rewriteResult{done: done + " into " + into, replaced: replaced, warnings: warnings}, nil
-	})
+		replaced := slices.ContainsFunc(s.From, func(e jj.LogEntry) bool { return e.CommitID == head.CommitID })
+		return tab.Result{Done: done + " into " + into, Replaced: replaced, Warnings: warnings}, nil
+	}})
 }
 
-func (m *Model) rewrite(focus string, apply func(ctx context.Context, src Source, head string) (rewriteResult, error)) tea.Cmd {
+func (m *Model) rewrite(rw tab.Rewrite) tea.Cmd {
 	keep := m.log.HoldPosition()
 	m.reloading = true
-	ctx, src, target, head := m.ctx, m.src, m.target, m.targetHead
+	if rw.Pending != "" {
+		m.status = rw.Pending
+	}
+	ctx, src, target := m.ctx, m.src, m.target
+	head := tab.Head{CommitID: m.targetHead, WorkingCopy: m.change.WorkingCopy}
 	return func() tea.Msg {
-		msg := rewrittenMsg{focus: focus, keep: keep}
-		r, err := apply(ctx, src, head)
-		msg.done, msg.warnings, msg.keepPicks, msg.err = r.done, r.warnings, r.keepPicks, err
-		if target == "" || r.replaced {
+		msg := rewrittenMsg{focus: rw.Focus, keep: keep}
+		r, err := rw.Run(ctx, head)
+		msg.done, msg.warnings, msg.keepPicks, msg.err = r.Done, r.Warnings, r.KeepPicks, err
+		if target == "" || r.Replaced {
 			msg.step, msg.loaded = workingCopyStep, fetch(ctx, src, "@")
 			return msg
 		}
-		msg.step, msg.loaded, msg.lost = reviewedAfterRewrite(ctx, src, target, head, r.restored)
+		msg.step, msg.loaded, msg.lost = reviewedAfterRewrite(ctx, src, target, head.CommitID, r.Restored)
 		return msg
 	}
 }

@@ -1,13 +1,12 @@
 package tui
 
 import (
-	"fmt"
 	"iter"
 	"slices"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
-	"github.com/madalinpopa/jjreview/internal/tui/ui"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 )
 
 func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
@@ -84,7 +83,7 @@ func (m *Model) confirmDrop(msg tea.KeyPressMsg, armed string) bool {
 		return true
 	}
 	m.armed = k
-	m.status = fmt.Sprintf("press %s again to drop %d selected %s", m.dropLabel(msg), n, ui.Plural(n, "hunk"))
+	m.status = tab.DropPrompt(m.dropLabel(msg), n)
 	return false
 }
 

@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 )
 
 type revisionStep int
@@ -42,12 +43,21 @@ func (s revisionStep) failure(err error) string {
 	return err.Error()
 }
 
+func (m Model) lock() tab.Lock {
+	l := tab.Lock{Busy: !m.loaded || m.reloading}
+	if m.blocked {
+		l.Reason = blockedStatus
+	}
+	return l
+}
+
 func (m *Model) canLoad() bool {
-	if !m.loaded || m.reloading {
+	l := m.lock()
+	if l.Busy {
 		return false
 	}
-	if m.blocked {
-		m.status = blockedStatus
+	if l.Reason != "" {
+		m.status = l.Reason
 		return false
 	}
 	return true

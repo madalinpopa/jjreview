@@ -8,28 +8,29 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 func (m *Model) push(e jj.LogEntry) tea.Cmd {
 	id := ui.ShortID(e.ChangeID)
 	retry := "bookmarks changed; press " + m.log.PushKey() + " to review the push again"
-	m.status = "pushing " + id + "…"
-	return m.rewrite(e.ChangeID, func(ctx context.Context, src Source, _ string) (rewriteResult, error) {
+	src := m.src
+	return m.rewrite(tab.Rewrite{Pending: "pushing " + id + "…", Focus: e.ChangeID, Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
 		r, err := src.Push(ctx, e)
-		res := rewriteResult{keepPicks: true}
+		res := tab.Result{KeepPicks: true}
 		switch {
 		case errors.Is(err, jj.ErrBookmarksChanged):
 			return res, errors.New(retry)
 		case err != nil:
 			return res, fmt.Errorf("push %s: %w", id, err)
 		case len(r) == 0:
-			res.done = "nothing to push"
+			res.Done = "nothing to push"
 		default:
-			res.done = "pushed " + pushSummary(r)
+			res.Done = "pushed " + pushSummary(r)
 		}
 		return res, nil
-	})
+	}})
 }
 
 func pushSummary(results []jj.PushResult) string {
@@ -41,16 +42,16 @@ func pushSummary(results []jj.PushResult) string {
 }
 
 func (m *Model) fetchRemote() tea.Cmd {
-	m.status = "fetching…"
-	return m.rewrite("", func(ctx context.Context, src Source, _ string) (rewriteResult, error) {
+	src := m.src
+	return m.rewrite(tab.Rewrite{Pending: "fetching…", Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
 		changed, err := src.Fetch(ctx)
-		res := rewriteResult{keepPicks: true, done: "fetched"}
+		res := tab.Result{KeepPicks: true, Done: "fetched"}
 		switch {
 		case err != nil:
 			return res, fmt.Errorf("fetch: %w", err)
 		case !changed:
-			res.done = "already up to date"
+			res.Done = "already up to date"
 		}
 		return res, nil
-	})
+	}})
 }
