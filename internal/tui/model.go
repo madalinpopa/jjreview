@@ -188,17 +188,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case m.bookmarks.OverlayOpen():
 			cmd = m.bookmarks.Paste(msg)
 		case m.view == logView:
-			cmd = m.log.Input(msg)
+			cmd = m.log.Paste(msg)
 		}
 	default:
 		if c, in, ok := m.bookmarks.Update(msg, m.bookmarkEnv()); ok {
 			cmd = m.bookmarkEffects(c, in)
 		} else if c, in, ok := m.operations.Update(msg, m.operationEnv()); ok {
 			cmd = m.operationEffects(c, in)
-		} else if c, in, ok := m.log.Update(msg, m.logEnv()); ok {
+		} else if c, in, ok := m.log.Update(msg, m.env(logView)); ok {
 			cmd = m.logEffects(c, in)
-		} else if m.view == logView {
-			cmd = m.log.Input(msg)
 		}
 	}
 	m.resizeModal()
@@ -377,7 +375,7 @@ func (m Model) requestContent() tea.Cmd {
 func (m *Model) scroll() {
 	switch m.view {
 	case logView:
-		m.log.KeepVisible(m.logEnv())
+		m.log.KeepVisible(m.env(logView))
 		return
 	case bookmarksView:
 		m.bookmarks.KeepVisible(m.bookmarkEnv())

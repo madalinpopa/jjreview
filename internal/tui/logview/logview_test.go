@@ -61,7 +61,7 @@ func (s *fakeSource) Fetch(context.Context) (bool, error) {
 	return !s.unchanged, nil
 }
 
-func rewrite(t *testing.T, fx logview.Effect) (tab.Result, error) {
+func rewrite(t *testing.T, fx tab.Effect) (tab.Result, error) {
 	t.Helper()
 
 	if fx.Rewrite == nil {
@@ -70,7 +70,7 @@ func rewrite(t *testing.T, fx logview.Effect) (tab.Result, error) {
 	return fx.Rewrite.Run(t.Context(), tab.Head{CommitID: "c1", WorkingCopy: true})
 }
 
-func locked(l tab.Lock) logview.Env {
+func locked(l tab.Lock) tab.Env {
 	e := env(true)
 	e.Lock = l
 	return e
@@ -87,8 +87,10 @@ func twoEntries() []jj.LogLine {
 	}
 }
 
-func env(active bool) logview.Env {
-	return logview.Env{Width: 80, Height: 24, BodyHeight: 20, ListHeight: 10, ModalWidth: 64, Head: "c1", Active: active}
+var _ tab.View = (*logview.Model)(nil)
+
+func env(active bool) tab.Env {
+	return tab.Env{Width: 80, Height: 24, BodyHeight: 20, ListHeight: 10, ModalWidth: 64, Head: tab.Head{CommitID: "c1"}, Active: active}
 }
 
 func run(t *testing.T, cmd tea.Cmd) tea.Msg {
@@ -104,7 +106,7 @@ func loaded(t *testing.T, src *fakeSource) logview.Model {
 	t.Helper()
 
 	m := logview.New(t.Context(), src)
-	if _, fx, ok := m.Update(run(t, m.Show("c1")), env(false)); !ok || fx != (logview.Effect{}) {
+	if _, fx, ok := m.Update(run(t, m.Show(env(true))), env(false)); !ok || fx != (tab.Effect{}) {
 		t.Fatalf("Update(log result) = %+v, %v, want no effect and handled while inactive", fx, ok)
 	}
 	return m
@@ -130,7 +132,7 @@ func TestUpdate_success(t *testing.T) {
 	t.Run("handles the result of its own log load", func(t *testing.T) {
 		t.Parallel()
 		m := logview.New(t.Context(), &fakeSource{lines: twoEntries()})
-		msg := run(t, m.Show("c1"))
+		msg := run(t, m.Show(env(true)))
 
 		_, _, ok := m.Update(msg, env(true))
 
@@ -165,8 +167,63 @@ func TestUpdate_success(t *testing.T) {
 	})
 }
 
+func TestUpdateSearch_success(t *testing.T) {
+	t.Parallel()
+
+	t.Run("forwards a foreign message to the search input while active", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: twoEntries()})
+		m.Key(press("/"), env(true))
+
+		_, fx, ok := m.Update(tea.PasteMsg{Content: "c2"}, env(true))
+
+		if !ok || fx != (tab.Effect{}) || m.SelectedChange() != "bbbbbbbbbbbb" {
+			t.Errorf("Update(PasteMsg) = %+v, %v, selected = %q, want no effect, handled and the matching bbbbbbbbbbbb", fx, ok, m.SelectedChange())
+		}
+	})
+}
+
+func TestPaste_success(t *testing.T) {
+	t.Parallel()
+
+	t.Run("types into the search", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: twoEntries()})
+		m.Key(press("/"), env(true))
+
+		m.Paste(tea.PasteMsg{Content: "c2"})
+
+		if got := m.SelectedChange(); got != "bbbbbbbbbbbb" {
+			t.Errorf("SelectedChange() = %q, want the matching bbbbbbbbbbbb", got)
+		}
+	})
+
+	t.Run("is ignored without a search", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: twoEntries()})
+
+		cmd := m.Paste(tea.PasteMsg{Content: "c2"})
+
+		if cmd != nil || m.SelectedChange() != "aaaaaaaaaaaa" || m.Captures() {
+			t.Errorf("Paste() cmd = %v, selected = %q, Captures = %v, want nothing", cmd != nil, m.SelectedChange(), m.Captures())
+		}
+	})
+}
+
 func TestUpdate_failed(t *testing.T) {
 	t.Parallel()
+
+	t.Run("leaves foreign messages to the caller while inactive", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: twoEntries()})
+		m.Key(press("/"), env(true))
+
+		cmd, fx, ok := m.Update(tea.PasteMsg{Content: "c2"}, env(false))
+
+		if ok || cmd != nil || fx != (tab.Effect{}) || m.SelectedChange() != "aaaaaaaaaaaa" {
+			t.Errorf("Update(PasteMsg) = %v, %+v, %v, selected = %q, want nothing, unhandled and the head", cmd != nil, fx, ok, m.SelectedChange())
+		}
+	})
 
 	t.Run("leaves foreign messages to the caller", func(t *testing.T) {
 		t.Parallel()
@@ -174,7 +231,7 @@ func TestUpdate_failed(t *testing.T) {
 
 		cmd, fx, ok := m.Update(tea.FocusMsg{}, env(true))
 
-		if ok || cmd != nil || fx != (logview.Effect{}) {
+		if ok || cmd != nil || fx != (tab.Effect{}) {
 			t.Errorf("Update(FocusMsg) = %v, %+v, %v, want nothing and unhandled", cmd != nil, fx, ok)
 		}
 	})
@@ -188,7 +245,7 @@ func TestMarkStale_success(t *testing.T) {
 		m := loaded(t, &fakeSource{lines: twoEntries()})
 		m.MarkStale()
 
-		cmd := m.Show("c1")
+		cmd := m.Show(env(true))
 
 		if cmd == nil {
 			t.Error("Show() after MarkStale() = nil, want a reload")
@@ -199,7 +256,7 @@ func TestMarkStale_success(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: twoEntries()})
 
-		cmd := m.Show("c1")
+		cmd := m.Show(env(true))
 
 		if cmd != nil {
 			t.Error("Show() on a fresh log = a command, want nil")
@@ -283,8 +340,19 @@ func TestKey_success(t *testing.T) {
 
 		_, fx := m.Key(press("enter"), env(true))
 
-		if fx.Open != "c1" {
-			t.Errorf("Key(enter) Open = %q, want c1", fx.Open)
+		if fx != (tab.Effect{Open: "c1", Reopen: true}) {
+			t.Errorf("Key(enter) = %+v, want an open of c1 that keeps a pending drop armed", fx)
+		}
+	})
+
+	t.Run("b asks root to pick a bookmark for the selected revision", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: twoEntries()})
+
+		_, fx := m.Key(press("b"), env(true))
+
+		if fx.Pick == nil || fx.Pick.CommitID != "c1" {
+			t.Errorf("Key(b) = %+v, want a pick of c1", fx)
 		}
 	})
 
@@ -294,7 +362,7 @@ func TestKey_success(t *testing.T) {
 
 		_, fx := m.Key(press("a"), env(true))
 
-		if fx != (logview.Effect{}) || !m.OverlayOpen() || m.Overlay(env(true)) == "" {
+		if fx != (tab.Effect{}) || !m.OverlayOpen() || m.Overlay(env(true)) == "" {
 			t.Errorf("Key(a) = %+v, OverlayOpen = %v, want no effect and the confirmation open", fx, m.OverlayOpen())
 		}
 	})
@@ -388,7 +456,7 @@ func TestKey_failed(t *testing.T) {
 
 		_, fx := m.Key(press("a"), locked(tab.Lock{Busy: true}))
 
-		if fx != (logview.Effect{}) || m.OverlayOpen() {
+		if fx != (tab.Effect{}) || m.OverlayOpen() {
 			t.Errorf("Key(a) = %+v, OverlayOpen = %v, want nothing", fx, m.OverlayOpen())
 		}
 	})
@@ -399,7 +467,7 @@ func TestKey_failed(t *testing.T) {
 
 		_, fx := m.Key(press("a"), locked(tab.Lock{Reason: "blocked"}))
 
-		if fx != (logview.Effect{Status: "blocked"}) || m.OverlayOpen() {
+		if fx != (tab.Effect{Status: "blocked"}) || m.OverlayOpen() {
 			t.Errorf("Key(a) = %+v, OverlayOpen = %v, want the reason and nothing armed", fx, m.OverlayOpen())
 		}
 	})
@@ -412,7 +480,7 @@ func TestKey_failed(t *testing.T) {
 
 		_, fx := m.Key(press("y"), locked(tab.Lock{Busy: true}))
 
-		if fx != (logview.Effect{}) || m.OverlayOpen() {
+		if fx != (tab.Effect{}) || m.OverlayOpen() {
 			t.Errorf("Key(y) = %+v, OverlayOpen = %v, want nothing and the confirmation closed", fx, m.OverlayOpen())
 		}
 	})
@@ -424,7 +492,7 @@ func TestKey_failed(t *testing.T) {
 
 		_, fx := m.Key(press("y"), locked(tab.Lock{Reason: "blocked"}))
 
-		if fx != (logview.Effect{Status: "blocked"}) {
+		if fx != (tab.Effect{Status: "blocked"}) {
 			t.Errorf("Key(y) = %+v, want the reason", fx)
 		}
 	})

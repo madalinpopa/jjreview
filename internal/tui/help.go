@@ -31,7 +31,7 @@ func (m Model) overlay() string {
 	case m.help:
 		return m.helpView()
 	case m.view == logView && m.log.OverlayOpen():
-		return m.log.Overlay(m.logEnv())
+		return m.log.Overlay(m.env(logView))
 	case m.view == operationsView && m.operations.OverlayOpen():
 		return m.operations.Overlay(m.operationEnv())
 	}

@@ -140,35 +140,14 @@ func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
 	return noIntent
 }
 
-type Env struct {
-	ui.Layout
-	Head    string
-	Active  bool
-	Dropped int
-	Lock    tab.Lock
-}
-
-func (e Env) modalInner() int {
-	return ui.InputBoxInner(e.ModalWidth)
-}
-
-func (e Env) blocked() (Effect, bool) {
+func blocked(e tab.Env) (tab.Effect, bool) {
 	switch {
 	case e.Lock.Busy:
-		return Effect{}, true
+		return tab.Effect{}, true
 	case e.Lock.Reason != "":
-		return Effect{Status: e.Lock.Reason}, true
+		return tab.Effect{Status: e.Lock.Reason}, true
 	}
-	return Effect{}, false
-}
-
-type Effect struct {
-	Open     string
-	Bookmark *jj.LogEntry
-	Rewrite  *tab.Rewrite
-	Status   string
-	Refresh  bool
-	Retarget bool
+	return tab.Effect{}, false
 }
 
 type action int
@@ -424,11 +403,11 @@ func (l *Model) RestorePosition(keep Position) {
 	l.keep = keep
 }
 
-func (l *Model) Show(head string) tea.Cmd {
+func (l *Model) Show(env tab.Env) tea.Cmd {
 	if l.list.Due() {
 		return l.Load()
 	}
-	l.focus(head)
+	l.focus(env.Head.CommitID)
 	return nil
 }
 
@@ -447,22 +426,25 @@ func (l *Model) MarkStale() {
 	l.list.MarkStale()
 }
 
-func (l *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
+func (l *Model) Update(msg tea.Msg, env tab.Env) (tea.Cmd, tab.Effect, bool) {
 	switch msg := msg.(type) {
 	case loadedMsg:
 		cmd, eff := l.applyList(msg, env)
 		return cmd, eff, true
 	case filesMsg:
 		l.files[msg.commitID] = fileList{files: msg.files, err: msg.err, loaded: true}
-		return nil, Effect{}, true
+		return nil, tab.Effect{}, true
 	}
-	return nil, Effect{}, false
+	if env.Active && l.searching {
+		return l.input(msg), tab.Effect{}, true
+	}
+	return nil, tab.Effect{}, false
 }
 
-func (l *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Effect) {
+func (l *Model) applyList(msg loadedMsg, env tab.Env) (tea.Cmd, tab.Effect) {
 	before := l.selectedCommit()
 	if !l.list.Finish(msg.seq, msg.err) {
-		return nil, Effect{}
+		return nil, tab.Effect{}
 	}
 	if msg.err != nil {
 		l.lines = nil
@@ -483,16 +465,16 @@ func (l *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Effect) {
 		l.focusNth(keep.at)
 	case keep.at > 0 && before != "" && l.selectedCommit() == before:
 	default:
-		l.focus(env.Head)
+		l.focus(env.Head.CommitID)
 	}
-	eff := Effect{Retarget: env.Active && l.selectedCommit() != before}
+	eff := tab.Effect{Retarget: env.Active && l.selectedCommit() != before}
 	if l.list.Stale() && env.Active {
 		return l.Load(), eff
 	}
 	return nil, eff
 }
 
-func (l Model) Ignores(msg tea.KeyPressMsg, env Env) bool {
+func (l Model) Ignores(msg tea.KeyPressMsg, env tab.Env) bool {
 	busy := msg.IsRepeat || env.Lock.Busy || l.list.Loading()
 	in := l.keys.resolve(msg)
 	if l.squashing != nil {
@@ -502,30 +484,30 @@ func (l Model) Ignores(msg tea.KeyPressMsg, env Env) bool {
 	return l.confirm == nil && !l.searching && slices.Contains(guarded, in) && busy
 }
 
-func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
+func (l *Model) Key(msg tea.KeyPressMsg, env tab.Env) (tea.Cmd, tab.Effect) {
 	in := l.keys.resolve(msg)
 	if l.confirm != nil {
 		return nil, l.confirmKey(in, msg.IsRepeat, env)
 	}
 	if l.searching {
-		return l.searchKey(in, msg), Effect{}
+		return l.searchKey(in, msg), tab.Effect{}
 	}
 	if l.squashing != nil {
 		return nil, l.squashKey(in, env)
 	}
 	if l.navigate(in, env) {
-		return nil, Effect{}
+		return nil, tab.Effect{}
 	}
 	return l.browseKey(in, env)
 }
 
-func (l *Model) confirmKey(in intent, repeat bool, env Env) Effect {
+func (l *Model) confirmKey(in intent, repeat bool, env tab.Env) tab.Effect {
 	c := l.confirm
 	l.confirm = nil
 	if e := l.selected(); repeat || in != confirmIntent || e == nil || e.CommitID != c.entry.CommitID {
-		return Effect{}
+		return tab.Effect{}
 	}
-	if fx, held := env.blocked(); held {
+	if fx, held := blocked(env); held {
 		return fx
 	}
 	if c.action == pushAction {
@@ -534,14 +516,14 @@ func (l *Model) confirmKey(in intent, repeat bool, env Env) Effect {
 	return l.abandon(c.entry)
 }
 
-func (l *Model) browseKey(in intent, env Env) (tea.Cmd, Effect) {
+func (l *Model) browseKey(in intent, env tab.Env) (tea.Cmd, tab.Effect) {
 	switch in {
 	case searchIntent:
 		if !l.list.Loaded() || l.list.Err() != nil {
-			return nil, Effect{}
+			return nil, tab.Effect{}
 		}
 		l.searching = true
-		return l.query.Focus(), Effect{}
+		return l.query.Focus(), tab.Effect{}
 	case dismissIntent:
 		if l.filtered() {
 			l.clearSearch()
@@ -556,10 +538,10 @@ func (l *Model) browseKey(in intent, env Env) (tea.Cmd, Effect) {
 		return nil, l.startSquash(env)
 	case openIntent:
 		if e := l.selected(); e != nil {
-			return nil, Effect{Open: e.CommitID}
+			return nil, tab.Effect{Open: e.CommitID, Reopen: true}
 		}
 	case expandIntent:
-		return l.expandFiles(), Effect{}
+		return l.expandFiles(), tab.Effect{}
 	case abandonIntent:
 		return nil, l.armAbandon(env)
 	case pushIntent:
@@ -568,7 +550,7 @@ func (l *Model) browseKey(in intent, env Env) (tea.Cmd, Effect) {
 		return nil, l.fetch(env)
 	case bookmarkIntent:
 		if e := l.selected(); e != nil {
-			return nil, Effect{Bookmark: new(*e)}
+			return nil, tab.Effect{Pick: new(*e)}
 		}
 	case resetIntent:
 		clear(l.marked)
@@ -578,12 +560,12 @@ func (l *Model) browseKey(in intent, env Env) (tea.Cmd, Effect) {
 			delete(l.expanded, e.CommitID)
 		}
 	case reloadIntent:
-		return nil, Effect{Refresh: !l.list.Loading()}
+		return nil, tab.Effect{Refresh: !l.list.Loading()}
 	}
-	return nil, Effect{}
+	return nil, tab.Effect{}
 }
 
-func (l *Model) navigate(in intent, env Env) bool {
+func (l *Model) navigate(in intent, env tab.Env) bool {
 	half := max(env.ListHeight/2, 1)
 	switch in {
 	case moveDownIntent:
@@ -642,7 +624,7 @@ func (l Model) squashed(commitID string) bool {
 	return slices.ContainsFunc(l.squashing, func(e jj.LogEntry) bool { return e.CommitID == commitID })
 }
 
-func (l *Model) startSquash(env Env) Effect {
+func (l *Model) startSquash(env tab.Env) tab.Effect {
 	from := l.marks()
 	if len(from) == 0 {
 		if e := l.selected(); e != nil {
@@ -650,13 +632,13 @@ func (l *Model) startSquash(env Env) Effect {
 		}
 	}
 	if len(from) == 0 {
-		return Effect{}
+		return tab.Effect{}
 	}
-	if fx, held := env.blocked(); held {
+	if fx, held := blocked(env); held {
 		return fx
 	}
 	if i := slices.IndexFunc(from, func(e jj.LogEntry) bool { return e.Immutable }); i >= 0 {
-		return Effect{Status: ui.ShortID(from[i].ChangeID) + " is immutable"}
+		return tab.Effect{Status: ui.ShortID(from[i].ChangeID) + " is immutable"}
 	}
 	l.squashing = from
 	l.dropArmed = false
@@ -668,10 +650,10 @@ func (l *Model) startSquash(env Env) Effect {
 		}
 	}
 	l.focusWhere(func(e *jj.LogEntry) bool { return parents[e.CommitID] })
-	return Effect{}
+	return tab.Effect{}
 }
 
-func (l *Model) squashKey(in intent, env Env) Effect {
+func (l *Model) squashKey(in intent, env tab.Env) tab.Effect {
 	armed := l.dropArmed
 	l.dropArmed = false
 	switch {
@@ -683,16 +665,16 @@ func (l *Model) squashKey(in intent, env Env) Effect {
 		switch {
 		case e == nil:
 		case l.squashed(e.CommitID):
-			return Effect{Status: "pick a revision that is not being squashed"}
+			return tab.Effect{Status: "pick a revision that is not being squashed"}
 		case e.Immutable:
-			return Effect{Status: ui.ShortID(e.ChangeID) + " is immutable"}
+			return tab.Effect{Status: ui.ShortID(e.ChangeID) + " is immutable"}
 		default:
-			if fx, held := env.blocked(); held {
+			if fx, held := blocked(env); held {
 				return fx
 			}
 			if env.Dropped > 0 && !armed {
 				l.dropArmed = true
-				return Effect{Status: tab.DropPrompt(l.keys.confirm.Help().Key, env.Dropped)}
+				return tab.Effect{Status: tab.DropPrompt(l.keys.confirm.Help().Key, env.Dropped)}
 			}
 			from := l.squashing
 			l.squashing = nil
@@ -700,40 +682,40 @@ func (l *Model) squashKey(in intent, env Env) Effect {
 			return l.squash(from, *e)
 		}
 	}
-	return Effect{}
+	return tab.Effect{}
 }
 
-func (l *Model) armAbandon(env Env) Effect {
+func (l *Model) armAbandon(env tab.Env) tab.Effect {
 	e := l.selected()
 	if e == nil {
-		return Effect{}
+		return tab.Effect{}
 	}
-	if fx, held := env.blocked(); held {
+	if fx, held := blocked(env); held {
 		return fx
 	}
 	if e.Immutable {
-		return Effect{Status: ui.ShortID(e.ChangeID) + " is immutable"}
+		return tab.Effect{Status: ui.ShortID(e.ChangeID) + " is immutable"}
 	}
 	l.arm(abandonAction)
-	return Effect{}
+	return tab.Effect{}
 }
 
-func (l *Model) armPush(env Env) Effect {
+func (l *Model) armPush(env tab.Env) tab.Effect {
 	if l.selected() == nil {
-		return Effect{}
+		return tab.Effect{}
 	}
-	if fx, held := env.blocked(); held {
+	if fx, held := blocked(env); held {
 		return fx
 	}
 	l.arm(pushAction)
-	return Effect{}
+	return tab.Effect{}
 }
 
-func (l Model) abandon(e jj.LogEntry) Effect {
+func (l Model) abandon(e jj.LogEntry) tab.Effect {
 	id := ui.ShortID(e.ChangeID)
 	retry := "bookmarks changed; press " + l.keys.abandon.Help().Key + " to review the abandon again"
 	src := l.src
-	return Effect{Rewrite: new(tab.Rewrite{Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
+	return tab.Effect{Rewrite: new(tab.Rewrite{Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
 		workingCopy, err := src.Abandon(ctx, e.CommitID, e.Bookmarks)
 		switch {
 		case errors.Is(err, jj.ErrBookmarksChanged):
@@ -745,14 +727,14 @@ func (l Model) abandon(e jj.LogEntry) Effect {
 	}})}
 }
 
-func (l Model) squash(from []jj.LogEntry, into jj.LogEntry) Effect {
+func (l Model) squash(from []jj.LogEntry, into jj.LogEntry) tab.Effect {
 	done := "squashed " + ui.ShortID(from[0].ChangeID)
 	if n := len(from); n > 1 {
 		done = fmt.Sprintf("squashed %d revisions", n)
 	}
 	target := ui.ShortID(into.ChangeID)
 	src := l.src
-	return Effect{Rewrite: new(tab.Rewrite{Focus: into.ChangeID, Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
+	return tab.Effect{Rewrite: new(tab.Rewrite{Focus: into.ChangeID, Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
 		warnings, err := src.Squash(ctx, from, into)
 		if err != nil {
 			return tab.Result{}, fmt.Errorf("squash into %s: %w", target, err)
@@ -762,11 +744,11 @@ func (l Model) squash(from []jj.LogEntry, into jj.LogEntry) Effect {
 	}})}
 }
 
-func (l Model) push(e jj.LogEntry) Effect {
+func (l Model) push(e jj.LogEntry) tab.Effect {
 	id := ui.ShortID(e.ChangeID)
 	retry := "bookmarks changed; press " + l.keys.push.Help().Key + " to review the push again"
 	src := l.src
-	return Effect{Rewrite: new(tab.Rewrite{Pending: "pushing " + id + "…", Focus: e.ChangeID, Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
+	return tab.Effect{Rewrite: new(tab.Rewrite{Pending: "pushing " + id + "…", Focus: e.ChangeID, Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
 		r, err := src.Push(ctx, e)
 		res := tab.Result{KeepPicks: true}
 		switch {
@@ -791,12 +773,12 @@ func pushSummary(results []jj.PushResult) string {
 	return strings.Join(parts, " and ")
 }
 
-func (l Model) fetch(env Env) Effect {
-	if fx, held := env.blocked(); held {
+func (l Model) fetch(env tab.Env) tab.Effect {
+	if fx, held := blocked(env); held {
 		return fx
 	}
 	src := l.src
-	return Effect{Rewrite: new(tab.Rewrite{Pending: "fetching…", Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
+	return tab.Effect{Rewrite: new(tab.Rewrite{Pending: "fetching…", Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
 		changed, err := src.Fetch(ctx)
 		res := tab.Result{KeepPicks: true, Done: "fetched"}
 		switch {
@@ -867,14 +849,14 @@ func (l Model) cursorRow(rows []row) int {
 	return max(slices.Index(rows, row{line: l.cursor, file: entryRow}), 0)
 }
 
-func (l Model) height(env Env) int {
+func (l Model) height(env tab.Env) int {
 	if l.filtered() {
 		return max(env.ListHeight-1, 1)
 	}
 	return env.ListHeight
 }
 
-func (l *Model) KeepVisible(env Env) {
+func (l *Model) KeepVisible(env tab.Env) {
 	height := l.height(env)
 	rows := l.rows()
 	top := min(l.top, max(len(rows)-height, 0))
@@ -922,12 +904,16 @@ func (l *Model) searchKey(in intent, msg tea.KeyPressMsg) tea.Cmd {
 		l.searching = false
 		l.query.Blur()
 	default:
-		return l.Input(msg)
+		return l.input(msg)
 	}
 	return nil
 }
 
-func (l *Model) Input(msg tea.Msg) tea.Cmd {
+func (l *Model) Paste(msg tea.PasteMsg) tea.Cmd {
+	return l.input(msg)
+}
+
+func (l *Model) input(msg tea.Msg) tea.Cmd {
 	if !l.searching {
 		return nil
 	}
@@ -997,7 +983,7 @@ func (l Model) Help() []ui.KeyHint {
 	}
 }
 
-func (l Model) View(env Env) string {
+func (l Model) View(env tab.Env) string {
 	p := env.Theme
 	inner := max(env.Width-2, 0)
 	var body []string
@@ -1038,7 +1024,7 @@ func (l Model) View(env Env) string {
 	return ui.Card(p, env.Width, env.BodyHeight, "Log", true, value, body)
 }
 
-func (l Model) line(env Env, i, width int) string {
+func (l Model) line(env tab.Env, i, width int) string {
 	p := env.Theme
 	line := l.shown[i]
 	bg := p.Card
@@ -1047,7 +1033,7 @@ func (l Model) line(env Env, i, width int) string {
 	}
 	e := line.Entry
 	bar := bg
-	if e != nil && e.CommitID == env.Head {
+	if e != nil && e.CommitID == env.Head.CommitID {
 		bar = p.Selection
 	}
 	left := []ui.Seg{ui.Span(ui.Fg(bar), ui.BarGlyph(bar)), ui.Span(ui.Fg(p.Muted), line.Graph)}
@@ -1137,14 +1123,14 @@ func continuation(graph string, last bool) string {
 	return b.String()
 }
 
-func (l Model) Overlay(env Env) string {
+func (l Model) Overlay(env tab.Env) string {
 	p := env.Theme
 	if l.confirm == nil {
 		return ""
 	}
 	c := l.confirm
 	e := c.entry
-	inner := env.modalInner()
+	inner := ui.InputBoxInner(env.ModalWidth)
 	wrap := func(style lipgloss.Style, text string) []string {
 		return ui.WrapLines(p, inner, style, text)
 	}

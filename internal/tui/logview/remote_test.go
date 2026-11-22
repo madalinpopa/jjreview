@@ -59,7 +59,7 @@ func TestFetch_failed(t *testing.T) {
 
 		_, fx := m.Key(press("f"), locked(tab.Lock{Reason: "blocked"}))
 
-		if fx != (logview.Effect{Status: "blocked"}) {
+		if fx != (tab.Effect{Status: "blocked"}) {
 			t.Errorf("Key(f) = %+v, want the reason", fx)
 		}
 	})
@@ -83,7 +83,7 @@ func TestPush_success(t *testing.T) {
 
 		fx := keys(&m, "P")
 
-		if fx != (logview.Effect{}) || !m.OverlayOpen() {
+		if fx != (tab.Effect{}) || !m.OverlayOpen() {
 			t.Errorf("Key(P) = %+v, OverlayOpen = %v, want no effect and the prompt open", fx, m.OverlayOpen())
 		}
 	})
@@ -185,7 +185,7 @@ func TestPush_failed(t *testing.T) {
 
 		_, fx := m.Key(press("P"), locked(tab.Lock{Busy: true}))
 
-		if fx != (logview.Effect{}) || m.OverlayOpen() {
+		if fx != (tab.Effect{}) || m.OverlayOpen() {
 			t.Errorf("Key(P) = %+v, OverlayOpen = %v, want nothing", fx, m.OverlayOpen())
 		}
 	})

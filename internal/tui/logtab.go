@@ -5,21 +5,16 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/jj"
-	"github.com/madalinpopa/jjreview/internal/tui/logview"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 )
 
 func (m Model) LogCursor() string {
 	return m.log.SelectedChange()
 }
 
-func (m Model) logEnv() logview.Env {
-	e := m.env(logView)
-	return logview.Env{Layout: e.Layout, Head: e.Head.CommitID, Active: e.Active, Dropped: e.Dropped, Lock: e.Lock}
-}
-
 func (m *Model) showLog() tea.Cmd {
 	m.view = logView
-	return m.log.Show(m.targetHead)
+	return m.log.Show(m.env(logView))
 }
 
 func (m *Model) loadLog() tea.Cmd {
@@ -27,7 +22,7 @@ func (m *Model) loadLog() tea.Cmd {
 }
 
 func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
-	env := m.logEnv()
+	env := m.env(logView)
 	if m.log.Ignores(msg, env) {
 		return nil
 	}
@@ -44,18 +39,21 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 	cmd, fx := m.log.Key(msg, env)
 	switch {
 	case fx.Open != "":
+		if !fx.Reopen {
+			armed = ""
+		}
 		return m.openCommit(msg, armed, fx.Open)
 	case fx.Rewrite != nil:
 		return m.rewrite(*fx.Rewrite)
-	case fx.Bookmark != nil:
-		return m.bookmarks.Pick(*fx.Bookmark)
+	case fx.Pick != nil:
+		return m.bookmarks.Pick(*fx.Pick)
 	case fx.Status != "":
 		m.status = fx.Status
 	}
 	return m.logEffects(cmd, fx)
 }
 
-func (m *Model) logEffects(cmd tea.Cmd, fx logview.Effect) tea.Cmd {
+func (m *Model) logEffects(cmd tea.Cmd, fx tab.Effect) tea.Cmd {
 	if fx.Retarget && slices.Contains(m.keys.open.Keys(), m.armed) {
 		m.armed = ""
 		m.status = ""
