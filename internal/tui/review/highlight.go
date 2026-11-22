@@ -1,4 +1,4 @@
-package tui
+package review
 
 import (
 	"image/color"
@@ -24,27 +24,27 @@ type highlightKey struct {
 	full bool
 }
 
-func (m *Model) ensureHighlight() {
+func (m *Model) ensureHighlight(env Env) {
 	file, ok := m.currentFile()
-	if !ok || !m.loaded || m.err != nil || wholeOnly(file) {
+	if !ok || !env.Loaded || env.Err != nil || wholeOnly(file) {
 		return
 	}
 	key := highlightKey{file: m.fileIdx, full: m.full}
 	if _, done := m.highlights[key]; done {
 		return
 	}
-	content, cached := m.contents[m.contentKey(file)]
+	content, cached := m.contents[contentKeyOf(env, file)]
 	if m.full && !cached && file.Status != diff.StatusDeleted {
 		return
 	}
 	lexer := pickLexer(file, content)
 	hl, reuse := m.highlights[highlightKey{file: m.fileIdx, full: !m.full}]
 	if !reuse {
-		hl.hunks = m.highlightHunks(lexer, file)
+		hl.hunks = highlightHunks(env.Theme, lexer, file)
 	}
 	hl.full = nil
 	if m.full {
-		hl.full = m.highlightText(lexer, content)
+		hl.full = highlightText(env.Theme, lexer, content)
 	}
 	m.highlights[key] = hl
 }
@@ -63,11 +63,11 @@ func pickLexer(f diff.File, content string) chroma.Lexer {
 	return chroma.Coalesce(lexer)
 }
 
-func (m Model) highlightHunks(lexer chroma.Lexer, f diff.File) [][][]ui.Seg {
+func highlightHunks(p theme.Theme, lexer chroma.Lexer, f diff.File) [][][]ui.Seg {
 	out := make([][][]ui.Seg, len(f.Hunks))
 	for k, h := range f.Hunks {
-		newSide := m.highlightText(lexer, sideText(diff.File{Hunks: []diff.Hunk{h}}, diff.LineRemoved))
-		oldSide := m.highlightText(lexer, sideText(diff.File{Hunks: []diff.Hunk{h}}, diff.LineAdded))
+		newSide := highlightText(p, lexer, sideText(diff.File{Hunks: []diff.Hunk{h}}, diff.LineRemoved))
+		oldSide := highlightText(p, lexer, sideText(diff.File{Hunks: []diff.Hunk{h}}, diff.LineAdded))
 		lines := make([][]ui.Seg, len(h.Lines))
 		n, o := 0, 0
 		for i, l := range h.Lines {
@@ -107,14 +107,14 @@ func lineAt(lines [][]ui.Seg, i int) []ui.Seg {
 	return lines[i]
 }
 
-func (m Model) highlightText(lexer chroma.Lexer, text string) [][]ui.Seg {
+func highlightText(p theme.Theme, lexer chroma.Lexer, text string) [][]ui.Seg {
 	tokens, err := chroma.Tokenise(lexer, nil, text)
 	if err != nil {
 		return nil
 	}
 	lines := [][]ui.Seg{nil}
 	for _, tok := range tokens {
-		style := m.tokenStyle(tok.Type)
+		style := tokenStyle(p, tok.Type)
 		for i, part := range strings.Split(tok.Value, "\n") {
 			if i > 0 {
 				lines = append(lines, nil)
@@ -128,30 +128,30 @@ func (m Model) highlightText(lexer chroma.Lexer, text string) [][]ui.Seg {
 	return lines
 }
 
-func (m Model) tokenStyle(t chroma.TokenType) lipgloss.Style {
-	style := ui.Fg(m.tokenColor(t))
+func tokenStyle(p theme.Theme, t chroma.TokenType) lipgloss.Style {
+	style := ui.Fg(tokenColor(p, t))
 	if t.InCategory(chroma.Comment) {
 		style = style.Italic(true)
 	}
 	return style
 }
 
-func (m Model) tokenColor(t chroma.TokenType) color.Color {
+func tokenColor(p theme.Theme, t chroma.TokenType) color.Color {
 	switch {
 	case t == chroma.KeywordType, t.InSubCategory(chroma.NameBuiltin):
-		return m.pal.Syntax.Type
+		return p.Syntax.Type
 	case t.InCategory(chroma.Keyword):
-		return m.pal.Syntax.Keyword
+		return p.Syntax.Keyword
 	case t.InSubCategory(chroma.NameFunction), t == chroma.NameClass:
-		return m.pal.Syntax.Function
+		return p.Syntax.Function
 	case t.InSubCategory(chroma.LiteralString):
-		return m.pal.Syntax.String
+		return p.Syntax.String
 	case t.InCategory(chroma.Literal):
-		return m.pal.Syntax.Literal
+		return p.Syntax.Literal
 	case t.InCategory(chroma.Comment):
-		return m.pal.Syntax.Comment
+		return p.Syntax.Comment
 	}
-	return m.pal.Text
+	return p.Text
 }
 
 func (m Model) codeSegs(r row) []ui.Seg {

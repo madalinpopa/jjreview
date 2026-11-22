@@ -2,33 +2,25 @@ package tui
 
 import (
 	"context"
-	"maps"
 	"os/exec"
-	"slices"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	uv "github.com/charmbracelet/ultraviolet"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/llm"
 	"github.com/madalinpopa/jjreview/internal/theme"
 	"github.com/madalinpopa/jjreview/internal/tui/bookmarks"
 	"github.com/madalinpopa/jjreview/internal/tui/logview"
 	"github.com/madalinpopa/jjreview/internal/tui/operations"
-	"github.com/madalinpopa/jjreview/internal/tui/ui"
+	"github.com/madalinpopa/jjreview/internal/tui/review"
 )
 
 const (
 	defaultWidth  = 100
 	defaultHeight = 30
 )
-
-type contentKey struct {
-	rev  string
-	path string
-}
 
 type view int
 
@@ -40,80 +32,60 @@ const (
 )
 
 type Model struct {
-	ctx         context.Context
-	src         Source
-	gen         llm.Provider
-	rev         string
-	themes      theme.Set
-	pal         theme.Theme
-	dark        bool
-	bgPending   bool
-	bgDeferred  bool
-	edit        editState
-	held        tea.Cmd
-	holdSeq     int
-	cancelEdit  context.CancelFunc
-	quitting    bool
-	keys        globalKeyMap
-	reviewKeys  reviewKeyMap
-	loaded      bool
-	reloading   bool
-	outdated    bool
-	err         error
-	change      jj.Change
-	target      string
-	targetHead  string
-	files       []diff.File
-	reviews     []fileReview
-	contents    map[contentKey]string
-	contentErrs map[contentKey]error
-	highlights  map[highlightKey]fileHighlight
-	fileIdx     int
-	cursor      int
-	diffTop     int
-	listTop     int
-	treeWidth   int
-	full        bool
-	filesFocus  bool
-	status      string
-	armed       string
-	width       int
-	height      int
-	modal       *commitModal
-	genSeq      int
-	help        bool
-	helpTop     int
-	blocked     bool
-	editor      func(ctx context.Context, path string) *exec.Cmd
-	root        string
-	reloadPath  string
-	view        view
-	log         logview.Model
-	bookmarks   bookmarks.Model
-	operations  operations.Model
+	ctx        context.Context
+	src        Source
+	rev        string
+	themes     theme.Set
+	pal        theme.Theme
+	dark       bool
+	bgPending  bool
+	bgDeferred bool
+	edit       editState
+	held       tea.Cmd
+	holdSeq    int
+	cancelEdit context.CancelFunc
+	quitting   bool
+	keys       globalKeyMap
+	loaded     bool
+	reloading  bool
+	outdated   bool
+	err        error
+	change     jj.Change
+	target     string
+	targetHead string
+	status     string
+	armed      string
+	width      int
+	height     int
+	help       bool
+	helpTop    int
+	blocked    bool
+	editor     func(ctx context.Context, path string) *exec.Cmd
+	root       string
+	reloadPath string
+	view       view
+	log        logview.Model
+	bookmarks  bookmarks.Model
+	operations operations.Model
+	review     review.Model
 }
 
 func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 	m := Model{
-		ctx:         ctx,
-		src:         src,
-		gen:         gen,
-		rev:         rev,
-		themes:      theme.DefaultSet(),
-		pal:         theme.Default(),
-		dark:        true,
-		keys:        newGlobalKeyMap(),
-		reviewKeys:  newReviewKeyMap(),
-		contents:    map[contentKey]string{},
-		contentErrs: map[contentKey]error{},
-		highlights:  map[highlightKey]fileHighlight{},
-		log:         logview.New(ctx, src),
-		bookmarks:   bookmarks.New(ctx, src),
-		operations:  operations.New(ctx, src),
-		width:       defaultWidth,
-		height:      defaultHeight,
+		ctx:        ctx,
+		src:        src,
+		rev:        rev,
+		themes:     theme.DefaultSet(),
+		pal:        theme.Default(),
+		dark:       true,
+		keys:       newGlobalKeyMap(),
+		review:     review.New(ctx, src, gen),
+		log:        logview.New(ctx, src),
+		bookmarks:  bookmarks.New(ctx, src),
+		operations: operations.New(ctx, src),
+		width:      defaultWidth,
+		height:     defaultHeight,
 	}
-	m.treeWidth = m.measureTree()
 	m.log.Resize(m.width)
 	return m
 }
@@ -169,12 +141,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyWorkingCopy(msg)
 	case rewrittenMsg:
 		cmd = m.applyRewritten(msg)
-	case contentMsg:
-		m.applyContent(msg)
-	case generatedMsg:
-		m.applyGenerated(msg)
-	case committedMsg:
-		m.applyCommitted(msg)
 	case editCheckedMsg:
 		cmd = m.editChecked(msg)
 	case EditorFinishedMsg:
@@ -183,8 +149,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmd = m.keyPress(msg)
 	case tea.PasteMsg:
 		switch {
-		case m.modal != nil:
-			cmd = m.modalInput(msg)
+		case m.review.ModalOpen():
+			cmd = m.review.Paste(msg)
 		case m.bookmarks.OverlayOpen():
 			cmd = m.bookmarks.Paste(msg)
 		default:
@@ -193,12 +159,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	default:
-		cmd = m.updateTabs(msg)
+		if c, eff, ok := m.review.Update(msg, m.reviewEnv()); ok {
+			cmd = m.applyReview(c, eff)
+		} else {
+			cmd = m.updateTabs(msg)
+		}
 	}
-	m.resizeModal()
+	env := m.reviewEnv()
+	m.review.Sync(env)
 	m.bookmarks.Resize(m.env(bookmarksView))
-	m.ensureHighlight()
-	m.scroll()
+	m.scroll(env)
 	return m, cmd
 }
 
@@ -210,8 +180,9 @@ func (m *Model) keyPress(msg tea.KeyPressMsg) tea.Cmd {
 		return m.quit()
 	case m.edit == editRunning, m.edit == editReloading && !key.Matches(msg, m.keys.quit):
 		return nil
-	case m.modal != nil:
-		return m.modalKey(msg)
+	case m.review.ModalOpen():
+		cmd, eff := m.review.Key(msg, m.reviewEnv())
+		return m.applyReview(cmd, eff)
 	case m.bookmarks.OverlayOpen():
 		cmd, eff := m.bookmarks.Key(msg, m.env(bookmarksView))
 		return m.applyEffect(bookmarksView, cmd, eff)
@@ -226,7 +197,7 @@ func (m *Model) keyPress(msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (m Model) CurrentFile() string {
-	file, ok := m.currentFile()
+	file, ok := m.review.CurrentFile()
 	if !ok {
 		return ""
 	}
@@ -234,26 +205,23 @@ func (m Model) CurrentFile() string {
 }
 
 func (m Model) Cursor() int {
-	return m.cursor
+	return m.review.Cursor()
 }
 
 func (m Model) FilesFocused() bool {
-	return m.filesFocus
+	return m.review.FilesFocused()
 }
 
 func (m Model) FullFile() bool {
-	return m.full
+	return m.review.FullFile()
 }
 
 func (m Model) ModalOpen() bool {
-	return m.modal != nil
+	return m.review.ModalOpen()
 }
 
 func (m Model) Message() string {
-	if m.modal == nil {
-		return ""
-	}
-	return m.modal.input.Value()
+	return m.review.Message()
 }
 
 func (m Model) autoTheme() bool {
@@ -275,12 +243,7 @@ func (m *Model) setProfile(dark bool) {
 	old := m.pal
 	m.dark = dark
 	m.pal = m.themes.Resolve(dark)
-	if !sameColors(highlightColors(old), highlightColors(m.pal)) {
-		clear(m.highlights)
-	}
-	if m.modal != nil {
-		m.modal.input.SetStyles(inputStyles(m.pal))
-	}
+	m.review.Repaint(old, m.pal)
 }
 
 func (m *Model) applyLoad(msg loadedMsg) tea.Cmd {
@@ -303,74 +266,43 @@ func (m *Model) applyLoad(msg loadedMsg) tea.Cmd {
 	m.targetHead = msg.change.CommitID
 	m.log.Follow(m.targetHead)
 	m.root = msg.root
-	prevFiles, prevReviews := m.files, m.reviews
-	m.files = slices.Clone(msg.files)
-	slices.SortStableFunc(m.files, compareTree)
-	m.reviews = make([]fileReview, len(m.files))
-	for i, f := range m.files {
-		m.reviews[i] = newReview(f)
-		if j := slices.IndexFunc(prevFiles, func(p diff.File) bool { return p.Path() == f.Path() }); j >= 0 {
-			m.reviews[i].keepView(f, prevFiles[j], prevReviews[j])
-		}
-	}
-	m.treeWidth = m.measureTree()
-	m.fileIdx = max(slices.IndexFunc(m.files, func(f diff.File) bool { return f.Path() == m.reloadPath }), 0)
+	cmd := m.review.Load(msg.files, m.reloadPath, m.reviewEnv())
 	m.reloadPath = ""
-	clear(m.contents)
-	clear(m.contentErrs)
-	clear(m.highlights)
-	m.cursor = firstRow(m.rows())
-	return m.requestContent()
+	return cmd
 }
 
-func (m *Model) applyContent(msg contentMsg) {
-	if msg.err != nil {
-		m.contentErrs[msg.key] = msg.err
-		if file, ok := m.currentFile(); ok && m.contentKey(file) == msg.key {
-			m.cursor = 0
+func (m Model) reviewEnv() review.Env {
+	return review.Env{
+		Env:       m.env(reviewView),
+		Change:    m.change,
+		Loaded:    m.loaded,
+		Err:       m.err,
+		Reloading: m.reloading,
+		Outdated:  m.outdated,
+		Blocked:   m.blocked,
+	}
+}
+
+func (m *Model) applyReview(cmd tea.Cmd, eff review.Effect) tea.Cmd {
+	if c := eff.Committed; c != nil {
+		m.markStale()
+		if c.Incomplete {
+			m.blocked = true
+		} else {
+			m.target = c.Rest.ChangeID
+			m.targetHead = c.Rest.CommitID
 		}
-		return
 	}
-	delete(m.contentErrs, msg.key)
-	m.contents[msg.key] = msg.content
-	maps.DeleteFunc(m.highlights, func(k highlightKey, _ fileHighlight) bool { return k.full })
-	if file, ok := m.currentFile(); ok && m.full && m.contentKey(file) == msg.key {
-		m.cursor = firstRow(m.rows())
+	if eff.Status != "" {
+		m.status = eff.Status
 	}
+	return cmd
 }
 
-func (m Model) currentFile() (diff.File, bool) {
-	if m.fileIdx < 0 || m.fileIdx >= len(m.files) {
-		return diff.File{}, false
-	}
-	return m.files[m.fileIdx], true
-}
-
-func (m Model) currentReview() fileReview {
-	return m.reviews[m.fileIdx]
-}
-
-func (m Model) contentKey(f diff.File) contentKey {
-	return contentKey{rev: m.change.CommitID, path: f.Path()}
-}
-
-func (m Model) requestContent() tea.Cmd {
-	file, ok := m.currentFile()
-	if !m.full || !ok || file.Status == diff.StatusDeleted || wholeOnly(file) {
-		return nil
-	}
-	key := m.contentKey(file)
-	if _, cached := m.contents[key]; cached {
-		return nil
-	}
-	return loadContent(m.ctx, m.src, key)
-}
-
-func (m *Model) scroll() {
+func (m *Model) scroll(env review.Env) {
 	if t, ok := m.active(); ok {
 		t.tab.KeepVisible(m.env(t.view))
 		return
 	}
-	m.diffTop = ui.ScrollTop(m.diffTop, m.cursor, m.diffHeight(), len(m.rows()))
-	m.listTop = ui.ScrollTop(m.listTop, m.currentTreeRow(), m.diffHeight(), len(m.treeRows()))
+	m.review.KeepVisible(env)
 }

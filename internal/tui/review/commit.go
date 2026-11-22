@@ -1,4 +1,4 @@
-package tui
+package review
 
 import (
 	"context"
@@ -72,12 +72,12 @@ func (m Model) restricted(picks []pick) []diff.File {
 	return out
 }
 
-func (m Model) commitRequest(message string, picks []pick) commitRequest {
+func (m Model) commitRequest(env Env, message string, picks []pick) commitRequest {
 	req := commitRequest{
-		changeID: m.target,
-		headID:   m.targetHead,
+		changeID: env.Head.ChangeID,
+		headID:   env.Head.CommitID,
 		message:  message,
-		parentID: m.change.Parents[0],
+		parentID: env.Change.Parents[0],
 		cache:    maps.Clone(m.contents),
 	}
 	for _, p := range picks {

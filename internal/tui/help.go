@@ -24,8 +24,8 @@ func (m *Model) helpKey(msg tea.KeyPressMsg) {
 
 func (m Model) overlay() string {
 	switch {
-	case m.modal != nil:
-		return m.modalView()
+	case m.review.ModalOpen():
+		return m.review.Overlay(m.reviewEnv())
 	case m.bookmarks.OverlayOpen():
 		return m.bookmarks.Overlay(m.env(bookmarksView))
 	case m.help:

@@ -13,8 +13,6 @@ import (
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
-const outdatedStatus = "review out of date; press @ to review the working copy"
-
 type rewrittenMsg struct {
 	done      string
 	focus     string
@@ -92,15 +90,15 @@ func (m *Model) applyRewritten(msg rewrittenMsg) tea.Cmd {
 		m.status = status + "; " + msg.step.failure(err)
 		return m.refreshAfterRewrite()
 	}
-	prevFiles, prevReviews := m.files, m.reviews
+	held := m.review.Hold()
 	if msg.step == workingCopyStep {
-		m.files, m.reviews = nil, nil
-	} else if file, ok := m.currentFile(); ok {
+		m.review.Reset()
+	} else if file, ok := m.review.CurrentFile(); ok {
 		m.reloadPath = file.Path()
 	}
 	cmd := m.applyLoad(msg.loaded)
-	if msg.keepPicks && msg.step == reviewedStep && !msg.loaded.moved && sameFiles(prevFiles, m.files) {
-		m.reviews = prevReviews
+	if msg.keepPicks && msg.step == reviewedStep && !msg.loaded.moved {
+		m.review.KeepPicks(held)
 	}
 	m.status = status
 	return tea.Batch(cmd, m.refreshAfterRewrite())

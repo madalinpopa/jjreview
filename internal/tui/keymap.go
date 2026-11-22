@@ -101,7 +101,7 @@ func (m Model) keyHints() []ui.KeyHint {
 	if t, ok := m.active(); ok {
 		return t.tab.Hints(m.tabsHint(), help)
 	}
-	return append(m.reviewHints(), help)
+	return append(m.review.Hints(m.change), help)
 }
 
 func (m Model) tabKeys() []key.Binding {
@@ -132,8 +132,11 @@ func (m Model) helpSections() []helpSection {
 	if t, ok := m.active(); ok {
 		own = []helpSection{{title: t.label, hints: t.tab.Help()}}
 	} else {
-		own = m.reviewHelp()
-		other = append(m.reviewOtherHelp(), other...)
+		sections, hints := m.review.Help(m.change)
+		for _, s := range sections {
+			own = append(own, helpSection{title: s.Title, hints: s.Hints})
+		}
+		other = append(hints, other...)
 	}
 	return slices.Concat([]helpSection{views}, own, []helpSection{{title: "Other", hints: other}})
 }

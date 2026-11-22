@@ -1,4 +1,4 @@
-package tui
+package review
 
 import (
 	"fmt"
@@ -33,22 +33,22 @@ func errorRow(err error) row {
 	return row{kind: rowError, hunk: -1, text: "error: " + ui.EscapePath(err.Error())}
 }
 
-func (m Model) rows() []row {
+func (m Model) rows(env Env) []row {
 	file, ok := m.currentFile()
 	switch {
-	case !m.loaded:
+	case !env.Loaded:
 		return []row{messageRow("loading…")}
-	case m.err != nil:
-		return []row{errorRow(m.err)}
+	case env.Err != nil:
+		return []row{errorRow(env.Err)}
 	case !ok:
 		return []row{messageRow("no changes")}
 	case wholeOnly(file):
 		return wholeRows(file)
 	case m.full:
-		return withMode(file, m.fullRows(file))
+		return withMode(file, m.fullRows(env, file))
 	}
 	total := -1
-	if content, cached := m.contents[m.contentKey(file)]; cached {
+	if content, cached := m.contents[contentKeyOf(env, file)]; cached {
 		total = lineCount(content)
 	}
 	return withMode(file, changeRows(file, m.currentReview(), total))
@@ -96,11 +96,11 @@ func describeWhole(f diff.File) string {
 	return ""
 }
 
-func (m Model) fullRows(file diff.File) []row {
+func (m Model) fullRows(env Env, file diff.File) []row {
 	if file.Status == diff.StatusDeleted {
 		return []row{messageRow("file deleted")}
 	}
-	key := m.contentKey(file)
+	key := contentKeyOf(env, file)
 	content, ok := m.contents[key]
 	if !ok {
 		if err, failed := m.contentErrs[key]; failed {

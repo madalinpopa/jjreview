@@ -1,4 +1,4 @@
-package tui
+package review
 
 import (
 	"context"
@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	modalMaxWidth   = 64
 	inputHeight     = 5
 	generatorHint   = "set provider in config.toml to generate"
-	blockedStatus   = "split done; restart jjr to continue"
 	immutableStatus = "immutable revision: read only"
-	reloadingStatus = "reloading change…"
+	BlockedStatus   = "split done; restart jjr to continue"
+	ReloadingStatus = "reloading change…"
+	OutdatedStatus  = "review out of date; press @ to review the working copy"
 )
 
 var errEmptyMessage = errors.New("commit message is empty")
@@ -47,38 +47,29 @@ type commitModal struct {
 	err        error
 }
 
-func (m *Model) openModal() tea.Cmd {
-	if m.reloading {
-		m.status = reloadingStatus
-		return nil
-	}
-	if !m.ready() {
-		return nil
-	}
-	if m.blocked {
-		m.status = blockedStatus
-		return nil
-	}
-	if m.outdated {
-		m.status = outdatedStatus
-		return nil
-	}
-	if m.change.Immutable {
-		m.status = immutableStatus
-		return nil
+func (m *Model) openModal(env Env) (tea.Cmd, string) {
+	switch {
+	case env.Reloading:
+		return nil, ReloadingStatus
+	case !m.ready(env):
+		return nil, ""
+	case env.Blocked:
+		return nil, BlockedStatus
+	case env.Outdated:
+		return nil, OutdatedStatus
+	case env.Change.Immutable:
+		return nil, immutableStatus
 	}
 	picks := m.picks()
 	if len(picks) == 0 {
-		m.status = "select hunks first (space / S)"
-		return nil
+		return nil, "select hunks first (space / S)"
 	}
-	if len(m.change.Parents) != 1 {
-		m.status = fmt.Sprintf("cannot commit: %s has %d parents, want 1", ui.ShortID(m.target), len(m.change.Parents))
-		return nil
+	if len(env.Change.Parents) != 1 {
+		return nil, fmt.Sprintf("cannot commit: %s has %d parents, want 1", ui.ShortID(env.Head.ChangeID), len(env.Change.Parents))
 	}
 	ctx, cancel := context.WithCancel(m.ctx)
-	m.modal = &commitModal{ctx: ctx, cancel: cancel, input: newInput(m.pal), picks: picks}
-	return m.generate()
+	m.modal = &commitModal{ctx: ctx, cancel: cancel, input: newInput(env.Theme), picks: picks}
+	return m.generate(), ""
 }
 
 func (m *Model) closeModal() {
@@ -128,7 +119,7 @@ func (m *Model) applyGenerated(msg generatedMsg) {
 	mo.input.SetValue(strings.TrimSpace(msg.text))
 }
 
-func (m *Model) modalKey(msg tea.KeyPressMsg) tea.Cmd {
+func (m *Model) modalKey(msg tea.KeyPressMsg, env Env) tea.Cmd {
 	mo := m.modal
 	if mo.committing {
 		return nil
@@ -143,7 +134,7 @@ func (m *Model) modalKey(msg tea.KeyPressMsg) tea.Cmd {
 		if mo.generating {
 			return nil
 		}
-		return m.commit()
+		return m.commit(env)
 	}
 	return m.modalInput(msg)
 }
@@ -162,7 +153,7 @@ func (m *Model) modalInput(msg tea.Msg) tea.Cmd {
 	return cmd
 }
 
-func (m *Model) commit() tea.Cmd {
+func (m *Model) commit(env Env) tea.Cmd {
 	mo := m.modal
 	message := strings.TrimSpace(mo.input.Value())
 	if message == "" {
@@ -171,56 +162,56 @@ func (m *Model) commit() tea.Cmd {
 	}
 	mo.err = nil
 	mo.committing = true
-	return runCommit(mo.ctx, m.src, m.commitRequest(message, mo.picks))
+	return runCommit(mo.ctx, m.src, m.commitRequest(env, message, mo.picks))
 }
 
-func (m *Model) applyCommitted(msg committedMsg) {
+func (m *Model) applyCommitted(env Env, msg committedMsg) Effect {
 	maps.Copy(m.contents, msg.fetched)
 	mo := m.modal
 	if mo == nil {
-		return
+		return Effect{}
 	}
 	mo.committing = false
 	incomplete := errors.Is(msg.err, jj.ErrSplitIncomplete)
 	if msg.err != nil && !incomplete {
 		mo.err = msg.err
-		return
+		return Effect{}
 	}
-	m.markStale()
 	id := ui.ShortID(msg.selected.ChangeID)
-	before := m.rows()
+	before := m.rows(env)
 	for _, p := range mo.picks {
 		m.reviews[p.file].commit(p.units, id, !wholeOnly(m.files[p.file]))
 	}
-	m.keepCursor(before)
+	m.keepCursor(env, before)
+	m.closeModal()
+	eff := Effect{Committed: &Committed{Selected: msg.selected, Rest: msg.rest, Incomplete: incomplete}}
 	if incomplete {
-		m.blocked = true
-		m.closeModal()
-		m.status = blockedStatus
-		return
+		eff.Status = BlockedStatus
+		return eff
 	}
 	subject, _, _ := strings.Cut(strings.TrimSpace(mo.input.Value()), "\n")
-	m.target = msg.rest.ChangeID
-	m.targetHead = msg.rest.CommitID
-	m.closeModal()
-	m.status = fmt.Sprintf("✓ created %s: %s", id, subject)
+	eff.Status = fmt.Sprintf("✓ created %s: %s", id, subject)
+	return eff
 }
 
-func (m *Model) resizeModal() {
+func (m *Model) resizeModal(env Env) {
 	if m.modal == nil {
 		return
 	}
 	in := &m.modal.input
-	if w := ui.InputBoxInner(m.modalInner()); in.Width() != w {
+	if w := ui.InputBoxInner(modalInner(env)); in.Width() != w {
 		in.SetWidth(w)
 	}
-	if h := m.modalLayout().input; in.Height() != h {
+	if h := m.modalLayout(env).input; in.Height() != h {
 		in.SetHeight(h)
 	}
 }
 
-func (m Model) modalWidth() int {
-	return min(modalMaxWidth, max(m.width-4, 20))
+func (m *Model) Paste(msg tea.PasteMsg) tea.Cmd {
+	if m.modal == nil {
+		return nil
+	}
+	return m.modalInput(msg)
 }
 
 func newInput(p theme.Theme) textarea.Model {

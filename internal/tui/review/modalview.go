@@ -1,4 +1,4 @@
-package tui
+package review
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/theme"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -25,14 +26,14 @@ type modalRows struct {
 	noteInHeading bool
 }
 
-func (m Model) modalLayout() modalRows {
-	notes := len(m.noteSegs(m.modalInner()))
+func (m Model) modalLayout(env Env) modalRows {
+	notes := len(m.noteSegs(env.Theme, modalInner(env)))
 	rows := modalRows{preview: 1}
 	chrome := modalChrome
-	if m.height < modalChrome+2+min(notes, modalNoteRows) {
+	if env.Height < modalChrome+2+min(notes, modalNoteRows) {
 		rows.preview, chrome = 0, modalCompactChrome
 	}
-	room := max(m.height-chrome-1-rows.preview, 0)
+	room := max(env.Height-chrome-1-rows.preview, 0)
 	if notes > 0 && room == 0 {
 		rows.notes, rows.noteInHeading = 1, true
 		rows.input = 1
@@ -50,38 +51,38 @@ func (m Model) modalLayout() modalRows {
 	return rows
 }
 
-func (m Model) modalInner() int {
-	return max(m.modalWidth()-4, 1)
+func modalInner(env Env) int {
+	return max(env.ModalWidth-4, 1)
 }
 
-func (m Model) modalView() string {
-	p := m.pal
+func (m Model) modalView(env Env) string {
+	p := env.Theme
 	mo := m.modal
-	inner := m.modalInner()
-	rows := m.modalLayout()
+	inner := modalInner(env)
+	rows := m.modalLayout(env)
 	lines := []string{
 		ui.Paint(inner, p.Card, []ui.Seg{
 			ui.Span(ui.Fg(p.Title).Bold(true), "New commit "),
-			ui.Pill(p.Chip, p.ChipText, "from "+ui.ShortID(m.target)),
+			ui.Pill(p.Chip, p.ChipText, "from "+ui.ShortID(env.Head.ChangeID)),
 		}, nil),
 	}
 	if rows.preview > 0 {
 		lines = append(lines,
 			ui.Blank(inner, p.Card),
-			ui.InputBox(p, inner, p.Border, strings.Join(m.pickLines(ui.InputBoxInner(inner), rows.preview), "\n")),
+			ui.InputBox(p, inner, p.Border, strings.Join(m.pickLines(p, ui.InputBoxInner(inner), rows.preview), "\n")),
 		)
 	}
 	heading := ui.Paint(inner, p.Card, []ui.Seg{
 		ui.Span(ui.Fg(p.Header), "Commit message "),
-		m.generatorNote(),
+		m.generatorNote(p),
 	}, nil)
-	notes := m.noteLines(inner, rows.notes)
+	notes := m.noteLines(p, inner, rows.notes)
 	if rows.noteInHeading {
 		heading, notes = notes[0], nil
 	}
 	lines = append(lines, heading, ui.InputBox(p, inner, p.Selection, mo.input.View()))
 	lines = append(lines, notes...)
-	lines = append(lines, ui.Paint(inner, p.Card, nil, m.modalFooter(inner)))
+	lines = append(lines, ui.Paint(inner, p.Card, nil, m.modalFooter(p, inner)))
 	return ui.ModalBox(p, lines)
 }
 
@@ -97,8 +98,7 @@ func (m Model) pickCount() int {
 	return n
 }
 
-func (m Model) pickItems(limit int) [][]ui.Seg {
-	p := m.pal
+func (m Model) pickItems(p theme.Theme, limit int) [][]ui.Seg {
 	var items [][]ui.Seg
 	for _, pk := range m.modal.picks {
 		f := m.files[pk.file]
@@ -122,14 +122,13 @@ func (m Model) pickItems(limit int) [][]ui.Seg {
 	return items
 }
 
-func (m Model) pickLines(width, rows int) []string {
-	p := m.pal
+func (m Model) pickLines(p theme.Theme, width, rows int) []string {
 	count := m.pickCount()
 	var items [][]ui.Seg
 	if count > rows {
-		items = append(m.pickItems(rows-1), []ui.Seg{ui.Span(ui.Fg(p.Muted), fmt.Sprintf("… %d more", count-rows+1))})
+		items = append(m.pickItems(p, rows-1), []ui.Seg{ui.Span(ui.Fg(p.Muted), fmt.Sprintf("… %d more", count-rows+1))})
 	} else {
-		items = m.pickItems(count)
+		items = m.pickItems(p, count)
 	}
 	lines := make([]string, len(items))
 	for i, item := range items {
@@ -148,8 +147,7 @@ func wholeLabel(f diff.File) string {
 	return "whole file"
 }
 
-func (m Model) generatorNote() ui.Seg {
-	p := m.pal
+func (m Model) generatorNote(p theme.Theme) ui.Seg {
 	mo := m.modal
 	switch {
 	case m.gen == nil:
@@ -165,9 +163,9 @@ func (m Model) generatorNote() ui.Seg {
 	return ui.Span(ui.Fg(p.Status), "")
 }
 
-func (m Model) noteSegs(width int) []ui.Seg {
+func (m Model) noteSegs(p theme.Theme, width int) []ui.Seg {
 	var segs []ui.Seg
-	for _, note := range m.modalNotes() {
+	for _, note := range m.modalNotes(p) {
 		for text := range strings.SplitSeq(ansi.Wrap(note.Text, width, ""), "\n") {
 			segs = append(segs, ui.Span(note.Style, text))
 		}
@@ -175,8 +173,8 @@ func (m Model) noteSegs(width int) []ui.Seg {
 	return segs
 }
 
-func (m Model) noteLines(width, room int) []string {
-	segs := m.noteSegs(width)
+func (m Model) noteLines(p theme.Theme, width, room int) []string {
+	segs := m.noteSegs(p, width)
 	if len(segs) > room {
 		segs = segs[:room]
 		if room > 0 {
@@ -185,30 +183,29 @@ func (m Model) noteLines(width, room int) []string {
 	}
 	lines := make([]string, len(segs))
 	for i, s := range segs {
-		lines[i] = ui.Paint(width, m.pal.Card, []ui.Seg{s}, nil)
+		lines[i] = ui.Paint(width, p.Card, []ui.Seg{s}, nil)
 	}
 	return lines
 }
 
-func (m Model) modalNotes() []ui.Seg {
+func (m Model) modalNotes(p theme.Theme) []ui.Seg {
 	mo := m.modal
 	var notes []ui.Seg
 	switch {
 	case mo.committing:
-		notes = append(notes, ui.Span(ui.Fg(m.pal.Status), "committing…"))
+		notes = append(notes, ui.Span(ui.Fg(p.Status), "committing…"))
 	case errors.Is(mo.err, jj.ErrStaleRevision):
-		notes = append(notes, ui.Span(ui.Fg(m.pal.Removed), "error: "+jj.ErrStaleRevision.Error()))
+		notes = append(notes, ui.Span(ui.Fg(p.Removed), "error: "+jj.ErrStaleRevision.Error()))
 	case mo.err != nil:
-		notes = append(notes, ui.Span(ui.Fg(m.pal.Removed), "error: "+mo.err.Error()))
+		notes = append(notes, ui.Span(ui.Fg(p.Removed), "error: "+mo.err.Error()))
 	}
 	if mo.genErr != nil {
-		notes = append(notes, ui.Span(ui.Fg(m.pal.Removed), "generation failed: "+mo.genErr.Error()))
+		notes = append(notes, ui.Span(ui.Fg(p.Removed), "generation failed: "+mo.genErr.Error()))
 	}
 	return notes
 }
 
-func (m Model) modalFooter(width int) []ui.Seg {
-	p := m.pal
+func (m Model) modalFooter(p theme.Theme, width int) []ui.Seg {
 	key := ui.Fg(p.Key)
 	text := ui.Fg(p.Muted)
 	full := []ui.Seg{

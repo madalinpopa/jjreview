@@ -1,4 +1,4 @@
-package tui
+package review
 
 import (
 	"fmt"
@@ -13,13 +13,12 @@ import (
 
 const gapIndent = "       "
 
-func (m Model) diffLine(r row, selected bool, width int) string {
-	p := m.pal
+func (m Model) diffLine(p theme.Theme, r row, selected bool, width int) string {
 	switch r.kind {
 	case rowHunk:
-		return m.hunkLine(r.hunk, selected, width)
+		return m.hunkLine(p, r.hunk, selected, width)
 	case rowLine:
-		return m.codeLine(r, selected, width)
+		return m.codeLine(p, r, selected, width)
 	case rowGap:
 		return ui.Paint(width, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Faint), gapIndent+r.text)}, nil)
 	case rowError:
@@ -28,8 +27,7 @@ func (m Model) diffLine(r row, selected bool, width int) string {
 	return ui.Paint(width, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Muted).Italic(true), "  "+r.text)}, nil)
 }
 
-func (m Model) hunkLine(k int, selected bool, width int) string {
-	p := m.pal
+func (m Model) hunkLine(p theme.Theme, k int, selected bool, width int) string {
 	file := m.files[m.fileIdx]
 	review := m.currentReview()
 	h := file.Hunks[k]
@@ -73,8 +71,7 @@ func (m Model) hunkLine(k int, selected bool, width int) string {
 	return ui.Paint(width, bg, left, right)
 }
 
-func (m Model) codeLine(r row, selected bool, width int) string {
-	p := m.pal
+func (m Model) codeLine(p theme.Theme, r row, selected bool, width int) string {
 	l := r.line
 	bg, bar, sign, text, signText := p.Card, p.Card, p.Muted, p.Text, "  "
 	switch l.Kind {

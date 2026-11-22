@@ -8,11 +8,12 @@ import (
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
+	"github.com/madalinpopa/jjreview/internal/tui/review"
 	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
-const maxListWidth = 60
+const modalMaxWidth = 64
 
 func (m Model) View() tea.View {
 	content := m.screen()
@@ -44,29 +45,9 @@ func (m Model) screen() string {
 	if t, ok := m.active(); ok {
 		body = t.tab.View(m.env(t.view))
 	} else {
-		body = lipgloss.JoinHorizontal(lipgloss.Top,
-			m.filesCard(),
-			ui.Blank(1, m.pal.Page),
-			m.diffCard(),
-		)
+		body = m.review.View(m.reviewEnv())
 	}
 	return strings.Join(append([]string{m.topBar(), body}, m.bottomBar()...), "\n")
-}
-
-func (m Model) listWidth() int {
-	return max(min(m.treeWidth+2, maxListWidth, (m.width-1)/2), 1)
-}
-
-func (m Model) measureTree() int {
-	w := ui.RowWidth(ui.CardHeader(m.pal, "Files", m.filesValue(len(m.files))))
-	for _, r := range m.treeRows() {
-		w = max(w, ui.RowWidth(m.treeSegs(r)))
-	}
-	return w
-}
-
-func (m Model) diffCardWidth() int {
-	return max(m.width-m.listWidth()-1, 1)
 }
 
 func (m Model) bodyHeight() int {
@@ -85,7 +66,7 @@ func (m Model) topBar() string {
 	}
 	gap := ui.Span(lipgloss.NewStyle(), " ")
 	revision := ui.Pill(p.Chip, p.ChipText, "@ "+ui.ShortID(id))
-	n := pickedUnits(m.picks())
+	n := m.review.Picked()
 	var indicators, optional []ui.Seg
 	if m.change.Immutable {
 		indicators = append(indicators, ui.Pill(p.Chip, p.Removed, "read only"))
@@ -200,105 +181,16 @@ func (m Model) bottomBar() []string {
 
 func (m Model) statusText() string {
 	if m.status == "" && m.outdated {
-		return outdatedStatus
+		return review.OutdatedStatus
 	}
 	if m.status != "" || m.view != reviewView {
 		return m.status
 	}
-	if !m.ready() {
-		return ""
-	}
-	n := len(m.files[m.fileIdx].Hunks)
-	text := fmt.Sprintf("file %d/%d · %d %s", m.fileIdx+1, len(m.files), n, ui.Plural(n, "hunk"))
-	if folded := m.currentReview().foldedCount(); folded > 0 && n > 0 {
-		text += fmt.Sprintf(" (%d folded)", folded)
-	}
-	return text
+	return m.review.Status(m.loaded && m.err == nil)
 }
 
-func (m Model) filesValue(done int) []ui.Seg {
-	return []ui.Seg{ui.Span(ui.Fg(m.pal.Title), fmt.Sprintf("%d/%d ✓", done, len(m.files)))}
-}
-
-func (m Model) filesCard() string {
-	done := 0
-	for _, r := range m.reviews {
-		if r.state() == stateDone {
-			done++
-		}
-	}
-	rows := m.treeRows()
-	width := m.listWidth()
-	inner := max(width-2, 0)
-	var body []string
-	for i := m.listTop; i < len(rows) && len(body) < m.diffHeight(); i++ {
-		body = append(body, m.treeLine(rows[i], inner))
-	}
-	return ui.Card(m.pal, width, m.bodyHeight(), "Files", m.filesFocus, m.filesValue(done), body)
-}
-
-func (m Model) treeLine(r treeRow, width int) string {
-	bg := m.pal.Card
-	if !r.dir && r.file == m.fileIdx {
-		bg = m.pal.CursorBg
-	}
-	left, right := m.treeSegs(r)
-	return ui.Paint(width, bg, left, right)
-}
-
-func (m Model) treeSegs(r treeRow) ([]ui.Seg, []ui.Seg) {
-	p := m.pal
-	if r.dir {
-		left := []ui.Seg{ui.Span(lipgloss.NewStyle(), strings.Repeat(" ", 1+r.depth*2)), ui.Span(ui.Fg(p.Muted), "▾ "), ui.Span(ui.Fg(p.DirName), ui.EscapePath(r.name))}
-		return left, []ui.Seg{ui.Span(ui.Fg(p.Muted), fmt.Sprint(r.count)), ui.Span(lipgloss.NewStyle(), " ")}
-	}
-	name, bar := ui.Fg(p.Strong), p.Card
-	if r.file == m.fileIdx {
-		name, bar = ui.Fg(p.Selection).Bold(true), p.Selection
-	}
-	st := m.reviews[r.file].state()
-	left := []ui.Seg{
-		ui.Span(ui.Fg(bar), ui.BarGlyph(bar)),
-		ui.Span(lipgloss.NewStyle(), strings.Repeat(" ", r.depth*2)),
-		ui.Span(m.glyphStyle(st), st.glyph()),
-		ui.Span(lipgloss.NewStyle(), " "),
-		ui.Span(name, ui.EscapePath(r.name)),
-	}
-	return left, []ui.Seg{ui.Span(ui.Fg(p.Muted), m.fileSummary(r.file)), ui.Span(lipgloss.NewStyle(), " ")}
-}
-
-func (m Model) glyphStyle(st fileState) lipgloss.Style {
-	switch st {
-	case stateDone:
-		return ui.Fg(m.pal.Added)
-	case stateNone:
-		return ui.Fg(m.pal.Muted)
-	}
-	return ui.Fg(m.pal.Picked)
-}
-
-func (m Model) fileSummary(i int) string {
-	f := m.files[i]
-	if f.Binary {
-		return "bin"
-	}
-	a, d := fileStats(f)
-	return fmt.Sprintf("+%d −%d", a, d)
-}
-
-func (m Model) diffCard() string {
-	var value []ui.Seg
-	if file, ok := m.currentFile(); ok {
-		value = []ui.Seg{ui.Span(ui.Fg(m.pal.Title), ui.EscapePath(file.Path()))}
-	}
-	rows := m.rows()
-	width := m.diffCardWidth()
-	inner := max(width-2, 0)
-	var body []string
-	for i := m.diffTop; i < len(rows) && len(body) < m.diffHeight(); i++ {
-		body = append(body, m.diffLine(rows[i], i == m.cursor, inner))
-	}
-	return ui.Card(m.pal, width, m.bodyHeight(), "Unified diff", !m.filesFocus, value, body)
+func (m Model) modalWidth() int {
+	return min(modalMaxWidth, max(m.width-4, 20))
 }
 
 func (m Model) layout() ui.Layout {
@@ -321,7 +213,7 @@ func (m Model) env(v view) tab.Env {
 		Layout:  m.layout(),
 		Head:    m.head(),
 		Active:  m.view == v,
-		Dropped: pickedUnits(m.picks()),
+		Dropped: m.review.Picked(),
 		Lock:    m.lock(),
 	}
 }

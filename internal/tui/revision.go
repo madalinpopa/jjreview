@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/tui/review"
 	"github.com/madalinpopa/jjreview/internal/tui/tab"
 )
 
@@ -46,7 +47,7 @@ func (s revisionStep) failure(err error) string {
 func (m Model) lock() tab.Lock {
 	l := tab.Lock{Busy: !m.loaded || m.reloading}
 	if m.blocked {
-		l.Reason = blockedStatus
+		l.Reason = review.BlockedStatus
 	}
 	return l
 }
@@ -81,9 +82,9 @@ func (m *Model) applyRevision(msg revisionMsg) tea.Cmd {
 		m.view = reviewView
 	}
 	if change := msg.loaded.change; change.ChangeID != m.target || msg.step == pickedStep && change.CommitID != m.targetHead {
-		m.full = false
+		m.review.ChangesOnly()
 	}
-	m.files, m.reviews = nil, nil
+	m.review.Reset()
 	cmd := m.applyLoad(msg.loaded)
 	if msg.step != workingCopyStep {
 		return cmd

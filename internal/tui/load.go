@@ -20,12 +20,6 @@ type loadedMsg struct {
 	err    error
 }
 
-type contentMsg struct {
-	key     contentKey
-	content string
-	err     error
-}
-
 func load(ctx context.Context, src Source, rev string) tea.Cmd {
 	return func() tea.Msg {
 		return fetch(ctx, src, rev)
@@ -44,7 +38,7 @@ func (m *Model) canReload() bool {
 }
 
 func (m *Model) reload() tea.Cmd {
-	if file, ok := m.currentFile(); ok {
+	if file, ok := m.review.CurrentFile(); ok {
 		m.reloadPath = file.Path()
 	}
 	m.reloading = true
@@ -90,14 +84,4 @@ func fetch(ctx context.Context, src Source, rev string) loadedMsg {
 		return loadedMsg{err: fmt.Errorf("find workspace root: %w", err)}
 	}
 	return loadedMsg{change: change, files: files, root: root}
-}
-
-func loadContent(ctx context.Context, src Source, key contentKey) tea.Cmd {
-	return func() tea.Msg {
-		content, err := src.FileContent(ctx, key.rev, key.path)
-		if err != nil {
-			err = fmt.Errorf("read %s: %w", key.path, err)
-		}
-		return contentMsg{key: key, content: content, err: err}
-	}
 }

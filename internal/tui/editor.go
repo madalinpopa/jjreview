@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
+	"github.com/madalinpopa/jjreview/internal/tui/review"
 )
 
 const editorHoldTimeout = 300 * time.Millisecond
@@ -82,7 +83,7 @@ func (m Model) WithEditor(editor func(ctx context.Context, path string) *exec.Cm
 }
 
 func (m *Model) editablePath() (string, bool) {
-	file, ok := m.currentFile()
+	file, ok := m.review.CurrentFile()
 	if !m.loaded || m.reloading || !ok {
 		return "", false
 	}
@@ -215,7 +216,7 @@ func (m *Model) editorFinished(msg EditorFinishedMsg) tea.Cmd {
 	}
 	cmds = append(cmds, m.handBack())
 	if msg.Err == nil {
-		m.status = reloadingStatus
+		m.status = review.ReloadingStatus
 		return tea.Batch(append(cmds, m.reload())...)
 	}
 	m.edit = editIdle
