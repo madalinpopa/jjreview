@@ -33,7 +33,7 @@ Sleep 500ms
 Type "jjjj"
 Sleep 800ms
 Enter
-Wait+Screen@10s /1 Review/
+Wait+Screen@10s /README\.md/
 Sleep 2.5s
 Type "@"
 Sleep 2s
