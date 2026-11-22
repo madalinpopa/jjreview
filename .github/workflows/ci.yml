@@ -21,10 +21,6 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
-env:
-  JJ_VERSION: 0.47.1
-  JJ_SHA256: d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7
-
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -41,10 +37,42 @@ jobs:
       - uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
         with:
           version: v2.15.0
+      - name: Build release targets
+        run: |
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            GOOS="${target%/*}" GOARCH="${target#*/}" go build -o /dev/null ./cmd/jjr
+          done
+        env:
+          CGO_ENABLED: "0"
 
   test:
-    runs-on: ubuntu-latest
+    name: test (${{ matrix.os }}, jj ${{ matrix.jj }})
+    runs-on: ${{ matrix.os }}
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            jj: 0.47.0
+            target: x86_64-unknown-linux-musl
+            sha256: 195b4e83e5c45b11e3f7a51a95168051f9a90970e581ca514c32c9cdbece5e9a
+          - os: ubuntu-latest
+            jj: 0.47.1
+            target: x86_64-unknown-linux-musl
+            sha256: d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7
+          - os: macos-latest
+            jj: 0.47.0
+            target: aarch64-apple-darwin
+            sha256: 7fa4e94e1c92c08ca62b1156ae29df84da2aad99a56d42c56e2f05045022c981
+          - os: macos-latest
+            jj: 0.47.1
+            target: aarch64-apple-darwin
+            sha256: 50129b527f7cd6aef82aebd4bb2b670bb56766adc509ef3279c4327aa3592255
+    env:
+      JJ_VERSION: ${{ matrix.jj }}
+      JJ_TARGET: ${{ matrix.target }}
+      JJ_SHA256: ${{ matrix.sha256 }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -55,18 +83,12 @@ jobs:
           cache-dependency-path: go.sum
       - name: Install jj
         run: |
-          archive="jj-v${JJ_VERSION}-x86_64-unknown-linux-musl.tar.gz"
+          archive="jj-v${JJ_VERSION}-${JJ_TARGET}.tar.gz"
           curl -fsSLo "$RUNNER_TEMP/$archive" "https://github.com/jj-vcs/jj/releases/download/v${JJ_VERSION}/$archive"
-          echo "$JJ_SHA256  $RUNNER_TEMP/$archive" | sha256sum -c -
+          echo "$JJ_SHA256  $RUNNER_TEMP/$archive" | shasum -a 256 -c -
           mkdir -p "$RUNNER_TEMP/jj"
-          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/jj" ./jj
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP/jj"
           echo "$RUNNER_TEMP/jj" >> "$GITHUB_PATH"
       - run: jj --version
       - run: go test -race -coverprofile=coverage.out ./...
       - run: go tool cover -func=coverage.out | tail -n 1 >> "$GITHUB_STEP_SUMMARY"
-      - name: Cross-compile for darwin
-        run: go build -o /dev/null ./cmd/jjr
-        env:
-          CGO_ENABLED: "0"
-          GOOS: darwin
-          GOARCH: arm64
