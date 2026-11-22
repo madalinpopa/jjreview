@@ -321,11 +321,11 @@ func TestKey_success(t *testing.T) {
 		m := loaded(t, &fakeSource{lines: twoEntries()})
 
 		m.Key(press("/"), env(true))
-		captured := m.Capturing()
+		captured := m.Captures()
 		m.Key(press("enter"), env(true))
 
-		if !captured || m.Capturing() {
-			t.Errorf("Capturing() = %v then %v, want true while searching and false after enter", captured, m.Capturing())
+		if !captured || m.Captures() {
+			t.Errorf("Captures() = %v then %v, want true while searching and false after enter", captured, m.Captures())
 		}
 	})
 }

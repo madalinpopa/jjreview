@@ -12,7 +12,6 @@ import (
 	"charm.land/bubbles/v2/textinput"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
@@ -30,12 +29,7 @@ type Source interface {
 }
 
 type keyMap struct {
-	down        key.Binding
-	up          key.Binding
-	halfDown    key.Binding
-	halfUp      key.Binding
-	top         key.Binding
-	bottom      key.Binding
+	ui.NavKeys
 	open        key.Binding
 	search      key.Binding
 	clearSearch key.Binding
@@ -55,12 +49,7 @@ type keyMap struct {
 
 func newKeyMap() keyMap {
 	return keyMap{
-		down:        key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next revision")),
-		up:          key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous revision")),
-		halfDown:    key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "half page down")),
-		halfUp:      key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", "half page up")),
-		top:         key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first revision")),
-		bottom:      key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last revision")),
+		NavKeys:     ui.NewNavKeys("next revision", "previous revision", "first revision", "last revision"),
 		open:        key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "review the revision")),
 		search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search by ID or description")),
 		clearSearch: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "clear the search")),
@@ -107,17 +96,17 @@ const (
 
 func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
 	switch {
-	case key.Matches(msg, k.down):
+	case key.Matches(msg, k.Down):
 		return moveDownIntent
-	case key.Matches(msg, k.up):
+	case key.Matches(msg, k.Up):
 		return moveUpIntent
-	case key.Matches(msg, k.halfDown):
+	case key.Matches(msg, k.HalfDown):
 		return halfDownIntent
-	case key.Matches(msg, k.halfUp):
+	case key.Matches(msg, k.HalfUp):
 		return halfUpIntent
-	case key.Matches(msg, k.top):
+	case key.Matches(msg, k.Top):
 		return topIntent
-	case key.Matches(msg, k.bottom):
+	case key.Matches(msg, k.Bottom):
 		return bottomIntent
 	case key.Matches(msg, k.open):
 		return openIntent
@@ -204,10 +193,7 @@ type Model struct {
 	searching bool
 	expanded  map[string]bool
 	files     map[string]fileList
-	loaded    bool
-	loading   bool
-	stale     bool
-	err       error
+	list      ui.Loader
 	cursor    int
 	followed  string
 	keep      Position
@@ -216,7 +202,6 @@ type Model struct {
 	squashing []jj.LogEntry
 	dropArmed bool
 	top       int
-	seq       int
 }
 
 type Position struct {
@@ -303,7 +288,7 @@ func (l Model) OverlayOpen() bool {
 	return l.confirm != nil
 }
 
-func (l Model) Capturing() bool {
+func (l Model) Captures() bool {
 	return l.searching || l.confirm != nil || l.squashing != nil
 }
 
@@ -387,7 +372,7 @@ func (l *Model) focusNth(n int) {
 }
 
 func (l *Model) Follow(commitID string) {
-	if l.loaded && l.selectedCommit() == l.followed {
+	if l.list.Loaded() && l.selectedCommit() == l.followed {
 		l.focus(commitID)
 	}
 }
@@ -440,7 +425,7 @@ func (l *Model) RestorePosition(keep Position) {
 }
 
 func (l *Model) Show(head string) tea.Cmd {
-	if !l.loading && (!l.loaded || l.stale) {
+	if l.list.Due() {
 		return l.Load()
 	}
 	l.focus(head)
@@ -448,10 +433,7 @@ func (l *Model) Show(head string) tea.Cmd {
 }
 
 func (l *Model) Load() tea.Cmd {
-	l.seq++
-	l.loading = true
-	l.stale = false
-	seq, ctx, src := l.seq, l.ctx, l.src
+	seq, ctx, src := l.list.Begin(), l.ctx, l.src
 	return func() tea.Msg {
 		lines, err := src.Log(ctx)
 		if err != nil {
@@ -462,7 +444,7 @@ func (l *Model) Load() tea.Cmd {
 }
 
 func (l *Model) MarkStale() {
-	l.stale = true
+	l.list.MarkStale()
 }
 
 func (l *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
@@ -478,13 +460,10 @@ func (l *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 }
 
 func (l *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Effect) {
-	if msg.seq != l.seq {
+	before := l.selectedCommit()
+	if !l.list.Finish(msg.seq, msg.err) {
 		return nil, Effect{}
 	}
-	before := l.selectedCommit()
-	l.loading = false
-	l.loaded = true
-	l.err = msg.err
 	if msg.err != nil {
 		l.lines = nil
 		l.searching = false
@@ -507,14 +486,14 @@ func (l *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Effect) {
 		l.focus(env.Head)
 	}
 	eff := Effect{Retarget: env.Active && l.selectedCommit() != before}
-	if l.stale && env.Active {
+	if l.list.Stale() && env.Active {
 		return l.Load(), eff
 	}
 	return nil, eff
 }
 
 func (l Model) Ignores(msg tea.KeyPressMsg, env Env) bool {
-	busy := msg.IsRepeat || env.Lock.Busy || l.loading
+	busy := msg.IsRepeat || env.Lock.Busy || l.list.Loading()
 	in := l.keys.resolve(msg)
 	if l.squashing != nil {
 		return in == confirmIntent && busy
@@ -558,7 +537,7 @@ func (l *Model) confirmKey(in intent, repeat bool, env Env) Effect {
 func (l *Model) browseKey(in intent, env Env) (tea.Cmd, Effect) {
 	switch in {
 	case searchIntent:
-		if !l.loaded || l.err != nil {
+		if !l.list.Loaded() || l.list.Err() != nil {
 			return nil, Effect{}
 		}
 		l.searching = true
@@ -599,7 +578,7 @@ func (l *Model) browseKey(in intent, env Env) (tea.Cmd, Effect) {
 			delete(l.expanded, e.CommitID)
 		}
 	case reloadIntent:
-		return nil, Effect{Refresh: !l.loading}
+		return nil, Effect{Refresh: !l.list.Loading()}
 	}
 	return nil, Effect{}
 }
@@ -970,11 +949,11 @@ func (l Model) Hints(tabs, help ui.KeyHint) []ui.KeyHint {
 		return []ui.KeyHint{ui.Hint("apply", l.keys.open), ui.Hint("clear", l.keys.clearSearch)}
 	}
 	if l.squashing != nil {
-		return []ui.KeyHint{ui.Hint("into", l.keys.down, l.keys.up), ui.Hint("squash", l.keys.confirm), ui.Hint("cancel", l.keys.cancel)}
+		return []ui.KeyHint{ui.Hint("into", l.keys.Down, l.keys.Up), ui.Hint("squash", l.keys.confirm), ui.Hint("cancel", l.keys.cancel)}
 	}
 	hints := []ui.KeyHint{
 		tabs,
-		ui.Hint("revision", l.keys.down, l.keys.up),
+		ui.Hint("revision", l.keys.Down, l.keys.Up),
 		ui.Hint("review", l.keys.open),
 		ui.Hint("select", l.keys.mark),
 	}
@@ -999,9 +978,9 @@ func (l Model) Hints(tabs, help ui.KeyHint) []ui.KeyHint {
 
 func (l Model) Help() []ui.KeyHint {
 	return []ui.KeyHint{
-		ui.Hint("next / previous revision", l.keys.down, l.keys.up),
-		ui.Hint("half page down / up", l.keys.halfDown, l.keys.halfUp),
-		ui.Hint("first / last revision", l.keys.top, l.keys.bottom),
+		ui.Hint("next / previous revision", l.keys.Down, l.keys.Up),
+		ui.Hint("half page down / up", l.keys.HalfDown, l.keys.HalfUp),
+		ui.Hint("first / last revision", l.keys.Top, l.keys.Bottom),
 		ui.Describe(l.keys.open),
 		ui.Describe(l.keys.expand),
 		ui.Describe(l.keys.collapse),
@@ -1024,9 +1003,9 @@ func (l Model) View(env Env) string {
 	var body []string
 	var value []ui.Seg
 	switch {
-	case l.err != nil:
-		body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  error: "+l.err.Error())}, nil)}
-	case !l.loaded:
+	case l.list.Err() != nil:
+		body = []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Removed), "  error: "+l.list.Err().Error())}, nil)}
+	case !l.list.Loaded():
 		body = []string{ui.Message(p, "loading…", inner)}
 	default:
 		if l.filtered() {
@@ -1167,11 +1146,7 @@ func (l Model) Overlay(env Env) string {
 	e := c.entry
 	inner := env.modalInner()
 	wrap := func(style lipgloss.Style, text string) []string {
-		var out []string
-		for line := range strings.SplitSeq(ansi.Wrap(text, inner, ""), "\n") {
-			out = append(out, ui.Paint(inner, p.Card, []ui.Seg{ui.Span(style, line)}, nil))
-		}
-		return out
+		return ui.WrapLines(p, inner, style, text)
 	}
 	verb := "abandon"
 	if c.action == pushAction {
@@ -1194,17 +1169,6 @@ func (l Model) Overlay(env Env) string {
 		lines = append(lines, wrap(ui.Fg(p.Removed), fmt.Sprintf("Drops %d selected %s", d, ui.Plural(d, "hunk")))...)
 	}
 	footer := wrap(ui.Fg(p.Muted), l.keys.confirm.Help().Key+" "+verb+" · any other key cancels")
-	if room := max(env.Height-2-len(footer), 0); len(lines) > room {
-		lines = lines[:room]
-		if room > 0 {
-			lines[room-1] = ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Muted), "…")}, nil)
-		}
-	}
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(p.ModalBorder).
-		BorderBackground(p.Card).
-		Background(p.Card).
-		Padding(0, 1).
-		Render(strings.Join(append(lines, footer...), "\n"))
+	lines = ui.TruncateLines(lines, env.Height-2-len(footer), ui.Ellipsis(p, inner))
+	return ui.ModalBox(p, append(lines, footer...))
 }

@@ -41,7 +41,7 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 	if !m.log.OverlayOpen() {
 		m.status = ""
 	}
-	if !m.log.Capturing() {
+	if !m.log.Captures() {
 		if cmd, ok := m.globalKey(msg, armed); ok {
 			return cmd
 		}

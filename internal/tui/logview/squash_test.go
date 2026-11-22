@@ -57,8 +57,8 @@ func TestSquash_success(t *testing.T) {
 
 		fx := keys(&m, "s")
 
-		if fx != (logview.Effect{}) || !m.Capturing() {
-			t.Errorf("Key(s) = %+v, Capturing = %v, want no effect and the squash mode", fx, m.Capturing())
+		if fx != (logview.Effect{}) || !m.Captures() {
+			t.Errorf("Key(s) = %+v, Captures = %v, want no effect and the squash mode", fx, m.Captures())
 		}
 	})
 
@@ -139,8 +139,8 @@ func TestSquash_success(t *testing.T) {
 
 		keys(&m, "esc")
 
-		if m.Capturing() || !strings.Contains(m.View(env(true)), "●") {
-			t.Errorf("after esc Capturing = %v, want the squash cancelled and the selection kept", m.Capturing())
+		if m.Captures() || !strings.Contains(m.View(env(true)), "●") {
+			t.Errorf("after esc Captures = %v, want the squash cancelled and the selection kept", m.Captures())
 		}
 	})
 
@@ -151,8 +151,8 @@ func TestSquash_success(t *testing.T) {
 
 		fx := keys(&m, "j", "y")
 
-		if fx.Rewrite == nil || m.Capturing() || strings.Contains(m.View(env(true)), "●") {
-			t.Errorf("Key(y) = %+v, Capturing = %v, want a squash, no mode and no selection", fx, m.Capturing())
+		if fx.Rewrite == nil || m.Captures() || strings.Contains(m.View(env(true)), "●") {
+			t.Errorf("Key(y) = %+v, Captures = %v, want a squash, no mode and no selection", fx, m.Captures())
 		}
 	})
 
@@ -170,8 +170,8 @@ func TestSquash_success(t *testing.T) {
 		if first != (logview.Effect{Status: "press y again to drop 2 selected hunks"}) {
 			t.Errorf("first Key(y) = %+v, want the drop prompt", first)
 		}
-		if _, got := squashed(t, src, second); got.into != "c2" || m.Capturing() {
-			t.Errorf("second Key(y) squashed into %s, Capturing = %v, want c2 and the mode closed", got.into, m.Capturing())
+		if _, got := squashed(t, src, second); got.into != "c2" || m.Captures() {
+			t.Errorf("second Key(y) squashed into %s, Captures = %v, want c2 and the mode closed", got.into, m.Captures())
 		}
 	})
 
@@ -186,8 +186,8 @@ func TestSquash_success(t *testing.T) {
 		m.Key(press("x"), dropping)
 		_, fx := m.Key(press("y"), dropping)
 
-		if fx != (logview.Effect{Status: "press y again to drop 1 selected hunk"}) || !m.Capturing() {
-			t.Errorf("Key(y, x, y) = %+v, Capturing = %v, want the drop prompt again and the mode kept", fx, m.Capturing())
+		if fx != (logview.Effect{Status: "press y again to drop 1 selected hunk"}) || !m.Captures() {
+			t.Errorf("Key(y, x, y) = %+v, Captures = %v, want the drop prompt again and the mode kept", fx, m.Captures())
 		}
 	})
 
@@ -248,8 +248,8 @@ func TestSquash_failed(t *testing.T) {
 
 		fx := keys(&m, "G", "s")
 
-		if fx != (logview.Effect{Status: "dddddddd is immutable"}) || m.Capturing() {
-			t.Errorf("Key(s) = %+v, Capturing = %v, want the immutable status and no mode", fx, m.Capturing())
+		if fx != (logview.Effect{Status: "dddddddd is immutable"}) || m.Captures() {
+			t.Errorf("Key(s) = %+v, Captures = %v, want the immutable status and no mode", fx, m.Captures())
 		}
 	})
 
@@ -259,8 +259,8 @@ func TestSquash_failed(t *testing.T) {
 
 		fx := keys(&m, "s", "G", "y")
 
-		if fx != (logview.Effect{Status: "dddddddd is immutable"}) || !m.Capturing() {
-			t.Errorf("Key(y) = %+v, Capturing = %v, want the immutable status and the mode kept", fx, m.Capturing())
+		if fx != (logview.Effect{Status: "dddddddd is immutable"}) || !m.Captures() {
+			t.Errorf("Key(y) = %+v, Captures = %v, want the immutable status and the mode kept", fx, m.Captures())
 		}
 	})
 
@@ -270,8 +270,8 @@ func TestSquash_failed(t *testing.T) {
 
 		fx := keys(&m, "s", "k", "y")
 
-		if fx.Rewrite != nil || fx.Status == "" || !m.Capturing() {
-			t.Errorf("Key(y) = %+v, Capturing = %v, want a status and the mode kept", fx, m.Capturing())
+		if fx.Rewrite != nil || fx.Status == "" || !m.Captures() {
+			t.Errorf("Key(y) = %+v, Captures = %v, want a status and the mode kept", fx, m.Captures())
 		}
 	})
 
@@ -281,8 +281,8 @@ func TestSquash_failed(t *testing.T) {
 
 		fx := keys(&m, "s", "enter")
 
-		if fx != (logview.Effect{}) || !m.Capturing() {
-			t.Errorf("Key(enter) = %+v, Capturing = %v, want nothing and the mode kept", fx, m.Capturing())
+		if fx != (logview.Effect{}) || !m.Captures() {
+			t.Errorf("Key(enter) = %+v, Captures = %v, want nothing and the mode kept", fx, m.Captures())
 		}
 	})
 
@@ -302,8 +302,8 @@ func TestSquash_failed(t *testing.T) {
 
 		_, fx := m.Key(press("s"), locked(tab.Lock{Busy: true}))
 
-		if fx != (logview.Effect{}) || m.Capturing() {
-			t.Errorf("Key(s) = %+v, Capturing = %v, want nothing", fx, m.Capturing())
+		if fx != (logview.Effect{}) || m.Captures() {
+			t.Errorf("Key(s) = %+v, Captures = %v, want nothing", fx, m.Captures())
 		}
 	})
 
@@ -314,8 +314,8 @@ func TestSquash_failed(t *testing.T) {
 
 		_, fx := m.Key(press("y"), locked(tab.Lock{Reason: "blocked"}))
 
-		if fx != (logview.Effect{Status: "blocked"}) || !m.Capturing() {
-			t.Errorf("Key(y) = %+v, Capturing = %v, want the reason and the mode kept", fx, m.Capturing())
+		if fx != (logview.Effect{Status: "blocked"}) || !m.Captures() {
+			t.Errorf("Key(y) = %+v, Captures = %v, want the reason and the mode kept", fx, m.Captures())
 		}
 	})
 }
