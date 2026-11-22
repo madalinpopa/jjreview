@@ -6,6 +6,7 @@ import (
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 func TestKeyScopes_noSharedKeys(t *testing.T) {
@@ -27,12 +28,12 @@ func TestKeyScopes_noSharedKeys(t *testing.T) {
 	}
 	review := map[string]key.Binding{
 		"switchPane":  r.switchPane,
-		"down":        r.down,
-		"up":          r.up,
-		"halfDown":    r.halfDown,
-		"halfUp":      r.halfUp,
-		"top":         r.top,
-		"bottom":      r.bottom,
+		"down":        r.Down,
+		"up":          r.Up,
+		"halfDown":    r.HalfDown,
+		"halfUp":      r.HalfUp,
+		"top":         r.Top,
+		"bottom":      r.Bottom,
 		"nextHunk":    r.nextHunk,
 		"prevHunk":    r.prevHunk,
 		"nextFile":    r.nextFile,
@@ -52,7 +53,7 @@ func TestKeyScopes_noSharedKeys(t *testing.T) {
 	if got, want := reflect.TypeFor[globalKeyMap]().NumField(), len(global)+len(helpOverlay)+1; got != want {
 		t.Fatalf("globalKeyMap has %d bindings, the scopes list %d; add the new binding to a scope", got, want)
 	}
-	if got, want := reflect.TypeFor[reviewKeyMap]().NumField(), len(review); got != want {
+	if got, want := reflect.TypeFor[reviewKeyMap]().NumField()-1+reflect.TypeFor[ui.NavKeys]().NumField(), len(review); got != want {
 		t.Fatalf("reviewKeyMap has %d bindings, the review scope lists %d; add the new binding to it", got, want)
 	}
 	tests := map[string][]map[string]key.Binding{

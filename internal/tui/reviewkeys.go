@@ -7,13 +7,8 @@ import (
 )
 
 type reviewKeyMap struct {
+	ui.NavKeys
 	switchPane  key.Binding
-	down        key.Binding
-	up          key.Binding
-	halfDown    key.Binding
-	halfUp      key.Binding
-	top         key.Binding
-	bottom      key.Binding
 	nextHunk    key.Binding
 	prevHunk    key.Binding
 	nextFile    key.Binding
@@ -33,13 +28,8 @@ type reviewKeyMap struct {
 
 func newReviewKeyMap() reviewKeyMap {
 	return reviewKeyMap{
+		NavKeys:     ui.NewNavKeys("next line or file", "previous line or file", "first line or file", "last line or file"),
 		switchPane:  key.NewBinding(key.WithKeys("tab"), key.WithHelp("tab", "switch pane")),
-		down:        key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next line or file")),
-		up:          key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous line or file")),
-		halfDown:    key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "half page down")),
-		halfUp:      key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", "half page up")),
-		top:         key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first line or file")),
-		bottom:      key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last line or file")),
 		nextHunk:    key.NewBinding(key.WithKeys("]"), key.WithHelp("]", "next hunk")),
 		prevHunk:    key.NewBinding(key.WithKeys("["), key.WithHelp("[", "previous hunk")),
 		nextFile:    key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next file")),
@@ -60,7 +50,7 @@ func newReviewKeyMap() reviewKeyMap {
 
 func (m Model) reviewHints() []ui.KeyHint {
 	k := m.reviewKeys
-	move := ui.Hint("line", k.down, k.up)
+	move := ui.Hint("line", k.Down, k.Up)
 	if m.filesFocus {
 		move.Label = "file"
 	}
@@ -89,9 +79,9 @@ func (m Model) reviewHelp() []helpSection {
 	return []helpSection{
 		{title: "Navigation", hints: []ui.KeyHint{
 			ui.Describe(k.switchPane),
-			ui.Hint("next / previous line or file", k.down, k.up),
-			ui.Hint("half page down / up", k.halfDown, k.halfUp),
-			ui.Hint("first / last line or file", k.top, k.bottom),
+			ui.Hint("next / previous line or file", k.Down, k.Up),
+			ui.Hint("half page down / up", k.HalfDown, k.HalfUp),
+			ui.Hint("first / last line or file", k.Top, k.Bottom),
 			ui.Hint("next / previous hunk", k.nextHunk, k.prevHunk),
 			ui.Hint("next / previous file", k.nextFile, k.prevFile),
 			ui.Describe(k.workingCopy),
@@ -140,17 +130,17 @@ func (k reviewKeyMap) resolve(msg tea.KeyPressMsg) reviewIntent {
 	switch {
 	case key.Matches(msg, k.switchPane):
 		return reviewSwitchPaneIntent
-	case key.Matches(msg, k.down):
+	case key.Matches(msg, k.Down):
 		return reviewDownIntent
-	case key.Matches(msg, k.up):
+	case key.Matches(msg, k.Up):
 		return reviewUpIntent
-	case key.Matches(msg, k.halfDown):
+	case key.Matches(msg, k.HalfDown):
 		return reviewHalfDownIntent
-	case key.Matches(msg, k.halfUp):
+	case key.Matches(msg, k.HalfUp):
 		return reviewHalfUpIntent
-	case key.Matches(msg, k.top):
+	case key.Matches(msg, k.Top):
 		return reviewTopIntent
-	case key.Matches(msg, k.bottom):
+	case key.Matches(msg, k.Bottom):
 		return reviewBottomIntent
 	case key.Matches(msg, k.nextHunk):
 		return reviewNextHunkIntent

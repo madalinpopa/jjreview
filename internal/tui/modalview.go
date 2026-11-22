@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
@@ -83,13 +82,7 @@ func (m Model) modalView() string {
 	lines = append(lines, heading, ui.InputBox(p, inner, p.Selection, mo.input.View()))
 	lines = append(lines, notes...)
 	lines = append(lines, ui.Paint(inner, p.Card, nil, m.modalFooter(inner)))
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(p.ModalBorder).
-		BorderBackground(p.Card).
-		Background(p.Card).
-		Padding(0, 1).
-		Render(strings.Join(lines, "\n"))
+	return ui.ModalBox(p, lines)
 }
 
 func (m Model) pickCount() int {
