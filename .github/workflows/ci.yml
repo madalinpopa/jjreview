@@ -54,10 +54,6 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            jj: 0.47.0
-            target: x86_64-unknown-linux-musl
-            sha256: 195b4e83e5c45b11e3f7a51a95168051f9a90970e581ca514c32c9cdbece5e9a
-          - os: ubuntu-latest
             jj: 0.47.1
             target: x86_64-unknown-linux-musl
             sha256: d4b657f622ee50929c8916466dfa3d6a6c17a0a32b50e7b2c793707ec9ebcad7
