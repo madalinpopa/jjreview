@@ -13,12 +13,12 @@ import (
 
 const gapIndent = "       "
 
-func (m Model) diffLine(p theme.Theme, r row, selected bool, width int) string {
+func (m Model) diffLine(p theme.Theme, r row, selected, ranged bool, width int) string {
 	switch r.kind {
 	case rowHunk:
 		return m.hunkLine(p, r.hunk, selected, width)
 	case rowLine:
-		return m.codeLine(p, r, selected, width)
+		return m.codeLine(p, r, selected, ranged, width)
 	case rowGap:
 		return ui.Paint(width, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Faint), gapIndent+r.text)}, nil)
 	case rowError:
@@ -31,8 +31,7 @@ func (m Model) hunkLine(p theme.Theme, k int, selected bool, width int) string {
 	file := m.files[m.fileIdx]
 	review := m.currentReview()
 	h := file.Hunks[k]
-	committed := review.committed[k]
-	picked := committed == "" && review.selected[k]
+	st := review.unitState(k)
 	folded := review.folded[k]
 
 	bar, text, arrow := p.HunkBar, p.Hunk, "▾"
@@ -40,20 +39,21 @@ func (m Model) hunkLine(p theme.Theme, k int, selected bool, width int) string {
 		bar, text, arrow = p.FoldedBar, p.Stats, "▸"
 	}
 	bg := p.HunkBg
-	muted, stat := p.Muted, p.Stats
-	check, checkStyle := "○", ui.Fg(p.Muted)
-	switch {
-	case committed != "":
-		bar, check, checkStyle = p.Added, "✓", ui.Fg(p.Added)
-	case picked:
-		bg, text, muted, stat = p.Selection, p.OnSelection, p.OnSelection, p.OnSelection
-		bar, check, checkStyle = p.Selection, "●", ui.Fg(p.OnSelection).Bold(true)
+	muted, stat, mark := p.Muted, p.Stats, p.Added
+	check, checkStyle := st.glyph(), ui.Fg(p.Muted)
+	switch st {
+	case stateDone:
+		bar, checkStyle = p.Added, ui.Fg(p.Added)
+	case stateAll:
+		bg, text, muted, stat, mark = p.Selection, p.OnSelection, p.OnSelection, p.OnSelection, p.OnSelection
+		bar, checkStyle = p.Selection, ui.Fg(p.OnSelection).Bold(true)
+	case stateSome:
+		checkStyle = ui.Fg(p.Picked)
 	}
 	if selected {
 		bar = p.Selection
 	}
-	a, d := hunkStats(h)
-	stats := fmt.Sprintf("+%d −%d", a, d)
+	stats := statsText(h, review.lines[k])
 	if folded {
 		stats += " · folded"
 	}
@@ -64,14 +64,40 @@ func (m Model) hunkLine(p theme.Theme, k int, selected bool, width int) string {
 		ui.Span(ui.Fg(text), hunkHeader(h)),
 	}
 	right := []ui.Seg{ui.Span(ui.Fg(stat), stats)}
-	if committed != "" {
-		right = append(right, ui.Span(ui.Fg(p.Added), " "+committed))
+	if note := committedNote(h, review, k); note != "" {
+		right = append(right, ui.Span(ui.Fg(mark), " "+note))
 	}
 	right = append(right, ui.Span(lipgloss.NewStyle(), " "))
 	return ui.Paint(width, bg, left, right)
 }
 
-func (m Model) codeLine(p theme.Theme, r row, selected bool, width int) string {
+func committedNote(h diff.Hunk, review fileReview, k int) string {
+	a, d := hunkStats(h)
+	pending, _ := tally(review.lines[k])
+	switch done := a + d - pending; {
+	case done == 0 || review.committed[k] == "":
+		return ""
+	case pending == 0:
+		return review.committed[k]
+	default:
+		return fmt.Sprintf("✓ %d/%d %s", done, a+d, review.committed[k])
+	}
+}
+
+func (m Model) lineState(r row) (lineState, bool) {
+	if r.hunk < 0 {
+		return lineContext, false
+	}
+	review := m.currentReview()
+	done := review.unitState(r.hunk) == stateDone
+	if r.index < 0 {
+		return lineContext, done
+	}
+	st := review.lines[r.hunk][r.index]
+	return st, done || st == lineDone
+}
+
+func (m Model) codeLine(p theme.Theme, r row, selected, ranged bool, width int) string {
 	l := r.line
 	bg, bar, sign, text, signText := p.Card, p.Card, p.Muted, p.Text, "  "
 	switch l.Kind {
@@ -82,8 +108,16 @@ func (m Model) codeLine(p theme.Theme, r row, selected bool, width int) string {
 	}
 	code := m.codeSegs(r)
 	gutter := p.Faint
-	if r.hunk >= 0 && m.currentReview().committed[r.hunk] != "" {
+	st, dim := m.lineState(r)
+	if dim {
 		bar, sign, text, gutter, code = dimmed(bar, p), p.Dim, p.Dim, p.Dim, nil
+	}
+	mark := " "
+	if st == linePicked {
+		mark = "●"
+	}
+	if ranged {
+		bg = p.CursorBg
 	}
 	if selected {
 		bg, bar = p.CursorBg, p.Selection
@@ -94,7 +128,8 @@ func (m Model) codeLine(p theme.Theme, r row, selected bool, width int) string {
 	}
 	left := []ui.Seg{
 		ui.Span(ui.Fg(bar), ui.BarGlyph(bar)),
-		ui.Span(ui.Fg(gutter), fmt.Sprintf("%4s ", number)),
+		ui.Span(ui.Fg(gutter), fmt.Sprintf("%4s", number)),
+		ui.Span(ui.Fg(p.Picked), mark),
 		ui.Span(ui.Fg(sign), signText),
 	}
 	if code == nil {

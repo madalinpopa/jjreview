@@ -29,7 +29,7 @@ func TestCommitModal_success(t *testing.T) {
 		if m.ModalOpen() {
 			t.Error("ModalOpen() = true, want false")
 		}
-		assertContains(t, view(m), "select hunks first (space / S)")
+		assertContains(t, view(m), "select hunks first (space / S), or lines (s / v)")
 	})
 
 	t.Run("c shows the modal while generating", func(t *testing.T) {

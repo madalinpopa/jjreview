@@ -73,7 +73,7 @@ func (m Model) topBar() string {
 	}
 	switch {
 	case m.view == reviewView && n > 0:
-		indicators = append(indicators, bold(ui.Pill(p.BadgeSel, p.Picked, fmt.Sprintf("%d %s selected", n, ui.Plural(n, "hunk")))))
+		indicators = append(indicators, bold(ui.Pill(p.BadgeSel, p.Picked, fmt.Sprintf("%d %s selected%s", n, ui.Plural(n, "hunk"), m.review.LineNote()))))
 	case m.view == reviewView:
 		optional = append(optional, bold(ui.Pill(p.BadgeIdle, p.BadgeIdleFg, "nothing selected")))
 	case n > 0:

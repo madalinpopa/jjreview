@@ -19,18 +19,19 @@ const (
 )
 
 type row struct {
-	kind rowKind
-	hunk int
-	line diff.Line
-	text string
+	kind  rowKind
+	hunk  int
+	index int
+	line  diff.Line
+	text  string
 }
 
 func messageRow(text string) row {
-	return row{kind: rowMessage, hunk: -1, text: text}
+	return row{kind: rowMessage, hunk: -1, index: -1, text: text}
 }
 
 func errorRow(err error) row {
-	return row{kind: rowError, hunk: -1, text: "error: " + ui.EscapePath(err.Error())}
+	return row{kind: rowError, hunk: -1, index: -1, text: "error: " + ui.EscapePath(err.Error())}
 }
 
 func (m Model) rows(env Env) []row {
@@ -72,7 +73,7 @@ func wholeRows(f diff.File) []row {
 	}
 	for _, h := range f.Hunks {
 		for _, l := range h.Lines {
-			rows = append(rows, row{kind: rowLine, hunk: -1, line: l})
+			rows = append(rows, row{kind: rowLine, hunk: -1, index: -1, line: l})
 		}
 	}
 	rows = withMode(f, rows)
@@ -113,12 +114,21 @@ func (m Model) fullRows(env Env, file diff.File) []row {
 
 func interleave(file diff.File, lines []diff.Line, r fileReview) []row {
 	rows := make([]row, 0, len(lines))
+	seen := make([]int, len(file.Hunks))
+	shows := make([]bool, len(file.Hunks))
+	for k := range shows {
+		shows[k] = r.showsRemoved(k)
+	}
 	for _, l := range lines {
-		k := hunkOf(file, l)
-		if l.Kind == diff.LineRemoved && (k < 0 || !r.removed[k]) {
+		k, index := hunkOf(file, l), -1
+		if k >= 0 {
+			index = seen[k]
+			seen[k]++
+		}
+		if l.Kind == diff.LineRemoved && (k < 0 || !shows[k]) {
 			continue
 		}
-		rows = append(rows, row{kind: rowLine, hunk: k, line: l})
+		rows = append(rows, row{kind: rowLine, hunk: k, index: index, line: l})
 	}
 	return rows
 }
@@ -130,11 +140,12 @@ func changeRows(file diff.File, r fileReview, total int) []row {
 		rows = appendGap(rows, newBegin(h)-next)
 		rows = append(rows, hunkRow(file, k))
 		if !r.folded[k] {
-			for _, l := range h.Lines {
-				if l.Kind == diff.LineRemoved && !r.removed[k] {
+			shows := r.showsRemoved(k)
+			for n, l := range h.Lines {
+				if l.Kind == diff.LineRemoved && !shows {
 					continue
 				}
-				rows = append(rows, row{kind: rowLine, hunk: k, line: l})
+				rows = append(rows, row{kind: rowLine, hunk: k, index: n, line: l})
 			}
 		}
 		next = newBegin(h) + h.NewLines
@@ -146,14 +157,14 @@ func changeRows(file diff.File, r fileReview, total int) []row {
 }
 
 func hunkRow(file diff.File, k int) row {
-	return row{kind: rowHunk, hunk: k, text: hunkHeader(file.Hunks[k])}
+	return row{kind: rowHunk, hunk: k, index: -1, text: hunkHeader(file.Hunks[k])}
 }
 
 func appendGap(rows []row, n int) []row {
 	if n <= 0 {
 		return rows
 	}
-	return append(rows, row{kind: rowGap, hunk: -1, text: fmt.Sprintf("⋯ %d unchanged %s", n, ui.Plural(n, "line"))})
+	return append(rows, row{kind: rowGap, hunk: -1, index: -1, text: fmt.Sprintf("⋯ %d unchanged %s", n, ui.Plural(n, "line"))})
 }
 
 func hunkOf(file diff.File, l diff.Line) int {

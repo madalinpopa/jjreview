@@ -1,6 +1,7 @@
 package review
 
 import (
+	"fmt"
 	"slices"
 
 	"github.com/madalinpopa/jjreview/internal/diff"
@@ -27,10 +28,19 @@ func (s fileState) glyph() string {
 	return "○"
 }
 
+type lineState int
+
+const (
+	lineContext lineState = iota
+	lineOpen
+	linePicked
+	lineDone
+)
+
 type fileReview struct {
 	folded    []bool
 	removed   []bool
-	selected  []bool
+	lines     [][]lineState
 	committed []string
 }
 
@@ -110,77 +120,192 @@ func newReview(f diff.File) fileReview {
 	return fileReview{
 		folded:    make([]bool, n),
 		removed:   removed,
-		selected:  make([]bool, n),
+		lines:     lineStates(f),
 		committed: make([]string, n),
 	}
 }
 
-func (r fileReview) state() fileState {
-	open, sel := 0, 0
-	for k, id := range r.committed {
-		if id != "" {
-			continue
-		}
-		open++
-		if r.selected[k] {
-			sel++
+func lineStates(f diff.File) [][]lineState {
+	if wholeOnly(f) {
+		return [][]lineState{{lineOpen}}
+	}
+	lines := make([][]lineState, len(f.Hunks))
+	for k, h := range f.Hunks {
+		lines[k] = make([]lineState, len(h.Lines))
+		for n, l := range h.Lines {
+			if l.Kind != diff.LineContext {
+				lines[k][n] = lineOpen
+			}
 		}
 	}
+	return lines
+}
+
+func tally(lines []lineState) (pending, picked int) {
+	for _, st := range lines {
+		switch st {
+		case lineOpen:
+			pending++
+		case linePicked:
+			pending++
+			picked++
+		}
+	}
+	return pending, picked
+}
+
+func stateOf(pending, picked int) fileState {
 	switch {
-	case open == 0:
+	case pending == 0:
 		return stateDone
-	case sel == 0:
+	case picked == 0:
 		return stateNone
-	case sel == open:
+	case picked == pending:
 		return stateAll
 	}
 	return stateSome
 }
 
+func (r fileReview) state() fileState {
+	pending, picked := 0, 0
+	for _, lines := range r.lines {
+		p, s := tally(lines)
+		pending += p
+		picked += s
+	}
+	return stateOf(pending, picked)
+}
+
+func (r fileReview) unitState(k int) fileState {
+	return stateOf(tally(r.lines[k]))
+}
+
+func (r fileReview) setUnit(k int, to lineState) {
+	for n, st := range r.lines[k] {
+		if st == lineOpen || st == linePicked {
+			r.lines[k][n] = to
+		}
+	}
+}
+
+func (r fileReview) toggleLine(k, n int) bool {
+	switch r.lines[k][n] {
+	case lineOpen:
+		r.lines[k][n] = linePicked
+	case linePicked:
+		r.lines[k][n] = lineOpen
+	default:
+		return false
+	}
+	return true
+}
+
+func (r fileReview) partial(k int) bool {
+	seen := lineContext
+	for _, st := range r.lines[k] {
+		if st == lineContext {
+			continue
+		}
+		if seen != lineContext && st != seen {
+			return true
+		}
+		seen = st
+	}
+	return false
+}
+
+func (r fileReview) showsRemoved(k int) bool {
+	return r.removed[k] || r.partial(k)
+}
+
+func pickOrRelease(st fileState) lineState {
+	if st == stateAll {
+		return lineOpen
+	}
+	return linePicked
+}
+
 func (r fileReview) toggleUnit(k int) {
-	if k < 0 || k >= len(r.selected) || r.committed[k] != "" {
+	if k < 0 || k >= len(r.lines) {
 		return
 	}
-	r.selected[k] = !r.selected[k]
+	r.setUnit(k, pickOrRelease(r.unitState(k)))
 }
 
 func (r fileReview) toggleFile() {
-	st := r.state()
-	if st == stateDone {
-		return
-	}
-	for k := range r.selected {
-		if r.committed[k] == "" {
-			r.selected[k] = st != stateAll
-		}
+	to := pickOrRelease(r.state())
+	for k := range r.lines {
+		r.setUnit(k, to)
 	}
 }
 
 func (r fileReview) picked() []int {
 	var out []int
-	for k, sel := range r.selected {
-		if sel && r.committed[k] == "" {
+	for k, lines := range r.lines {
+		if _, picked := tally(lines); picked > 0 {
 			out = append(out, k)
 		}
 	}
 	return out
 }
 
-func (r fileReview) included() []int {
-	var out []int
-	for k, sel := range r.selected {
-		if sel || r.committed[k] != "" {
-			out = append(out, k)
+func (r fileReview) included() [][]bool {
+	out := make([][]bool, len(r.lines))
+	for k, lines := range r.lines {
+		if !slices.ContainsFunc(lines, taken) {
+			continue
+		}
+		out[k] = make([]bool, len(lines))
+		for n, st := range lines {
+			out[k][n] = taken(st)
 		}
 	}
 	return out
+}
+
+func (r fileReview) masks() (done, taken [][]bool) {
+	done, taken = make([][]bool, len(r.lines)), make([][]bool, len(r.lines))
+	for k, lines := range r.lines {
+		done[k], taken[k] = make([]bool, len(lines)), make([]bool, len(lines))
+		for n, st := range lines {
+			done[k][n] = st == lineDone
+			taken[k][n] = st == linePicked
+		}
+	}
+	return done, taken
+}
+
+func (r fileReview) pickedLines() (lines int, partial bool) {
+	for _, states := range r.lines {
+		pending, picked := tally(states)
+		lines += picked
+		partial = partial || picked > 0 && (picked < pending || slices.Contains(states, lineDone))
+	}
+	return lines, partial
+}
+
+func taken(st lineState) bool {
+	return st == linePicked || st == lineDone
+}
+
+func (r fileReview) complete() bool {
+	for _, lines := range r.lines {
+		if slices.Contains(lines, lineOpen) {
+			return false
+		}
+	}
+	return true
 }
 
 func (r fileReview) commit(units []int, id string, fold bool) {
 	for _, k := range units {
+		for n, st := range r.lines[k] {
+			if st == linePicked {
+				r.lines[k][n] = lineDone
+			}
+		}
 		r.committed[k] = id
-		r.selected[k] = false
-		r.folded[k] = fold
+		r.folded[k] = fold && (r.folded[k] || r.unitState(k) == stateDone)
 	}
 }
 
@@ -245,6 +370,29 @@ func hunkStats(h diff.Hunk) (added, removed int) {
 		}
 	}
 	return added, removed
+}
+
+func pickedStats(h diff.Hunk, states []lineState) (added, removed int) {
+	for n, l := range h.Lines {
+		switch {
+		case states[n] != linePicked:
+		case l.Kind == diff.LineAdded:
+			added++
+		case l.Kind == diff.LineRemoved:
+			removed++
+		}
+	}
+	return added, removed
+}
+
+func statsText(h diff.Hunk, states []lineState) string {
+	a, d := hunkStats(h)
+	total := fmt.Sprintf("+%d −%d", a, d)
+	pa, pd := pickedStats(h, states)
+	if n := pa + pd; n == 0 || n == a+d {
+		return total
+	}
+	return fmt.Sprintf("+%d −%d of %s", pa, pd, total)
 }
 
 func fileStats(f diff.File) (added, removed int) {

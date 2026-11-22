@@ -16,16 +16,35 @@ func Apply(oldText string, f File, hunks []int) (string, error) {
 	if err := checkSelection(hunks, len(f.Hunks)); err != nil {
 		return "", err
 	}
+	sel := make([][]bool, len(f.Hunks))
+	for _, i := range hunks {
+		sel[i] = make([]bool, len(f.Hunks[i].Lines))
+		for n := range sel[i] {
+			sel[i][n] = true
+		}
+	}
+	return ApplyLines(oldText, f, sel)
+}
+
+func ApplyLines(oldText string, f File, sel [][]bool) (string, error) {
+	if len(sel) != len(f.Hunks) {
+		return "", fmt.Errorf("apply: %d line masks for %d hunks", len(sel), len(f.Hunks))
+	}
 	a := applied{old: splitLines(oldText), oldNoNewline: !strings.HasSuffix(oldText, "\n")}
 	cursor := 0
-	for _, i := range hunks {
-		h := f.Hunks[i]
+	for i, h := range f.Hunks {
+		if sel[i] == nil {
+			continue
+		}
+		if len(sel[i]) != len(h.Lines) {
+			return "", fmt.Errorf("apply hunk %d: mask of %d lines for %d lines", i, len(sel[i]), len(h.Lines))
+		}
 		start := firstLine(h.OldStart, h.OldLines) - 1
 		if start < cursor || start > len(a.old) {
 			return "", fmt.Errorf("apply hunk %d: old start %d outside the text", i, h.OldStart)
 		}
 		a.copyOld(cursor, start)
-		next, err := a.hunk(start, h)
+		next, err := a.hunk(start, h, sel[i])
 		if err != nil {
 			return "", fmt.Errorf("apply hunk %d: %w", i, err)
 		}
@@ -55,15 +74,15 @@ func (a *applied) copyOld(from, to int) {
 	a.noNewline = to == len(a.old) && a.oldNoNewline
 }
 
-func (a *applied) hunk(pos int, h Hunk) (int, error) {
-	for _, l := range h.Lines {
+func (a *applied) hunk(pos int, h Hunk, taken []bool) (int, error) {
+	for n, l := range h.Lines {
 		if l.Kind != LineAdded {
 			if err := a.checkOld(pos, l); err != nil {
 				return 0, err
 			}
 			pos++
 		}
-		if l.Kind != LineRemoved {
+		if l.Kind == LineContext || (l.Kind == LineAdded) == taken[n] {
 			a.lines = append(a.lines, l.Text)
 			a.noNewline = l.NoNewline
 		}

@@ -114,8 +114,7 @@ func (m Model) pickItems(p theme.Theme, limit int) [][]ui.Seg {
 			if len(items) == limit {
 				return items
 			}
-			a, d := hunkStats(f.Hunks[k])
-			detail := fmt.Sprintf("  %s  +%d −%d", hunkHeader(f.Hunks[k]), a, d)
+			detail := fmt.Sprintf("  %s  %s", hunkHeader(f.Hunks[k]), statsText(f.Hunks[k], m.reviews[pk.file].lines[k]))
 			items = append(items, []ui.Seg{name, ui.Span(ui.Fg(p.Header), detail)})
 		}
 	}
@@ -157,8 +156,11 @@ func (m Model) generatorNote(p theme.Theme) ui.Seg {
 	case mo.genErr != nil:
 		return ui.Span(ui.Fg(p.Removed), "✨ generation failed")
 	case mo.generated:
-		n := pickedUnits(mo.picks)
-		return ui.Span(ui.Fg(p.Status), fmt.Sprintf("✨ generated from %d %s, edit freely", n, ui.Plural(n, "hunk")))
+		n, unit := pickedUnits(mo.picks), "hunk"
+		if lines, partial := m.partialLines(); partial {
+			n, unit = lines, "line"
+		}
+		return ui.Span(ui.Fg(p.Status), fmt.Sprintf("✨ generated from %d %s, edit freely", n, ui.Plural(n, unit)))
 	}
 	return ui.Span(ui.Fg(p.Status), "")
 }

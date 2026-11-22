@@ -13,6 +13,7 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 	armed := m.armed
 	m.armed = ""
 	if cmd, ok := m.globalKey(msg, armed); ok {
+		m.review.CancelRange()
 		return cmd
 	}
 	cmd, eff := m.review.Key(msg, m.reviewEnv())
@@ -42,7 +43,7 @@ func (m *Model) confirmDrop(msg tea.KeyPressMsg, armed string) bool {
 		return true
 	}
 	m.armed = k
-	m.status = tab.DropPrompt(m.dropLabel(msg), n)
+	m.status = tab.DropPrompt(m.dropLabel(msg), n) + m.review.LineNote()
 	return false
 }
 

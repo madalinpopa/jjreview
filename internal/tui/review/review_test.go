@@ -232,7 +232,7 @@ func TestKey_commitRefused(t *testing.T) {
 		pick   bool
 		status string
 	}{
-		"without picks":      {env: env(change()), status: "select hunks first (space / S)"},
+		"without picks":      {env: env(change()), status: "select hunks first (space / S), or lines (s / v)"},
 		"after a split stop": {env: blocked, pick: true, status: review.BlockedStatus},
 	}
 	for name, tt := range tests {

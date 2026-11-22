@@ -155,7 +155,7 @@ func tokenColor(p theme.Theme, t chroma.TokenType) color.Color {
 }
 
 func (m Model) codeSegs(r row) []ui.Seg {
-	file, ok := m.currentFile()
+	_, ok := m.currentFile()
 	hl, cached := m.highlights[highlightKey{file: m.fileIdx, full: m.full}]
 	if !ok || !cached || r.hunk < 0 && r.line.Kind == diff.LineRemoved {
 		return nil
@@ -166,12 +166,7 @@ func (m Model) codeSegs(r row) []ui.Seg {
 	if r.hunk < 0 || r.hunk >= len(hl.hunks) {
 		return nil
 	}
-	for i, l := range file.Hunks[r.hunk].Lines {
-		if l.Kind == r.line.Kind && l.OldNo == r.line.OldNo && l.NewNo == r.line.NewNo {
-			return lineAt(hl.hunks[r.hunk], i)
-		}
-	}
-	return nil
+	return lineAt(hl.hunks[r.hunk], r.index)
 }
 
 func highlightColors(p theme.Theme) []color.Color {

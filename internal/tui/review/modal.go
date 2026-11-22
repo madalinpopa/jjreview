@@ -23,6 +23,14 @@ const (
 	BlockedStatus   = "split done; restart jjr to continue"
 	ReloadingStatus = "reloading change…"
 	OutdatedStatus  = "review out of date; press @ to review the working copy"
+
+	lineKeyStatus        = "%s selects a changed line; %s selects the hunk"
+	rangeStatus          = "selecting a range"
+	rangeEmptyStatus     = "no changed lines to select in the range"
+	lineDoneStatus       = "line already committed"
+	wholeFileStatus      = "this file can only be selected whole; press "
+	partialRemovedStatus = "removed lines stay visible in a partly selected hunk"
+	noSelectionStatus    = "select hunks first (%s / %s), or lines (%s / %s)"
 )
 
 var errEmptyMessage = errors.New("commit message is empty")
@@ -62,7 +70,8 @@ func (m *Model) openModal(env Env) (tea.Cmd, string) {
 	}
 	picks := m.picks()
 	if len(picks) == 0 {
-		return nil, "select hunks first (space / S)"
+		k := m.keys
+		return nil, fmt.Sprintf(noSelectionStatus, k.selectHunk.Help().Key, k.selectFile.Help().Key, k.selectLine.Help().Key, k.selectRange.Help().Key)
 	}
 	if len(env.Change.Parents) != 1 {
 		return nil, fmt.Sprintf("cannot commit: %s has %d parents, want 1", ui.ShortID(env.Head.ChangeID), len(env.Change.Parents))
@@ -82,6 +91,11 @@ func (m *Model) generate() tea.Cmd {
 	if m.gen == nil {
 		return nil
 	}
+	files, err := m.restricted(mo.picks)
+	if err != nil {
+		mo.genErr = err
+		return nil
+	}
 	if mo.genCancel != nil {
 		mo.genCancel()
 	}
@@ -95,7 +109,7 @@ func (m *Model) generate() tea.Cmd {
 	mo.input.Reset()
 	mo.input.Placeholder = "Generating…"
 	seq, gen, ctx := mo.seq, m.gen, genCtx
-	patch := diff.Format(m.restricted(mo.picks))
+	patch := diff.Format(files)
 	return func() tea.Msg {
 		text, err := gen.Generate(ctx, patch)
 		return generatedMsg{seq: seq, text: text, err: err}

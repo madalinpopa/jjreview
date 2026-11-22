@@ -28,6 +28,9 @@ func (m Model) Overlay(env Env) string {
 }
 
 func (m Model) Status(loaded bool) string {
+	if m.ranging {
+		return rangeStatus
+	}
 	if _, ok := m.currentFile(); !loaded || !ok {
 		return ""
 	}
@@ -134,7 +137,7 @@ func (m Model) diffCard(env Env) string {
 	inner := max(width-2, 0)
 	var body []string
 	for i := m.diffTop; i < len(rows) && len(body) < env.ListHeight; i++ {
-		body = append(body, m.diffLine(env.Theme, rows[i], i == m.cursor, inner))
+		body = append(body, m.diffLine(env.Theme, rows[i], i == m.cursor, m.inRange(i), inner))
 	}
 	return ui.Card(env.Theme, width, env.BodyHeight, "Unified diff", !m.filesFocus, value, body)
 }

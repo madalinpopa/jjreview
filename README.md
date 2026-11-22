@@ -2,8 +2,8 @@
 
 <p align="center">
   Review a <a href="https://jj-vcs.github.io/jj/">jj</a> change hunk by hunk
-  and split the hunks you select into their own commits, with messages drafted
-  by AI.
+  and split the hunks or lines you select into their own commits, with messages
+  drafted by AI.
 </p>
 
 <p align="center">
@@ -20,11 +20,11 @@
   </picture>
 </p>
 
-`jjr` shows the diff of a jj change in a terminal UI, lets you pick hunks or
-whole files, and commits the selection with `jj split`, so your jj configuration
-and `jj undo` still apply. When a message provider is configured, the commit
-message is generated from the selected hunks; either way, you can edit it before
-committing.
+`jjr` shows the diff of a jj change in a terminal UI, lets you pick single
+lines, hunks or whole files, and commits the selection with `jj split`, so your
+jj configuration and `jj undo` still apply. When a message provider is
+configured, the commit message is generated from the selection; either way, you
+can edit it before committing.
 
 The interface may change before v1.
 
@@ -58,8 +58,9 @@ file, in `ANTHROPIC_API_KEY`, or through `ant auth login`), or set
 jjr
 ```
 
-1. Move to a hunk and press `space` to select it, or press `space` on a file in
-   the file pane to select the whole file.
+1. Move to a hunk and press `space` to select it, press `s` on a changed line to
+   select only that line, or press `space` on a file in the file pane to select
+   the whole file.
 2. Press `c`. The commit dialog lists the selection and, when a provider is
    configured, drafts a message.
 3. Write or edit the message and press `ctrl+s` to commit.
@@ -94,7 +95,13 @@ jjr -R ~/src/app # review a repository elsewhere
 The file tree is on the left and the unified diff of the current file on the
 right. The diff shows each hunk as it reads after the change: added and context
 lines only. Press `d` on a hunk to see its removed lines too, or `D` for every
-hunk in the file.
+hunk in the file. A hunk that is selected in part always shows its removed
+lines, so a replaced line is never committed without you seeing both sides.
+
+A selected line is marked `●`. A hunk header shows `○` when nothing in it is
+selected, `◐` when some of its lines are, `●` when all of them are and `✓` once
+it is committed. Binary files, symlinks and files without hunks can only be
+selected whole.
 
 | Key | Action |
 |-----|--------|
@@ -106,13 +113,15 @@ hunk in the file.
 | `]` / `[` | Next hunk / start of the current or previous hunk |
 | `J` / `K` | Next / previous file from either pane |
 | `@` | Go back to the working-copy revision |
-| `space` | Select the hunk under the cursor (in the file pane: the whole file) |
-| `S` | Select every open hunk in the file |
+| `s` | Select the changed line under the cursor |
+| `v` | Start a line range at the cursor: move to extend it, `s` or `space` selects its changed lines (or unselects them when all are selected), `esc` or `v` cancels |
+| `space` | Select the hunk under the cursor (in the file pane: the whole file); on a hunk selected in part it selects the rest, then unselects it |
+| `S` | Select every open hunk in the file; on a file selected in part it selects the rest, then unselects it |
 | `z` / `enter` | Fold or unfold the hunk under the cursor |
 | `Z` | Fold or unfold every hunk in the file |
 | `d` | Show or hide the removed lines of the hunk under the cursor |
 | `D` | Show or hide the removed lines of every hunk in the file |
-| `c` | Commit the selected hunks |
+| `c` | Commit the selection |
 | `R` | Reload the working copy to pick up edits made outside jjr |
 | `e` | Edit the current file in `$VISUAL` / `$EDITOR` (default `vi`); working copy only |
 | `f` | Switch between changes only and the full file |
@@ -253,10 +262,18 @@ Commit dialog:
 
 ### How committing works
 
-Committing runs `jj split`: the selected hunks stay in the reviewed change with
-the new message, and the rest moves to a new child change that keeps the
-original description. Committed hunks stay on screen, folded and dimmed. Use
-`jj undo` to revert a commit made by mistake.
+Committing runs `jj split`: the selected hunks and lines stay in the reviewed
+change with the new message, and the rest moves to a new child change that
+keeps the original description. Committed hunks stay on screen, folded and
+dimmed. Use `jj undo` to revert a commit made by mistake.
+
+When only some lines of a hunk are committed, those lines are dimmed and the
+hunk stays open until its last line is committed. An added line you leave out
+is not in the commit; a removed line you leave out is still in it. The screen
+keeps showing the original diff, so you can go on selecting from it; when
+reviewing the working copy, press `R` to load the diff of what is left. A
+rename or a mode change goes into the first commit that takes any line of the
+file.
 
 ## Configuration
 
@@ -372,9 +389,9 @@ against your Copilot plan.
 
 ### Data sent to the model
 
-Only the selected hunks are sent, formatted as a unified diff, together with the
-commit message instructions. Nothing is sent when you write the message yourself
-without credentials.
+Only the selected hunks and lines are sent, formatted as a unified diff,
+together with the commit message instructions. Nothing is sent when you write
+the message yourself without credentials.
 
 ## Development
 

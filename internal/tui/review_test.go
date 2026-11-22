@@ -43,7 +43,7 @@ func TestLoad_success(t *testing.T) {
 		assertContains(t, got,
 			"@ kxyzabcd", "nothing selected",
 			"FILES", "0/4 ✓", "UNIFIED DIFF", "src/ui/view.go",
-			"tab pane · j k line · space select · c commit · d diff · e edit · ? help", "file 1/4 · 1 hunk",
+			"tab pane · j k line · s space select · c commit · d diff · e edit · ? help", "file 1/4 · 1 hunk",
 		)
 	})
 
@@ -454,12 +454,6 @@ func TestSelect_success(t *testing.T) {
 
 	t.Run("space twice clears the selection", func(t *testing.T) {
 		m := press(t, loaded(t, newSource()), "tab", "j", "tab", "space", "space")
-
-		assertContains(t, view(m), "○ main.go", "nothing selected")
-	})
-
-	t.Run("s does not select", func(t *testing.T) {
-		m := press(t, loaded(t, newSource()), "tab", "j", "tab", "s")
 
 		assertContains(t, view(m), "○ main.go", "nothing selected")
 	})

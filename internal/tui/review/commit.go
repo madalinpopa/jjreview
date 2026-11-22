@@ -18,7 +18,7 @@ type pick struct {
 
 type commitJob struct {
 	file  diff.File
-	hunks []int
+	lines [][]bool
 	whole bool
 }
 
@@ -56,20 +56,41 @@ func pickedUnits(picks []pick) int {
 	return n
 }
 
-func (m Model) restricted(picks []pick) []diff.File {
+func (m Model) partialLines() (lines int, partial bool) {
+	for i, r := range m.reviews {
+		if wholeOnly(m.files[i]) {
+			continue
+		}
+		n, part := r.pickedLines()
+		lines += n
+		partial = partial || part
+	}
+	return lines, partial
+}
+
+func (m Model) lineNote() string {
+	lines, partial := m.partialLines()
+	if !partial {
+		return ""
+	}
+	return fmt.Sprintf(" (%d %s)", lines, ui.Plural(lines, "line"))
+}
+
+func (m Model) restricted(picks []pick) ([]diff.File, error) {
 	out := make([]diff.File, len(picks))
 	for i, p := range picks {
 		f := m.files[p.file]
 		if !wholeOnly(f) {
-			hunks := make([]diff.Hunk, len(p.units))
-			for j, k := range p.units {
-				hunks[j] = f.Hunks[k]
+			done, taken := m.reviews[p.file].masks()
+			step, err := diff.Between(f, done, taken)
+			if err != nil {
+				return nil, fmt.Errorf("patch for %s: %w", f.Path(), err)
 			}
-			f.Hunks = hunks
+			f = step
 		}
 		out[i] = f
 	}
-	return out
+	return out, nil
 }
 
 func (m Model) commitRequest(env Env, message string, picks []pick) commitRequest {
@@ -82,11 +103,11 @@ func (m Model) commitRequest(env Env, message string, picks []pick) commitReques
 	}
 	for _, p := range picks {
 		f := m.files[p.file]
-		included := m.reviews[p.file].included()
+		r := m.reviews[p.file]
 		req.jobs = append(req.jobs, commitJob{
 			file:  f,
-			hunks: included,
-			whole: wholeOnly(f) || len(included) == len(f.Hunks),
+			lines: r.included(),
+			whole: wholeOnly(f) || r.complete(),
 		})
 	}
 	return req
@@ -156,7 +177,7 @@ func applyHunks(job commitJob, get func(contentKey) (string, error), parentID st
 			return "", err
 		}
 	}
-	content, err := diff.Apply(parent, f, job.hunks)
+	content, err := diff.ApplyLines(parent, f, job.lines)
 	if err != nil {
 		return "", fmt.Errorf("apply hunks to %s: %w", f.Path(), err)
 	}

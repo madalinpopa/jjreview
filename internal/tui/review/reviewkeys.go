@@ -15,6 +15,9 @@ type keyMap struct {
 	nextFile    key.Binding
 	prevFile    key.Binding
 	workingCopy key.Binding
+	selectLine  key.Binding
+	selectRange key.Binding
+	cancelRange key.Binding
 	selectHunk  key.Binding
 	selectFile  key.Binding
 	commit      key.Binding
@@ -36,6 +39,9 @@ func newKeyMap() keyMap {
 		nextFile:    key.NewBinding(key.WithKeys("J"), key.WithHelp("J", "next file")),
 		prevFile:    key.NewBinding(key.WithKeys("K"), key.WithHelp("K", "previous file")),
 		workingCopy: key.NewBinding(key.WithKeys("@"), key.WithHelp("@", "working-copy revision")),
+		selectLine:  key.NewBinding(key.WithKeys("s"), key.WithHelp("s", "select the line")),
+		selectRange: key.NewBinding(key.WithKeys("v"), key.WithHelp("v", "a range of lines")),
+		cancelRange: key.NewBinding(key.WithKeys("esc"), key.WithHelp("esc", "cancel the range")),
 		selectHunk:  key.NewBinding(key.WithKeys("space"), key.WithHelp("space", "select the hunk (the file in the file pane)")),
 		selectFile:  key.NewBinding(key.WithKeys("S"), key.WithHelp("S", "select every hunk in the file")),
 		commit:      key.NewBinding(key.WithKeys("c"), key.WithHelp("c", "commit the selected hunks")),
@@ -52,12 +58,19 @@ func newKeyMap() keyMap {
 func (m Model) Hints(c jj.Change) []ui.KeyHint {
 	k := m.keys
 	move := ui.Hint("line", k.Down, k.Up)
+	if m.ranging {
+		return []ui.KeyHint{move, ui.Hint("select range", k.selectLine, k.selectHunk), ui.Hint("cancel", k.cancelRange, k.selectRange)}
+	}
 	if m.filesFocus {
 		move.Label = "file"
 	}
 	hints := []ui.KeyHint{ui.Hint("pane", k.switchPane), move}
 	if !c.Immutable {
-		hints = append(hints, ui.Hint("select", k.selectHunk), ui.Hint("commit", k.commit))
+		pick := ui.Hint("select", k.selectLine, k.selectHunk)
+		if m.filesFocus {
+			pick = ui.Hint("select", k.selectHunk)
+		}
+		hints = append(hints, pick, ui.Hint("commit", k.commit))
 	}
 	if m.filesFocus {
 		hints = append(hints, ui.Hint("diff", k.removedAll))
@@ -79,7 +92,7 @@ func (m Model) Help(c jj.Change) ([]HelpSection, []ui.KeyHint) {
 	k := m.keys
 	var review []ui.KeyHint
 	if !c.Immutable {
-		review = []ui.KeyHint{ui.Describe(k.selectHunk), ui.Describe(k.selectFile), ui.Describe(k.commit)}
+		review = []ui.KeyHint{ui.Hint(k.selectLine.Help().Desc+" / "+k.selectRange.Help().Desc, k.selectLine, k.selectRange), ui.Describe(k.selectHunk), ui.Describe(k.selectFile), ui.Describe(k.commit)}
 	}
 	review = append(review, ui.Describe(k.fold), ui.Describe(k.foldAll), ui.Describe(k.removed), ui.Describe(k.removedAll))
 	sections := []HelpSection{
@@ -120,6 +133,9 @@ func Bindings() map[string]key.Binding {
 		"nextFile":    k.nextFile,
 		"prevFile":    k.prevFile,
 		"workingCopy": k.workingCopy,
+		"selectLine":  k.selectLine,
+		"selectRange": k.selectRange,
+		"cancelRange": k.cancelRange,
 		"selectHunk":  k.selectHunk,
 		"selectFile":  k.selectFile,
 		"commit":      k.commit,
@@ -157,6 +173,9 @@ const (
 	removedIntent
 	removedAllIntent
 	foldAllIntent
+	selectLineIntent
+	selectRangeIntent
+	cancelRangeIntent
 	selectHunkIntent
 	selectFileIntent
 )
@@ -203,6 +222,12 @@ func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
 		return removedAllIntent
 	case key.Matches(msg, k.foldAll):
 		return foldAllIntent
+	case key.Matches(msg, k.selectLine):
+		return selectLineIntent
+	case key.Matches(msg, k.selectRange):
+		return selectRangeIntent
+	case key.Matches(msg, k.cancelRange):
+		return cancelRangeIntent
 	case key.Matches(msg, k.selectHunk):
 		return selectHunkIntent
 	case key.Matches(msg, k.selectFile):

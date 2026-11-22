@@ -73,6 +73,8 @@ type Model struct {
 	highlights  map[highlightKey]fileHighlight
 	fileIdx     int
 	cursor      int
+	ranging     bool
+	anchor      int
 	diffTop     int
 	listTop     int
 	treeWidth   int
@@ -98,6 +100,7 @@ func New(ctx context.Context, src Source, gen llm.Provider) Model {
 
 func (m *Model) Load(files []diff.File, focus string, env Env) tea.Cmd {
 	prevFiles, prevReviews := m.files, m.reviews
+	m.ranging = false
 	m.files = slices.Clone(files)
 	slices.SortStableFunc(m.files, compareTree)
 	m.reviews = make([]fileReview, len(m.files))
@@ -196,6 +199,14 @@ func (m Model) Message() string {
 
 func (m Model) Picked() int {
 	return pickedUnits(m.picks())
+}
+
+func (m Model) LineNote() string {
+	return m.lineNote()
+}
+
+func (m *Model) CancelRange() {
+	m.ranging = false
 }
 
 func (m *Model) applyContent(env Env, msg contentMsg) {
