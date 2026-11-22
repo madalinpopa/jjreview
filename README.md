@@ -112,7 +112,9 @@ edge that hides text.
 case. Removed lines hidden by default and lines in folded hunks are not
 searched until `d` or `z` shows them. Every match is highlighted, the current
 one in the selection colour, and the status bar shows its position in the
-file, such as `/query 3/12`.
+file, such as `/query 3/12`. In the full-file view, `n` / `N` move to the next
+file whose changes match, or whose loaded content matches, and the next `n` /
+`N` continues inside it.
 
 | Key | Action |
 |-----|--------|
