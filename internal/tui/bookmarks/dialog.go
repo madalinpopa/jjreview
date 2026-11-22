@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -108,10 +109,10 @@ func newInput(value string) textinput.Model {
 	return in
 }
 
-func (b *Model) openModal(s *jj.Bookmark, env Env) tea.Cmd {
+func (b *Model) openModal(s *jj.Bookmark, env tab.Env) tea.Cmd {
 	mo := &dialog{}
 	if s == nil {
-		mo.prefill = targetOf(env.HeadChange, env.Head, env.HeadTitle)
+		mo.prefill = targetOf(env.Head.ChangeID, env.Head.CommitID, env.Head.Title)
 		mo.inputs = [2]textinput.Model{newInput(""), newInput(mo.prefill.shown)}
 	} else {
 		mo.editing, mo.oldName, mo.oldRef, mo.from = true, s.Name, refOf(*s), []string{s.CommitID}
@@ -274,8 +275,8 @@ func joinWarnings(warnings []string) string {
 	return strings.Join(slices.DeleteFunc(warnings, func(w string) bool { return w == "" }), "\n")
 }
 
-func (b *Model) applySaved(msg savedMsg) Effect {
-	var eff Effect
+func (b *Model) applySaved(msg savedMsg) tab.Effect {
+	var eff tab.Effect
 	mo := b.modal
 	if msg.refresh {
 		if mo == nil || !mo.picked {
@@ -311,11 +312,11 @@ func (b *Model) applySaved(msg savedMsg) Effect {
 	return eff
 }
 
-func (b *Model) Resize(env Env) {
+func (b *Model) Resize(env tab.Env) {
 	if b.modal == nil {
 		return
 	}
-	inner := env.modalInner()
+	inner := modalInner(env)
 	w := inner - labelWidth
 	if chromeRows(env.Height, len(b.noteLines(env.Theme, inner))) == fullChrome {
 		w = ui.InputBoxInner(inner)
@@ -358,9 +359,9 @@ func chromeRows(height, notes int) int {
 	return minimalChrome
 }
 
-func (b Model) modalView(env Env) string {
+func (b Model) modalView(env tab.Env) string {
 	p := env.Theme
-	inner := env.modalInner()
+	inner := modalInner(env)
 	notes := b.noteLines(env.Theme, inner)
 	chrome := chromeRows(env.Height, len(notes))
 	if room := max(env.Height-chrome, 1); len(notes) > room {

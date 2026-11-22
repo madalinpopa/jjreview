@@ -380,7 +380,7 @@ func (m *Model) scroll() {
 		m.log.KeepVisible(m.logEnv())
 		return
 	case bookmarksView:
-		m.bookmarks.KeepVisible(m.diffHeight())
+		m.bookmarks.KeepVisible(m.bookmarkEnv())
 		return
 	case operationsView:
 		m.operations.KeepVisible(m.operationEnv())

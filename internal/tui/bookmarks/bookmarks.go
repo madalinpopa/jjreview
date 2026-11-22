@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -24,24 +25,8 @@ type Source interface {
 	Change(ctx context.Context, rev string) (jj.Change, error)
 }
 
-type Env struct {
-	ui.Layout
-	Head       string
-	HeadChange string
-	HeadTitle  string
-	Active     bool
-}
-
-func (e Env) modalInner() int {
-	return ui.InputBoxInner(e.ModalWidth)
-}
-
-type Effect struct {
-	Status   string
-	Refresh  bool
-	Retarget bool
-	Reopen   bool
-	Open     string
+func modalInner(env tab.Env) int {
+	return ui.InputBoxInner(env.ModalWidth)
 }
 
 type Model struct {
@@ -111,6 +96,14 @@ func (b Model) selectedRef() bookmarkRef {
 	return bookmarkRef{}
 }
 
+func (b Model) Ignores(tea.KeyPressMsg, tab.Env) bool {
+	return false
+}
+
+func (b Model) Captures() bool {
+	return b.OverlayOpen()
+}
+
 func (b Model) OverlayOpen() bool {
 	return b.modal != nil || b.deleting != nil || b.picker != nil
 }
@@ -119,8 +112,8 @@ func (b *Model) move(delta int) {
 	b.cursor = max(min(b.cursor+delta, len(b.items)-1), 0)
 }
 
-func (b *Model) KeepVisible(height int) {
-	b.top = ui.ScrollTop(b.top, b.cursor, height, len(b.items))
+func (b *Model) KeepVisible(env tab.Env) {
+	b.top = ui.ScrollTop(b.top, b.cursor, env.ListHeight, len(b.items))
 }
 
 func (b *Model) scrollPage(delta, height int) {
@@ -128,7 +121,11 @@ func (b *Model) scrollPage(delta, height int) {
 	b.move(delta)
 }
 
-func (b *Model) Show() tea.Cmd {
+func (b *Model) Show(tab.Env) tea.Cmd {
+	return b.loadDue()
+}
+
+func (b *Model) loadDue() tea.Cmd {
 	if b.list.Due() {
 		return b.Load()
 	}
@@ -150,7 +147,7 @@ func (b *Model) MarkStale() {
 	b.list.MarkStale()
 }
 
-func (b *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
+func (b *Model) Update(msg tea.Msg, env tab.Env) (tea.Cmd, tab.Effect, bool) {
 	switch msg := msg.(type) {
 	case loadedMsg:
 		cmd, eff := b.applyList(msg, env)
@@ -162,13 +159,13 @@ func (b *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 	case deletedMsg:
 		return nil, b.applyDeleted(msg), true
 	}
-	return nil, Effect{}, false
+	return nil, tab.Effect{}, false
 }
 
-func (b *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Effect) {
+func (b *Model) applyList(msg loadedMsg, env tab.Env) (tea.Cmd, tab.Effect) {
 	want := cmp.Or(b.want, b.SelectedName())
 	if !b.list.Finish(msg.seq, msg.err) {
-		return nil, Effect{}
+		return nil, tab.Effect{}
 	}
 	b.items = msg.items
 	if i := slices.IndexFunc(b.items, func(item jj.Bookmark) bool { return item.Name == want }); i >= 0 {
@@ -179,19 +176,19 @@ func (b *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Effect) {
 	if !b.list.Stale() {
 		b.want = ""
 	}
-	eff := Effect{Retarget: env.Active && b.selectedRef() != b.opened}
+	eff := tab.Effect{Retarget: env.Active && b.selectedRef() != b.opened}
 	if b.list.Stale() && env.Active {
 		return b.Load(), eff
 	}
 	return nil, eff
 }
 
-func (b *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
+func (b *Model) Key(msg tea.KeyPressMsg, env tab.Env) (tea.Cmd, tab.Effect) {
 	switch {
 	case b.deleting != nil:
-		return b.deleteKey(msg), Effect{}
+		return b.deleteKey(msg), tab.Effect{}
 	case b.modal != nil:
-		return b.modalKey(msg), Effect{}
+		return b.modalKey(msg), tab.Effect{}
 	case b.picker != nil:
 		return b.pickKey(msg, env)
 	}
@@ -212,36 +209,36 @@ func (b *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	case openIntent:
 		return nil, b.open()
 	case createIntent:
-		return b.openModal(nil, env), Effect{}
+		return b.openModal(nil, env), tab.Effect{}
 	case editIntent:
 		s := b.selected()
 		switch {
 		case s == nil:
 		case s.Conflict:
-			return nil, Effect{Status: s.Name + " is conflicted; resolve it with jj bookmark set"}
+			return nil, tab.Effect{Status: s.Name + " is conflicted; resolve it with jj bookmark set"}
 		default:
-			return b.openModal(s, env), Effect{}
+			return b.openModal(s, env), tab.Effect{}
 		}
 	case deleteIntent:
 		if s := b.selected(); s != nil {
 			b.deleting = new(*s)
 		}
 	case reloadIntent:
-		return nil, Effect{Refresh: !b.list.Loading()}
+		return nil, tab.Effect{Refresh: !b.list.Loading()}
 	}
-	return nil, Effect{}
+	return nil, tab.Effect{}
 }
 
-func (b *Model) open() Effect {
+func (b *Model) open() tab.Effect {
 	s := b.selected()
 	switch {
 	case s == nil:
-		return Effect{}
+		return tab.Effect{}
 	case s.CommitID == "":
-		return Effect{Status: s.Name + " is conflicted: it has no single target"}
+		return tab.Effect{Status: s.Name + " is conflicted: it has no single target"}
 	}
 	ref := b.selectedRef()
-	eff := Effect{Open: s.CommitID, Reopen: ref == b.opened}
+	eff := tab.Effect{Open: s.CommitID, Reopen: ref == b.opened}
 	b.opened = ref
 	return eff
 }
@@ -258,7 +255,7 @@ func (b *Model) deleteKey(msg tea.KeyPressMsg) tea.Cmd {
 	}
 }
 
-func (b Model) Overlay(env Env) string {
+func (b Model) Overlay(env tab.Env) string {
 	switch {
 	case b.modal != nil:
 		return b.modalView(env)
@@ -270,10 +267,10 @@ func (b Model) Overlay(env Env) string {
 	return ""
 }
 
-func (b Model) deleteView(env Env) string {
+func (b Model) deleteView(env tab.Env) string {
 	p := env.Theme
 	d := b.deleting
-	inner := env.modalInner()
+	inner := modalInner(env)
 	lines := []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "Delete bookmark")}, nil)}
 	for line := range strings.SplitSeq(ansi.Hardwrap(ui.EscapePath(d.Name), inner, true), "\n") {
 		lines = append(lines, ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Key).Bold(true), line)}, nil))
@@ -290,14 +287,16 @@ func (b Model) deleteView(env Env) string {
 	return ui.ModalBox(p, lines)
 }
 
-func (b Model) Hints() []ui.KeyHint {
+func (b Model) Hints(tabs, help ui.KeyHint) []ui.KeyHint {
 	return []ui.KeyHint{
+		tabs,
 		ui.Hint("bookmark", b.keys.Down, b.keys.Up),
 		ui.Hint("review", b.keys.open),
 		ui.Hint("new", b.keys.create),
 		ui.Hint("edit", b.keys.edit),
 		ui.Hint("delete", b.keys.remove),
 		ui.Hint("refresh", b.keys.reload),
+		help,
 	}
 }
 
@@ -360,8 +359,8 @@ func observe(ctx context.Context, src Source, names ...string) string {
 	return "now: " + strings.Join(parts, ", ")
 }
 
-func (b *Model) applyDeleted(msg deletedMsg) Effect {
-	eff := Effect{Status: "✓ deleted " + msg.name}
+func (b *Model) applyDeleted(msg deletedMsg) tab.Effect {
+	eff := tab.Effect{Status: "✓ deleted " + msg.name}
 	if msg.err != nil {
 		eff.Status = msg.err.Error()
 	} else if msg.warnings != "" {
@@ -374,7 +373,7 @@ func (b *Model) applyDeleted(msg deletedMsg) Effect {
 	return eff
 }
 
-func (b Model) View(env Env) string {
+func (b Model) View(env tab.Env) string {
 	p := env.Theme
 	inner := max(env.Width-2, 0)
 	var body []string
@@ -399,7 +398,7 @@ func (b Model) View(env Env) string {
 	return ui.Card(p, env.Width, env.BodyHeight, "Bookmarks", true, value, body)
 }
 
-func (b Model) line(env Env, i, names, width int) string {
+func (b Model) line(env tab.Env, i, names, width int) string {
 	p := env.Theme
 	item := b.items[i]
 	bg := p.Card
@@ -407,7 +406,7 @@ func (b Model) line(env Env, i, names, width int) string {
 		bg = p.CursorBg
 	}
 	bar := bg
-	if item.CommitID != "" && item.CommitID == env.Head {
+	if item.CommitID != "" && item.CommitID == env.Head.CommitID {
 		bar = p.Selection
 	}
 	gap := ui.Span(lipgloss.NewStyle(), " ")

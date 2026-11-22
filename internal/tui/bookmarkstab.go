@@ -4,16 +4,15 @@ import (
 	"slices"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/madalinpopa/jjreview/internal/tui/bookmarks"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 )
 
 func (m Model) BookmarkCursor() string {
 	return m.bookmarks.SelectedName()
 }
 
-func (m Model) bookmarkEnv() bookmarks.Env {
-	e := m.env(bookmarksView)
-	return bookmarks.Env{Layout: e.Layout, Head: e.Head.CommitID, HeadChange: e.Head.ChangeID, HeadTitle: e.Head.Title, Active: e.Active}
+func (m Model) bookmarkEnv() tab.Env {
+	return m.env(bookmarksView)
 }
 
 func (m Model) headTitle() string {
@@ -25,7 +24,7 @@ func (m Model) headTitle() string {
 
 func (m *Model) showBookmarks() tea.Cmd {
 	m.view = bookmarksView
-	return m.bookmarks.Show()
+	return m.bookmarks.Show(m.bookmarkEnv())
 }
 
 func (m *Model) markStale() {
@@ -64,7 +63,7 @@ func (m *Model) bookmarksKey(msg tea.KeyPressMsg) tea.Cmd {
 	return m.openCommit(msg, armed, eff.Open)
 }
 
-func (m *Model) bookmarkEffects(cmd tea.Cmd, eff bookmarks.Effect) tea.Cmd {
+func (m *Model) bookmarkEffects(cmd tea.Cmd, eff tab.Effect) tea.Cmd {
 	if eff.Status != "" {
 		m.status = eff.Status
 	}

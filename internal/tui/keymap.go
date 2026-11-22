@@ -107,7 +107,7 @@ func (m Model) keyHints() []ui.KeyHint {
 	case logView:
 		return m.log.Hints(m.tabsHint(), help)
 	case bookmarksView:
-		return slices.Concat([]ui.KeyHint{m.tabsHint()}, m.bookmarks.Hints(), []ui.KeyHint{help})
+		return m.bookmarks.Hints(m.tabsHint(), help)
 	case operationsView:
 		return slices.Concat([]ui.KeyHint{m.tabsHint()}, m.operations.Hints(), []ui.KeyHint{help})
 	}

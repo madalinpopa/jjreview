@@ -8,6 +8,7 @@ import (
 
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/tui/bookmarks"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 )
 
 type fakeSource struct {
@@ -37,8 +38,8 @@ func newSource() *fakeSource {
 	return &fakeSource{items: []jj.Bookmark{{Name: "main", ChangeID: "kkkk", CommitID: "aaaa"}}}
 }
 
-func env() bookmarks.Env {
-	return bookmarks.Env{Width: 80, Height: 24, BodyHeight: 20, ListHeight: 16, ModalWidth: 64, Head: "aaaa", Active: true}
+func env() tab.Env {
+	return tab.Env{Width: 80, Height: 24, BodyHeight: 20, ListHeight: 16, ModalWidth: 64, Head: tab.Head{CommitID: "aaaa"}, Active: true}
 }
 
 func run(t *testing.T, cmd tea.Cmd) tea.Msg {
@@ -54,7 +55,7 @@ func loaded(t *testing.T, src *fakeSource) bookmarks.Model {
 	t.Helper()
 
 	m := bookmarks.New(t.Context(), src)
-	if _, _, ok := m.Update(run(t, m.Show()), env()); !ok {
+	if _, _, ok := m.Update(run(t, m.Show(env())), env()); !ok {
 		t.Fatal("Update(list result) handled = false, want true")
 	}
 	return m
@@ -73,7 +74,7 @@ func TestUpdate_success(t *testing.T) {
 	t.Run("handles the result of its own list load", func(t *testing.T) {
 		t.Parallel()
 		m := bookmarks.New(t.Context(), newSource())
-		msg := run(t, m.Show())
+		msg := run(t, m.Show(env()))
 
 		_, _, ok := m.Update(msg, env())
 
@@ -137,7 +138,7 @@ func TestUpdate_failed(t *testing.T) {
 
 			cmd, eff, ok := m.Update(msg, env())
 
-			if ok || cmd != nil || eff != (bookmarks.Effect{}) {
+			if ok || cmd != nil || eff != (tab.Effect{}) {
 				t.Errorf("Update(%T) = %v, %+v, %v, want nil, zero effect, false", msg, cmd, eff, ok)
 			}
 		})

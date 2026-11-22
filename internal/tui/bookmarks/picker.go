@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -36,10 +37,10 @@ type pickedMsg struct {
 
 func (b *Model) Pick(e jj.LogEntry) tea.Cmd {
 	b.picker = &picker{changeID: e.ChangeID, commitID: e.CommitID, title: e.Description}
-	return b.Show()
+	return b.loadDue()
 }
 
-func (b *Model) pickKey(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
+func (b *Model) pickKey(msg tea.KeyPressMsg, env tab.Env) (tea.Cmd, tab.Effect) {
 	pk := b.picker
 	pending := pk.pending
 	pk.pending = nil
@@ -49,7 +50,7 @@ func (b *Model) pickKey(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 		b.picker = nil
 	case pk.moving || !b.listed():
 	case it == confirmIntent && pending != nil:
-		return b.movePicked(pk, *pending, true), Effect{}
+		return b.movePicked(pk, *pending, true), tab.Effect{}
 	case it == moveDownIntent:
 		pk.cursor = min(pk.cursor+1, last)
 	case it == moveUpIntent:
@@ -62,27 +63,27 @@ func (b *Model) pickKey(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 		return b.choose(pk, env)
 	}
 	pk.top = ui.ScrollTop(pk.top, pk.cursor, b.pickerRoom(env), last+1)
-	return nil, Effect{}
+	return nil, tab.Effect{}
 }
 
-func (b *Model) choose(pk *picker, env Env) (tea.Cmd, Effect) {
+func (b *Model) choose(pk *picker, env tab.Env) (tea.Cmd, tab.Effect) {
 	if pk.cursor = min(pk.cursor, len(b.items)); pk.cursor == 0 {
 		b.picker = nil
-		env.Head, env.HeadChange, env.HeadTitle = pk.commitID, pk.changeID, pk.title
+		env.Head.CommitID, env.Head.ChangeID, env.Head.Title = pk.commitID, pk.changeID, pk.title
 		cmd := b.openModal(nil, env)
 		b.modal.picked = true
-		return cmd, Effect{}
+		return cmd, tab.Effect{}
 	}
 	s := b.items[pk.cursor-1]
 	switch {
 	case s.Conflict:
 		b.picker = nil
-		return nil, Effect{Status: s.Name + " is conflicted; resolve it with jj bookmark set"}
+		return nil, tab.Effect{Status: s.Name + " is conflicted; resolve it with jj bookmark set"}
 	case s.CommitID == pk.commitID:
 		b.picker = nil
-		return nil, Effect{Status: s.Name + " is already on " + ui.ShortID(pk.changeID)}
+		return nil, tab.Effect{Status: s.Name + " is already on " + ui.ShortID(pk.changeID)}
 	}
-	return b.movePicked(pk, s, false), Effect{}
+	return b.movePicked(pk, s, false), tab.Effect{}
 }
 
 func (b *Model) movePicked(pk *picker, s jj.Bookmark, allowBackwards bool) tea.Cmd {
@@ -114,22 +115,22 @@ func moveBookmark(ctx context.Context, src Source, s jj.Bookmark, change, to str
 	return msg
 }
 
-func (b *Model) applyPicked(msg pickedMsg) Effect {
+func (b *Model) applyPicked(msg pickedMsg) tab.Effect {
 	pk := b.picker
 	open := pk != nil && pk.moving
 	name := msg.bookmark.Name
 	if msg.refused {
 		if !open {
-			return Effect{Status: name + " would move backwards or sideways; not moved"}
+			return tab.Effect{Status: name + " would move backwards or sideways; not moved"}
 		}
 		pk.moving = false
 		pk.pending = new(msg.bookmark)
-		return Effect{}
+		return tab.Effect{}
 	}
 	if open {
 		b.picker = nil
 	}
-	eff := Effect{Status: "moved " + name + " to " + ui.ShortID(msg.change), Refresh: true}
+	eff := tab.Effect{Status: "moved " + name + " to " + ui.ShortID(msg.change), Refresh: true}
 	switch {
 	case msg.err != nil:
 		eff.Status, _, _ = strings.Cut(msg.err.Error(), "\n")
@@ -139,10 +140,10 @@ func (b *Model) applyPicked(msg pickedMsg) Effect {
 	return eff
 }
 
-func (b Model) pickerView(env Env) string {
+func (b Model) pickerView(env tab.Env) string {
 	p := env.Theme
 	pk := b.picker
-	inner := env.modalInner()
+	inner := modalInner(env)
 	lines := []string{ui.Paint(inner, p.Card, []ui.Seg{ui.Span(ui.Fg(p.Title).Bold(true), "Bookmark "+ui.ShortID(pk.changeID))}, nil)}
 	switch {
 	case !b.list.Loaded() || b.list.Loading():
@@ -187,8 +188,8 @@ func (b Model) pickerNotes(width int) []string {
 	return nil
 }
 
-func (b Model) pickerRoom(env Env) int {
-	return max(env.Height-pickerChrome-len(b.pickerNotes(env.modalInner())), 1)
+func (b Model) pickerRoom(env tab.Env) int {
+	return max(env.Height-pickerChrome-len(b.pickerNotes(modalInner(env))), 1)
 }
 
 func (b Model) pickerLine(p theme.Theme, i, width int) string {
