@@ -761,7 +761,7 @@ func TestHelp_success(t *testing.T) {
 
 		got := view(m)
 
-		assertContains(t, got, "Keys", "^d ^u", "half page", "@", "working-copy revision", "S", "select every hunk in the file",
+		assertContains(t, got, "Keys", "^d ^u", "half page", "@", "working-copy revision", "S", "select every open hunk in the file",
 			"Z", "fold all hunks", "R", "reload the change", "open in $EDITOR", "full file / changes only", "q", "quit")
 	})
 
@@ -831,7 +831,7 @@ func TestHelp_success(t *testing.T) {
 		got := view(press(t, loaded(t, src), "?"))
 
 		assertContains(t, got, "fold all hunks")
-		for _, hint := range []string{"select every hunk", "commit the selected"} {
+		for _, hint := range []string{"select every open hunk in the file", "commit the selection"} {
 			if strings.Contains(got, hint) {
 				t.Errorf("help popup of an immutable revision shows %q", hint)
 			}
