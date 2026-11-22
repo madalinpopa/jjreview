@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"syscall"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/madalinpopa/jjreview/internal/config"
+	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
 )
 
@@ -30,6 +32,38 @@ func TestRun_success(t *testing.T) {
 			t.Errorf("run(-version) output = %q, want %q", got, "dev\n")
 		}
 	})
+
+	t.Run("prints the version without jj in PATH", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		var out bytes.Buffer
+
+		err := run(t.Context(), []string{"-version"}, &out)
+
+		if err != nil {
+			t.Fatalf("run(-version) error = %v", err)
+		}
+		if got := out.String(); got != "dev\n" {
+			t.Errorf("run(-version) output = %q, want %q", got, "dev\n")
+		}
+	})
+}
+
+func TestRun_canceled(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "jj"), []byte("#!/bin/sh\necho 'jj 0.47.0'\n"), 0o755); err != nil {
+		t.Fatalf("write fake jj: %v", err)
+	}
+	t.Setenv("PATH", dir)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+
+	err := run(ctx, nil, &bytes.Buffer{})
+
+	if err != nil {
+		t.Errorf("run() with a canceled context error = %v, want nil", err)
+	}
 }
 
 func TestRun_help(t *testing.T) {
@@ -49,6 +83,65 @@ func TestRun_failed(t *testing.T) {
 		}
 	})
 
+	t.Run("reports a missing jj before starting", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		t.Setenv("HOME", t.TempDir())
+
+		err := run(t.Context(), nil, &bytes.Buffer{})
+
+		if !errors.Is(err, jj.ErrNotFound) {
+			t.Errorf("run() error = %v, want %v", err, jj.ErrNotFound)
+		}
+	})
+
+	t.Run("reports a jj older than the minimum before starting", func(t *testing.T) {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "jj"), []byte("#!/bin/sh\necho 'jj 0.44.0'\n"), 0o755); err != nil {
+			t.Fatalf("write fake jj: %v", err)
+		}
+		t.Setenv("PATH", dir)
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		t.Setenv("HOME", t.TempDir())
+
+		err := run(t.Context(), nil, &bytes.Buffer{})
+
+		if !errors.Is(err, jj.ErrUnsupportedVersion) {
+			t.Errorf("run() error = %v, want %v", err, jj.ErrUnsupportedVersion)
+		}
+	})
+
+	t.Run("checks jj in the -R repository", func(t *testing.T) {
+		repo, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatalf("resolve repository: %v", err)
+		}
+		dir := t.TempDir()
+		script := "#!/bin/sh\nif [ \"$(pwd -P)\" = '" + repo + "' ]; then echo 'jj 0.44.0'; else echo 'wrong directory' >&2; exit 3; fi\n"
+		if err := os.WriteFile(filepath.Join(dir, "jj"), []byte(script), 0o755); err != nil {
+			t.Fatalf("write fake jj: %v", err)
+		}
+		t.Setenv("PATH", dir)
+		t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+		t.Setenv("HOME", t.TempDir())
+
+		err = run(t.Context(), []string{"-R", repo}, &bytes.Buffer{})
+
+		if !errors.Is(err, jj.ErrUnsupportedVersion) {
+			t.Errorf("run(-R %s) error = %v, want %v", repo, err, jj.ErrUnsupportedVersion)
+		}
+	})
+
+	t.Run("does not check jj for apply-split", func(t *testing.T) {
+		t.Setenv("PATH", t.TempDir())
+		missing := filepath.Join(t.TempDir(), "spec.json")
+
+		err := run(t.Context(), []string{"apply-split", missing, t.TempDir(), t.TempDir()}, &bytes.Buffer{})
+
+		if !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("run(apply-split) error = %v, want %v", err, os.ErrNotExist)
+		}
+	})
 }
 
 func TestParseArgs_success(t *testing.T) {

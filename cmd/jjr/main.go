@@ -68,6 +68,12 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		_, err := fmt.Fprintln(stdout, version)
 		return err
 	}
+	if err := jj.CheckVersion(ctx, opts.repo); err != nil {
+		if errors.Is(err, context.Canceled) {
+			return nil
+		}
+		return err
+	}
 
 	exe, err := os.Executable()
 	if err != nil {
