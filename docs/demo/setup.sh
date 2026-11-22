@@ -9,6 +9,10 @@ email = "demo@example.com"
 
 [ui]
 paginate = "never"
+
+[operation]
+hostname = "demo"
+username = "demo"
 EOF
 export JJ_CONFIG="$root/jj.toml"
 
