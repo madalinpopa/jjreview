@@ -1,13 +1,8 @@
 package tui
 
 import (
-	"context"
-	"fmt"
-
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/tui/operations"
-	"github.com/madalinpopa/jjreview/internal/tui/tab"
-	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 func (m Model) OperationCursor() string {
@@ -18,6 +13,8 @@ func (m Model) operationEnv() operations.Env {
 	return operations.Env{
 		Layout:  m.layout(),
 		Dropped: pickedUnits(m.picks()),
+		Active:  m.view == operationsView,
+		Lock:    m.lock(),
 	}
 }
 
@@ -27,7 +24,8 @@ func (m *Model) showOperations() tea.Cmd {
 }
 
 func (m *Model) operationsKey(msg tea.KeyPressMsg) tea.Cmd {
-	if m.operations.Ignores(msg, m.reloading) {
+	env := m.operationEnv()
+	if m.operations.Ignores(msg, env) {
 		return nil
 	}
 	armed := m.armed
@@ -38,40 +36,17 @@ func (m *Model) operationsKey(msg tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 	}
-	in := m.operations.Key(msg, m.operationEnv())
-	switch {
-	case in.Run != nil:
-		if m.canLoad() {
-			return m.runOperation(*in.Run)
-		}
-	case in.Status != "":
-		m.status = in.Status
-	case in.Refresh:
-		return m.invalidate()
-	}
-	return nil
+	return m.operationEffects(m.operations.Key(msg, env))
 }
 
-func (m *Model) runOperation(a operations.Action) tea.Cmd {
-	op := a.Op
-	id := ui.ShortID(op.ID)
-	src := m.src
-	return m.rewrite(tab.Rewrite{Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
-		switch a.Kind {
-		case operations.Restore:
-			if err := src.RestoreOperation(ctx, op.ID); err != nil {
-				return tab.Result{KeepPicks: true}, fmt.Errorf("restore operation %s: %w", id, err)
-			}
-			return tab.Result{Done: "restored operation " + id, Replaced: head.WorkingCopy, Restored: true}, nil
-		case operations.Undo:
-			if err := src.RevertOperation(ctx, op.ID); err != nil {
-				return tab.Result{KeepPicks: true}, fmt.Errorf("undo operation %s: %w", id, err)
-			}
-			return tab.Result{Done: "undid operation " + id, Replaced: head.WorkingCopy, Restored: true}, nil
-		}
-		if err := src.AbandonOperation(ctx, op.ID); err != nil {
-			return tab.Result{KeepPicks: true}, fmt.Errorf("abandon operation %s: %w", id, err)
-		}
-		return tab.Result{Done: "abandoned operation " + id, KeepPicks: true}, nil
-	}})
+func (m *Model) operationEffects(cmd tea.Cmd, eff operations.Effect) tea.Cmd {
+	switch {
+	case eff.Rewrite != nil:
+		return tea.Batch(cmd, m.rewrite(*eff.Rewrite))
+	case eff.Status != "":
+		m.status = eff.Status
+	case eff.Refresh:
+		return tea.Batch(cmd, m.invalidate())
+	}
+	return cmd
 }

@@ -15,34 +15,15 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type Source interface {
 	Operations(ctx context.Context) ([]jj.Operation, error)
-}
-
-type Kind int
-
-const (
-	Restore Kind = iota
-	Undo
-	Abandon
-)
-
-func (k Kind) verb() string {
-	switch k {
-	case Restore:
-		return "restore"
-	case Undo:
-		return "undo"
-	}
-	return "abandon"
-}
-
-type Action struct {
-	Kind Kind
-	Op   jj.Operation
+	RestoreOperation(ctx context.Context, id string) error
+	RevertOperation(ctx context.Context, id string) error
+	AbandonOperation(ctx context.Context, id string) error
 }
 
 type keyMap struct {
@@ -59,6 +40,76 @@ type keyMap struct {
 	collapse key.Binding
 	confirm  key.Binding
 	reload   key.Binding
+}
+
+type intent int
+
+const (
+	noIntent intent = iota
+	moveDownIntent
+	moveUpIntent
+	halfPageDownIntent
+	halfPageUpIntent
+	topIntent
+	bottomIntent
+	expandIntent
+	collapseIntent
+	restoreIntent
+	undoIntent
+	abandonIntent
+	reloadIntent
+	confirmIntent
+)
+
+func (i intent) verb() string {
+	switch i {
+	case restoreIntent:
+		return "restore"
+	case undoIntent:
+		return "undo"
+	}
+	return "abandon"
+}
+
+func (i intent) action() bool {
+	return i == restoreIntent || i == undoIntent || i == abandonIntent
+}
+
+func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
+	switch {
+	case key.Matches(msg, k.down):
+		return moveDownIntent
+	case key.Matches(msg, k.up):
+		return moveUpIntent
+	case key.Matches(msg, k.halfDown):
+		return halfPageDownIntent
+	case key.Matches(msg, k.halfUp):
+		return halfPageUpIntent
+	case key.Matches(msg, k.top):
+		return topIntent
+	case key.Matches(msg, k.bottom):
+		return bottomIntent
+	case key.Matches(msg, k.expand):
+		return expandIntent
+	case key.Matches(msg, k.collapse):
+		return collapseIntent
+	case key.Matches(msg, k.restore):
+		return restoreIntent
+	case key.Matches(msg, k.undo):
+		return undoIntent
+	case key.Matches(msg, k.abandon):
+		return abandonIntent
+	case key.Matches(msg, k.reload):
+		return reloadIntent
+	}
+	return noIntent
+}
+
+func (k keyMap) resolveConfirm(msg tea.KeyPressMsg) intent {
+	if !msg.IsRepeat && key.Matches(msg, k.confirm) {
+		return confirmIntent
+	}
+	return noIntent
 }
 
 func newKeyMap() keyMap {
@@ -82,12 +133,19 @@ func newKeyMap() keyMap {
 type Env struct {
 	ui.Layout
 	Dropped int
+	Active  bool
+	Lock    tab.Lock
 }
 
-type Intent struct {
+type Effect struct {
 	Status  string
 	Refresh bool
-	Run     *Action
+	Rewrite *tab.Rewrite
+}
+
+type pending struct {
+	action intent
+	op     jj.Operation
 }
 
 type Model struct {
@@ -102,7 +160,7 @@ type Model struct {
 	cursor   int
 	top      int
 	seq      int
-	confirm  *Action
+	confirm  *pending
 	expanded map[string]bool
 }
 
@@ -141,8 +199,8 @@ func (o Model) OverlayOpen() bool {
 	return o.confirm != nil
 }
 
-func (o Model) Ignores(msg tea.KeyPressMsg, reloading bool) bool {
-	return o.confirm == nil && key.Matches(msg, o.keys.restore, o.keys.undo, o.keys.abandon) && (msg.IsRepeat || reloading || o.loading)
+func (o Model) Ignores(msg tea.KeyPressMsg, env Env) bool {
+	return o.confirm == nil && o.keys.resolve(msg).action() && (msg.IsRepeat || env.Lock.Busy || o.loading)
 }
 
 func (o *Model) move(delta int) {
@@ -280,13 +338,13 @@ func (o *Model) MarkStale() {
 	o.stale = true
 }
 
-func (o *Model) Update(msg tea.Msg, active bool) (tea.Cmd, bool) {
+func (o *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 	loaded, ok := msg.(loadedMsg)
 	if !ok {
-		return nil, false
+		return nil, Effect{}, false
 	}
 	if loaded.seq != o.seq {
-		return nil, true
+		return nil, Effect{}, true
 	}
 	want := o.SelectedID()
 	o.loading = false
@@ -301,74 +359,96 @@ func (o *Model) Update(msg tea.Msg, active bool) (tea.Cmd, bool) {
 	} else {
 		o.cursor = max(min(o.cursor, len(o.items)-1), 0)
 	}
-	if o.stale && active {
-		return o.Load(), true
+	if o.stale && env.Active {
+		return o.Load(), Effect{}, true
 	}
-	return nil, true
+	return nil, Effect{}, true
 }
 
-func (o *Model) Key(msg tea.KeyPressMsg, env Env) Intent {
+func (o *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	if o.confirm != nil {
-		return o.confirmKey(msg)
+		return nil, o.confirmKey(msg, env)
 	}
 	half := max(env.ListHeight/2, 1)
 	width := listWidth(env)
-	switch {
-	case key.Matches(msg, o.keys.down):
-		o.jump(1, listWidth(env))
-	case key.Matches(msg, o.keys.up):
-		o.jump(-1, listWidth(env))
-	case key.Matches(msg, o.keys.halfDown):
+	switch in := o.keys.resolve(msg); in {
+	case moveDownIntent:
+		o.jump(1, width)
+	case moveUpIntent:
+		o.jump(-1, width)
+	case halfPageDownIntent:
 		o.scrollPage(half, env.ListHeight, width)
-	case key.Matches(msg, o.keys.halfUp):
+	case halfPageUpIntent:
 		o.scrollPage(-half, env.ListHeight, width)
-	case key.Matches(msg, o.keys.top):
+	case topIntent:
 		o.jump(-len(o.items), width)
-	case key.Matches(msg, o.keys.bottom):
+	case bottomIntent:
 		o.jump(len(o.items), width)
-	case key.Matches(msg, o.keys.expand):
+	case expandIntent:
 		o.expand(env.ListHeight, width)
-	case key.Matches(msg, o.keys.collapse):
+	case collapseIntent:
 		if s := o.selected(); s != nil {
 			delete(o.expanded, s.ID)
 		}
-	case key.Matches(msg, o.keys.restore):
-		return o.ask(Restore)
-	case key.Matches(msg, o.keys.undo):
-		return o.ask(Undo)
-	case key.Matches(msg, o.keys.abandon):
-		return o.ask(Abandon)
-	case key.Matches(msg, o.keys.reload):
-		return Intent{Refresh: !o.loading}
+	case restoreIntent, undoIntent, abandonIntent:
+		return nil, o.ask(in)
+	case reloadIntent:
+		return nil, Effect{Refresh: !o.loading}
 	}
-	return Intent{}
+	return nil, Effect{}
 }
 
-func (o *Model) ask(kind Kind) Intent {
+func (o *Model) ask(action intent) Effect {
 	s := o.selected()
 	switch {
 	case s == nil:
-		return Intent{}
-	case kind == Restore && s.Current:
-		return Intent{Status: "already at operation " + ui.ShortID(s.ID)}
-	case kind == Undo && s.Root:
-		return Intent{Status: "the root operation cannot be undone"}
-	case kind == Abandon && s.Root:
-		return Intent{Status: "the root operation cannot be abandoned"}
-	case kind == Abandon && s.Current:
-		return Intent{Status: "the current operation cannot be abandoned; press " + o.keys.undo.Help().Key + " to undo it first"}
+		return Effect{}
+	case action == restoreIntent && s.Current:
+		return Effect{Status: "already at operation " + ui.ShortID(s.ID)}
+	case action == undoIntent && s.Root:
+		return Effect{Status: "the root operation cannot be undone"}
+	case action == abandonIntent && s.Root:
+		return Effect{Status: "the root operation cannot be abandoned"}
+	case action == abandonIntent && s.Current:
+		return Effect{Status: "the current operation cannot be abandoned; press " + o.keys.undo.Help().Key + " to undo it first"}
 	}
-	o.confirm = &Action{Kind: kind, Op: *s}
-	return Intent{}
+	o.confirm = &pending{action: action, op: *s}
+	return Effect{}
 }
 
-func (o *Model) confirmKey(msg tea.KeyPressMsg) Intent {
+func (o *Model) confirmKey(msg tea.KeyPressMsg, env Env) Effect {
 	c := o.confirm
 	o.confirm = nil
-	if msg.IsRepeat || !key.Matches(msg, o.keys.confirm) || o.SelectedID() != c.Op.ID {
-		return Intent{}
+	switch {
+	case o.keys.resolveConfirm(msg) != confirmIntent, o.SelectedID() != c.op.ID, env.Lock.Busy:
+		return Effect{}
+	case env.Lock.Reason != "":
+		return Effect{Status: env.Lock.Reason}
 	}
-	return Intent{Run: c}
+	rw := o.rewrite(*c)
+	return Effect{Rewrite: &rw}
+}
+
+func (o Model) rewrite(c pending) tab.Rewrite {
+	src, id, short := o.src, c.op.ID, ui.ShortID(c.op.ID)
+	return tab.Rewrite{Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
+		switch c.action {
+		case restoreIntent:
+			if err := src.RestoreOperation(ctx, id); err != nil {
+				return tab.Result{KeepPicks: true}, fmt.Errorf("restore operation %s: %w", short, err)
+			}
+			return tab.Result{Done: "restored operation " + short, Replaced: head.WorkingCopy, Restored: true}, nil
+		case undoIntent:
+			if err := src.RevertOperation(ctx, id); err != nil {
+				return tab.Result{KeepPicks: true}, fmt.Errorf("undo operation %s: %w", short, err)
+			}
+			return tab.Result{Done: "undid operation " + short, Replaced: head.WorkingCopy, Restored: true}, nil
+		}
+		if err := src.AbandonOperation(ctx, id); err != nil {
+			return tab.Result{KeepPicks: true}, fmt.Errorf("abandon operation %s: %w", short, err)
+		}
+		return tab.Result{Done: "abandoned operation " + short, KeepPicks: true}, nil
+	}}
 }
 
 func (o Model) Overlay(env Env) string {
@@ -385,23 +465,23 @@ func (o Model) Overlay(env Env) string {
 		}
 		return out
 	}
-	verb := c.Kind.verb()
-	lines := wrap(ui.Fg(p.Title).Bold(true), strings.ToUpper(verb[:1])+verb[1:]+" operation "+ui.ShortID(c.Op.ID))
-	lines = append(lines, wrap(ui.Fg(p.Strong), describe(c.Op))...)
+	verb := c.action.verb()
+	lines := wrap(ui.Fg(p.Title).Bold(true), strings.ToUpper(verb[:1])+verb[1:]+" operation "+ui.ShortID(c.op.ID))
+	lines = append(lines, wrap(ui.Fg(p.Strong), describe(c.op))...)
 	var args []string
-	if c.Op.Args != "" {
-		args = wrap(ui.Fg(p.Muted), c.Op.Args)
+	if c.op.Args != "" {
+		args = wrap(ui.Fg(p.Muted), c.op.Args)
 	}
-	tail := wrap(ui.Fg(p.Muted), c.Op.Time+" by "+c.Op.User)
-	switch c.Kind {
-	case Restore:
+	tail := wrap(ui.Fg(p.Muted), c.op.Time+" by "+c.op.User)
+	switch c.action {
+	case restoreIntent:
 		tail = append(tail, wrap(ui.Fg(p.Picked), "Returns the repo to its state after this operation")...)
-	case Undo:
+	case undoIntent:
 		tail = append(tail, wrap(ui.Fg(p.Picked), "Applies the inverse of this operation")...)
-	case Abandon:
+	case abandonIntent:
 		tail = append(tail, wrap(ui.Fg(p.Removed), "Removes the operation from the history; the repo is unchanged")...)
 	}
-	if d := env.Dropped; d > 0 && c.Kind != Abandon {
+	if d := env.Dropped; d > 0 && c.action != abandonIntent {
 		tail = append(tail, wrap(ui.Fg(p.Removed), fmt.Sprintf("Drops %d selected %s", d, ui.Plural(d, "hunk")))...)
 	}
 	footer := wrap(ui.Fg(p.Muted), o.keys.confirm.Help().Key+" "+verb+" · any other key cancels")

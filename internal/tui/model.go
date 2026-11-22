@@ -193,8 +193,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	default:
 		if c, in, ok := m.bookmarks.Update(msg, m.bookmarkEnv()); ok {
 			cmd = m.bookmarkEffects(c, in)
-		} else if c, ok := m.operations.Update(msg, m.view == operationsView); ok {
-			cmd = c
+		} else if c, in, ok := m.operations.Update(msg, m.operationEnv()); ok {
+			cmd = m.operationEffects(c, in)
 		} else if c, in, ok := m.log.Update(msg, m.logEnv()); ok {
 			cmd = m.logEffects(c, in)
 		} else if m.view == logView {

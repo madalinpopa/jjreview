@@ -14,18 +14,36 @@ import (
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
 	"github.com/madalinpopa/jjreview/internal/tui/operations"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type fakeSource struct {
-	items []jj.Operation
-	err   error
-	calls int
+	items  []jj.Operation
+	err    error
+	calls  int
+	runs   []string
+	runErr error
 }
 
 func (s *fakeSource) Operations(context.Context) ([]jj.Operation, error) {
 	s.calls++
 	return slices.Clone(s.items), s.err
+}
+
+func (s *fakeSource) RestoreOperation(_ context.Context, id string) error {
+	s.runs = append(s.runs, "restore "+id)
+	return s.runErr
+}
+
+func (s *fakeSource) RevertOperation(_ context.Context, id string) error {
+	s.runs = append(s.runs, "revert "+id)
+	return s.runErr
+}
+
+func (s *fakeSource) AbandonOperation(_ context.Context, id string) error {
+	s.runs = append(s.runs, "abandon "+id)
+	return s.runErr
 }
 
 func newSource() *fakeSource {
@@ -45,6 +63,7 @@ func env(width, listHeight int) operations.Env {
 		BodyHeight: listHeight + ui.CardChrome,
 		ListHeight: listHeight,
 		ModalWidth: 64,
+		Active:     true,
 	}
 }
 
@@ -59,7 +78,7 @@ func run(t *testing.T, cmd tea.Cmd) tea.Msg {
 func loaded(t *testing.T, src *fakeSource) operations.Model {
 	t.Helper()
 	m := operations.New(t.Context(), src)
-	if _, ok := m.Update(run(t, m.Show()), true); !ok {
+	if _, _, ok := m.Update(run(t, m.Show()), env(80, 10)); !ok {
 		t.Fatal("Update(list result) handled = false, want true")
 	}
 	return m
@@ -77,13 +96,13 @@ func keyMsg(k string) tea.KeyPressMsg {
 	return tea.KeyPressMsg{Code: rune(k[0]), Text: k}
 }
 
-func press(m *operations.Model, e operations.Env, keys ...string) operations.Intent {
-	var in operations.Intent
+func press(m *operations.Model, e operations.Env, keys ...string) operations.Effect {
+	var eff operations.Effect
 	for _, k := range keys {
-		in = m.Key(keyMsg(k), e)
+		_, eff = m.Key(keyMsg(k), e)
 		m.KeepVisible(e)
 	}
-	return in
+	return eff
 }
 
 func screen(m operations.Model, e operations.Env) string {
@@ -134,7 +153,7 @@ func TestLoad_success(t *testing.T) {
 		press(&m, env(80, 10), "j", "j")
 		src.items = append([]jj.Operation{{ID: "ffff9999ffff", Description: "restore to operation cccc3333eeee", Current: true}}, src.items...)
 
-		m.Update(run(t, m.Load()), true)
+		m.Update(run(t, m.Load()), env(80, 10))
 
 		if got := m.SelectedID(); got != "cccc3333eeee" {
 			t.Errorf("SelectedID() = %q, want cccc3333eeee", got)
@@ -148,7 +167,7 @@ func TestLoad_success(t *testing.T) {
 		press(&m, env(80, 10), "j")
 		src.items = slices.Delete(src.items, 1, 2)
 
-		m.Update(run(t, m.Load()), true)
+		m.Update(run(t, m.Load()), env(80, 10))
 
 		if got := m.SelectedID(); got != "cccc3333eeee" {
 			t.Errorf("SelectedID() = %q, want cccc3333eeee", got)
@@ -163,8 +182,8 @@ func TestLoad_success(t *testing.T) {
 		src.items = src.items[:1]
 		second := run(t, m.Load())
 
-		m.Update(second, true)
-		_, ok := m.Update(first, true)
+		m.Update(second, env(80, 10))
+		_, _, ok := m.Update(first, env(80, 10))
 
 		if !ok {
 			t.Error("Update(outdated result) handled = false, want true")
@@ -180,7 +199,7 @@ func TestLoad_success(t *testing.T) {
 		msg := run(t, m.Load())
 		m.MarkStale()
 
-		cmd, _ := m.Update(msg, true)
+		cmd, _, _ := m.Update(msg, env(80, 10))
 
 		if cmd == nil {
 			t.Error("Update(stale result, active) = nil, want a reload")
@@ -193,7 +212,10 @@ func TestLoad_success(t *testing.T) {
 		msg := run(t, m.Load())
 		m.MarkStale()
 
-		cmd, _ := m.Update(msg, false)
+		inactive := env(80, 10)
+		inactive.Active = false
+
+		cmd, _, _ := m.Update(msg, inactive)
 
 		if cmd != nil {
 			t.Error("Update(stale result, inactive) = a command, want nil")
@@ -236,10 +258,10 @@ func TestLoad_failed(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, newSource())
 
-		cmd, ok := m.Update(tea.WindowSizeMsg{Width: 10, Height: 10}, true)
+		cmd, eff, ok := m.Update(tea.WindowSizeMsg{Width: 10, Height: 10}, env(80, 10))
 
-		if ok || cmd != nil {
-			t.Errorf("Update(WindowSizeMsg) = (%v, %t), want (nil, false)", cmd, ok)
+		if ok || cmd != nil || eff != (operations.Effect{}) {
+			t.Errorf("Update(WindowSizeMsg) = (%v, %+v, %t), want (nil, {}, false)", cmd, eff, ok)
 		}
 	})
 }
@@ -267,10 +289,10 @@ func TestKey_success(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, newSource())
 
-		in := press(&m, env(80, 10), "R")
+		eff := press(&m, env(80, 10), "R")
 
-		if !in.Refresh {
-			t.Errorf("Key(R) = %+v, want a refresh", in)
+		if !eff.Refresh {
+			t.Errorf("Key(R) = %+v, want a refresh", eff)
 		}
 	})
 
@@ -279,39 +301,74 @@ func TestKey_success(t *testing.T) {
 		m := loaded(t, newSource())
 		m.Load()
 
-		in := press(&m, env(80, 10), "R")
+		eff := press(&m, env(80, 10), "R")
 
-		if in.Refresh {
-			t.Errorf("Key(R) while loading = %+v, want no refresh", in)
+		if eff.Refresh {
+			t.Errorf("Key(R) while loading = %+v, want no refresh", eff)
 		}
 	})
 
 	tests := map[string]struct {
 		key  string
-		kind operations.Kind
+		run  string
+		want tab.Result
 	}{
-		"r then y restores": {key: "r", kind: operations.Restore},
-		"u then y undoes":   {key: "u", kind: operations.Undo},
-		"a then y abandons": {key: "a", kind: operations.Abandon},
+		"r then y restores": {key: "r", run: "restore cccc3333eeee", want: tab.Result{Done: "restored operation cccc3333", Replaced: true, Restored: true}},
+		"u then y undoes":   {key: "u", run: "revert cccc3333eeee", want: tab.Result{Done: "undid operation cccc3333", Replaced: true, Restored: true}},
+		"a then y abandons": {key: "a", run: "abandon cccc3333eeee", want: tab.Result{Done: "abandoned operation cccc3333", KeepPicks: true}},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			m := loaded(t, newSource())
+			src := newSource()
+			m := loaded(t, src)
 			e := env(80, 10)
 			press(&m, e, "j", "j", tt.key)
 			opened := m.OverlayOpen()
 
-			in := press(&m, e, "y")
+			eff := press(&m, e, "y")
 
 			if !opened {
 				t.Errorf("OverlayOpen() after %s = false, want true", tt.key)
 			}
-			if in.Run == nil || in.Run.Kind != tt.kind || in.Run.Op.ID != "cccc3333eeee" {
-				t.Errorf("Key(y) = %+v, want to run kind %d on cccc3333eeee", in, tt.kind)
-			}
 			if m.OverlayOpen() {
 				t.Error("OverlayOpen() after y = true, want false")
+			}
+			if eff.Rewrite == nil {
+				t.Fatalf("Key(y) = %+v, want a rewrite", eff)
+			}
+			if len(src.runs) != 0 {
+				t.Errorf("runs before the rewrite = %v, want none", src.runs)
+			}
+			got, err := eff.Rewrite.Run(t.Context(), tab.Head{CommitID: "commit1", WorkingCopy: true})
+			if err != nil {
+				t.Fatalf("Rewrite.Run() error = %v", err)
+			}
+			if got != tt.want {
+				t.Errorf("Rewrite.Run() = %+v, want %+v", got, tt.want)
+			}
+			if !slices.Equal(src.runs, []string{tt.run}) {
+				t.Errorf("runs = %v, want [%s]", src.runs, tt.run)
+			}
+		})
+	}
+
+	for _, k := range []string{"r", "u", "a"} {
+		t.Run(k+" off the working copy does not replace the reviewed commit", func(t *testing.T) {
+			t.Parallel()
+			m := loaded(t, newSource())
+
+			eff := press(&m, env(80, 10), "j", "j", k, "y")
+
+			if eff.Rewrite == nil {
+				t.Fatalf("Key(y) = %+v, want a rewrite", eff)
+			}
+			got, err := eff.Rewrite.Run(t.Context(), tab.Head{CommitID: "commit1"})
+			if err != nil {
+				t.Fatalf("Rewrite.Run() error = %v", err)
+			}
+			if got.Replaced {
+				t.Error("Rewrite.Run() Replaced = true, want false")
 			}
 		})
 	}
@@ -322,10 +379,10 @@ func TestKey_success(t *testing.T) {
 		e := env(80, 10)
 		press(&m, e, "j", "j", "r")
 
-		in := press(&m, e, "n")
+		eff := press(&m, e, "n")
 
-		if in != (operations.Intent{}) || m.OverlayOpen() {
-			t.Errorf("Key(n) = %+v, OverlayOpen() = %t, want nothing to run and the prompt closed", in, m.OverlayOpen())
+		if eff != (operations.Effect{}) || m.OverlayOpen() {
+			t.Errorf("Key(n) = %+v, OverlayOpen() = %t, want nothing to run and the prompt closed", eff, m.OverlayOpen())
 		}
 	})
 
@@ -335,10 +392,10 @@ func TestKey_success(t *testing.T) {
 		e := env(80, 10)
 		press(&m, e, "j", "j", "r")
 
-		in := m.Key(tea.KeyPressMsg{Code: 'y', Text: "y", IsRepeat: true}, e)
+		_, eff := m.Key(tea.KeyPressMsg{Code: 'y', Text: "y", IsRepeat: true}, e)
 
-		if in.Run != nil {
-			t.Errorf("Key(repeated y) = %+v, want nothing to run", in)
+		if eff.Rewrite != nil {
+			t.Errorf("Key(repeated y) = %+v, want nothing to run", eff)
 		}
 	})
 
@@ -346,18 +403,21 @@ func TestKey_success(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, newSource())
 		held := tea.KeyPressMsg{Code: 'r', Text: "r", IsRepeat: true}
+		idle := env(80, 10)
+		busy := env(80, 10)
+		busy.Lock = tab.Lock{Busy: true}
 
-		if !m.Ignores(keyMsg("r"), true) {
-			t.Error("Ignores(r, reloading) = false, want true")
+		if !m.Ignores(keyMsg("r"), busy) {
+			t.Error("Ignores(r, busy) = false, want true")
 		}
-		if !m.Ignores(held, false) {
+		if !m.Ignores(held, idle) {
 			t.Error("Ignores(held r) = false, want true")
 		}
-		if m.Ignores(keyMsg("r"), false) {
+		if m.Ignores(keyMsg("r"), idle) {
 			t.Error("Ignores(r) = true, want false")
 		}
-		if m.Ignores(keyMsg("j"), true) {
-			t.Error("Ignores(j, reloading) = true, want false")
+		if m.Ignores(keyMsg("j"), busy) {
+			t.Error("Ignores(j, busy) = true, want false")
 		}
 	})
 }
@@ -379,10 +439,10 @@ func TestKey_failed(t *testing.T) {
 			t.Parallel()
 			m := loaded(t, newSource())
 
-			in := press(&m, env(80, 10), tt.keys...)
+			eff := press(&m, env(80, 10), tt.keys...)
 
-			if in.Status != tt.status || in.Run != nil {
-				t.Errorf("Key(%v) = %+v, want status %q", tt.keys, in, tt.status)
+			if eff.Status != tt.status || eff.Rewrite != nil {
+				t.Errorf("Key(%v) = %+v, want status %q", tt.keys, eff, tt.status)
 			}
 			if m.OverlayOpen() {
 				t.Error("OverlayOpen() = true, want no prompt")
@@ -394,12 +454,91 @@ func TestKey_failed(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{})
 
-		in := press(&m, env(80, 10), "r")
+		eff := press(&m, env(80, 10), "r")
 
-		if in != (operations.Intent{}) || m.OverlayOpen() {
-			t.Errorf("Key(r) on no operations = %+v, OverlayOpen() = %t, want nothing", in, m.OverlayOpen())
+		if eff != (operations.Effect{}) || m.OverlayOpen() {
+			t.Errorf("Key(r) on no operations = %+v, OverlayOpen() = %t, want nothing", eff, m.OverlayOpen())
 		}
 	})
+}
+
+func TestConfirm_failed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("y while the review is busy closes the prompt without a rewrite", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, newSource())
+		e := env(80, 10)
+		press(&m, e, "j", "j", "r")
+		e.Lock = tab.Lock{Busy: true}
+
+		eff := press(&m, e, "y")
+
+		if eff != (operations.Effect{}) || m.OverlayOpen() {
+			t.Errorf("Key(y) while busy = %+v, OverlayOpen() = %t, want nothing and the prompt closed", eff, m.OverlayOpen())
+		}
+	})
+
+	t.Run("y while the review is blocked reports why", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, newSource())
+		e := env(80, 10)
+		press(&m, e, "j", "j", "r")
+		e.Lock = tab.Lock{Reason: "blocked"}
+
+		eff := press(&m, e, "y")
+
+		if eff.Status != "blocked" || eff.Rewrite != nil || m.OverlayOpen() {
+			t.Errorf("Key(y) while blocked = %+v, OverlayOpen() = %t, want status blocked and the prompt closed", eff, m.OverlayOpen())
+		}
+	})
+
+	t.Run("y after the selected operation is gone does not rewrite", func(t *testing.T) {
+		t.Parallel()
+		src := newSource()
+		m := loaded(t, src)
+		e := env(80, 10)
+		press(&m, e, "j", "j", "r")
+		src.items = slices.Delete(src.items, 2, 3)
+		m.Update(run(t, m.Load()), e)
+
+		eff := press(&m, e, "y")
+
+		if eff.Rewrite != nil {
+			t.Errorf("Key(y) = %+v, want no rewrite", eff)
+		}
+	})
+
+	errs := map[string]struct {
+		key  string
+		want string
+	}{
+		"restore": {key: "r", want: "restore operation cccc3333: boom"},
+		"undo":    {key: "u", want: "undo operation cccc3333: boom"},
+		"abandon": {key: "a", want: "abandon operation cccc3333: boom"},
+	}
+	for name, tt := range errs {
+		t.Run("a failed "+name+" keeps the picks and names the operation", func(t *testing.T) {
+			t.Parallel()
+			boom := errors.New("boom")
+			src := newSource()
+			src.runErr = boom
+			m := loaded(t, src)
+
+			eff := press(&m, env(80, 10), "j", "j", tt.key, "y")
+
+			if eff.Rewrite == nil {
+				t.Fatalf("Key(y) = %+v, want a rewrite", eff)
+			}
+			got, err := eff.Rewrite.Run(t.Context(), tab.Head{CommitID: "commit1", WorkingCopy: true})
+			if !errors.Is(err, boom) || err.Error() != tt.want {
+				t.Errorf("Rewrite.Run() error = %v, want %q wrapping boom", err, tt.want)
+			}
+			if got != (tab.Result{KeepPicks: true}) {
+				t.Errorf("Rewrite.Run() = %+v, want only KeepPicks", got)
+			}
+		})
+	}
 }
 
 func TestOverlay_success(t *testing.T) {
@@ -611,7 +750,7 @@ func TestExpand_success(t *testing.T) {
 		e := env(80, 10)
 		press(&m, e, "j", "j", "l")
 
-		m.Update(run(t, m.Load()), true)
+		m.Update(run(t, m.Load()), env(80, 10))
 
 		if got := screen(m, e); !strings.Contains(got, "jj new") {
 			t.Errorf("View() after reload = %q, want the command still shown", got)
@@ -626,10 +765,10 @@ func TestExpand_success(t *testing.T) {
 		press(&m, e, "j", "j", "l")
 		all := slices.Clone(src.items)
 		src.items = slices.Delete(src.items, 2, 3)
-		m.Update(run(t, m.Load()), true)
+		m.Update(run(t, m.Load()), env(80, 10))
 		src.items = all
 
-		m.Update(run(t, m.Load()), true)
+		m.Update(run(t, m.Load()), env(80, 10))
 
 		if got := screen(m, e); strings.Contains(got, "jj new") {
 			t.Errorf("View() = %q, want the forgotten command hidden", got)
