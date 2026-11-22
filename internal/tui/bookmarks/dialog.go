@@ -129,22 +129,22 @@ func (b *Model) modalKey(msg tea.KeyPressMsg) tea.Cmd {
 	if mo.saving {
 		return nil
 	}
-	k := msg.String()
+	it := b.keys.resolveDialog(msg)
 	if mo.done {
-		if slices.Contains([]string{"esc", "enter", "ctrl+enter", "ctrl+s"}, k) {
+		if it == cancelIntent || it == saveIntent {
 			b.modal = nil
 		}
 		return nil
 	}
-	switch k {
-	case "esc":
+	switch it {
+	case cancelIntent:
 		b.modal = nil
 		return nil
-	case "tab", "shift+tab", "up", "down":
+	case nextFieldIntent:
 		mo.inputs[mo.field].Blur()
 		mo.field = 1 - mo.field
 		return mo.inputs[mo.field].Focus()
-	case "enter", "ctrl+enter", "ctrl+s":
+	case saveIntent:
 		return b.save()
 	}
 	return b.input(msg)
@@ -274,21 +274,21 @@ func joinWarnings(warnings []string) string {
 	return strings.Join(slices.DeleteFunc(warnings, func(w string) bool { return w == "" }), "\n")
 }
 
-func (b *Model) applySaved(msg savedMsg) Intent {
-	var in Intent
+func (b *Model) applySaved(msg savedMsg) Effect {
+	var eff Effect
 	mo := b.modal
 	if msg.refresh {
 		if mo == nil || !mo.picked {
 			b.want = msg.name
 		}
-		in.Refresh = true
+		eff.Refresh = true
 	}
 	refused := msg.refused != bookmarkMove{}
 	if msg.err == nil && !refused {
-		in.Status = "✓ saved " + msg.name
+		eff.Status = "✓ saved " + msg.name
 	}
 	if mo == nil {
-		return in
+		return eff
 	}
 	mo.saving = false
 	mo.err = msg.err
@@ -308,7 +308,7 @@ func (b *Model) applySaved(msg savedMsg) Intent {
 	default:
 		b.modal = nil
 	}
-	return in
+	return eff
 }
 
 func (b *Model) Resize(env Env) {

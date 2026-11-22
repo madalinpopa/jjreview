@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -25,36 +24,6 @@ type Source interface {
 	Change(ctx context.Context, rev string) (jj.Change, error)
 }
 
-type keyMap struct {
-	down     key.Binding
-	up       key.Binding
-	halfDown key.Binding
-	halfUp   key.Binding
-	top      key.Binding
-	bottom   key.Binding
-	open     key.Binding
-	create   key.Binding
-	edit     key.Binding
-	remove   key.Binding
-	reload   key.Binding
-}
-
-func newKeyMap() keyMap {
-	return keyMap{
-		down:     key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "next bookmark")),
-		up:       key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "previous bookmark")),
-		halfDown: key.NewBinding(key.WithKeys("ctrl+d", "pgdown"), key.WithHelp("^d", "half page down")),
-		halfUp:   key.NewBinding(key.WithKeys("ctrl+u", "pgup"), key.WithHelp("^u", "half page up")),
-		top:      key.NewBinding(key.WithKeys("g", "home"), key.WithHelp("g", "first bookmark")),
-		bottom:   key.NewBinding(key.WithKeys("G", "end"), key.WithHelp("G", "last bookmark")),
-		open:     key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "review the target revision")),
-		create:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "new bookmark on a revision")),
-		edit:     key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit the bookmark: rename or move it")),
-		remove:   key.NewBinding(key.WithKeys("d"), key.WithHelp("d", "delete the bookmark (y confirms)")),
-		reload:   key.NewBinding(key.WithKeys("R"), key.WithHelp("R", "refresh the bookmarks")),
-	}
-}
-
 type Env struct {
 	ui.Layout
 	Head       string
@@ -67,7 +36,7 @@ func (e Env) modalInner() int {
 	return ui.InputBoxInner(e.ModalWidth)
 }
 
-type Intent struct {
+type Effect struct {
 	Status   string
 	Refresh  bool
 	Retarget bool
@@ -188,11 +157,11 @@ func (b *Model) MarkStale() {
 	b.stale = true
 }
 
-func (b *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Intent, bool) {
+func (b *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 	switch msg := msg.(type) {
 	case loadedMsg:
-		cmd, in := b.applyList(msg, env)
-		return cmd, in, true
+		cmd, eff := b.applyList(msg, env)
+		return cmd, eff, true
 	case savedMsg:
 		return nil, b.applySaved(msg), true
 	case pickedMsg:
@@ -200,12 +169,12 @@ func (b *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Intent, bool) {
 	case deletedMsg:
 		return nil, b.applyDeleted(msg), true
 	}
-	return nil, Intent{}, false
+	return nil, Effect{}, false
 }
 
-func (b *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Intent) {
+func (b *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Effect) {
 	if msg.seq != b.seq {
-		return nil, Intent{}
+		return nil, Effect{}
 	}
 	before := b.SelectedName()
 	want := cmp.Or(b.want, before)
@@ -221,77 +190,77 @@ func (b *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Intent) {
 	if !b.stale {
 		b.want = ""
 	}
-	in := Intent{Retarget: env.Active && b.selectedRef() != b.opened}
+	eff := Effect{Retarget: env.Active && b.selectedRef() != b.opened}
 	if b.stale && env.Active {
-		return b.Load(), in
+		return b.Load(), eff
 	}
-	return nil, in
+	return nil, eff
 }
 
-func (b *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
+func (b *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	switch {
 	case b.deleting != nil:
-		return b.deleteKey(msg), Intent{}
+		return b.deleteKey(msg), Effect{}
 	case b.modal != nil:
-		return b.modalKey(msg), Intent{}
+		return b.modalKey(msg), Effect{}
 	case b.picker != nil:
 		return b.pickKey(msg, env)
 	}
 	half := max(env.ListHeight/2, 1)
-	switch {
-	case key.Matches(msg, b.keys.down):
+	switch b.keys.resolve(msg) {
+	case moveDownIntent:
 		b.move(1)
-	case key.Matches(msg, b.keys.up):
+	case moveUpIntent:
 		b.move(-1)
-	case key.Matches(msg, b.keys.halfDown):
+	case halfDownIntent:
 		b.scrollPage(half, env.ListHeight)
-	case key.Matches(msg, b.keys.halfUp):
+	case halfUpIntent:
 		b.scrollPage(-half, env.ListHeight)
-	case key.Matches(msg, b.keys.top):
+	case firstIntent:
 		b.move(-len(b.items))
-	case key.Matches(msg, b.keys.bottom):
+	case lastIntent:
 		b.move(len(b.items))
-	case key.Matches(msg, b.keys.open):
+	case openIntent:
 		return nil, b.open()
-	case key.Matches(msg, b.keys.create):
-		return b.openModal(nil, env), Intent{}
-	case key.Matches(msg, b.keys.edit):
+	case createIntent:
+		return b.openModal(nil, env), Effect{}
+	case editIntent:
 		s := b.selected()
 		switch {
 		case s == nil:
 		case s.Conflict:
-			return nil, Intent{Status: s.Name + " is conflicted; resolve it with jj bookmark set"}
+			return nil, Effect{Status: s.Name + " is conflicted; resolve it with jj bookmark set"}
 		default:
-			return b.openModal(s, env), Intent{}
+			return b.openModal(s, env), Effect{}
 		}
-	case key.Matches(msg, b.keys.remove):
+	case deleteIntent:
 		if s := b.selected(); s != nil {
 			b.deleting = new(*s)
 		}
-	case key.Matches(msg, b.keys.reload):
-		return nil, Intent{Refresh: !b.loading}
+	case reloadIntent:
+		return nil, Effect{Refresh: !b.loading}
 	}
-	return nil, Intent{}
+	return nil, Effect{}
 }
 
-func (b *Model) open() Intent {
+func (b *Model) open() Effect {
 	s := b.selected()
 	switch {
 	case s == nil:
-		return Intent{}
+		return Effect{}
 	case s.CommitID == "":
-		return Intent{Status: s.Name + " is conflicted: it has no single target"}
+		return Effect{Status: s.Name + " is conflicted: it has no single target"}
 	}
 	ref := b.selectedRef()
-	in := Intent{Open: s.CommitID, Reopen: ref == b.opened}
+	eff := Effect{Open: s.CommitID, Reopen: ref == b.opened}
 	b.opened = ref
-	return in
+	return eff
 }
 
 func (b *Model) deleteKey(msg tea.KeyPressMsg) tea.Cmd {
 	d := *b.deleting
 	b.deleting = nil
-	if msg.String() != "y" {
+	if b.keys.resolveDelete(msg) != confirmIntent {
 		return nil
 	}
 	ref, ctx, src := refOf(d), b.ctx, b.src
@@ -408,18 +377,18 @@ func observe(ctx context.Context, src Source, names ...string) string {
 	return "now: " + strings.Join(parts, ", ")
 }
 
-func (b *Model) applyDeleted(msg deletedMsg) Intent {
-	in := Intent{Status: "✓ deleted " + msg.name}
+func (b *Model) applyDeleted(msg deletedMsg) Effect {
+	eff := Effect{Status: "✓ deleted " + msg.name}
 	if msg.err != nil {
-		in.Status = msg.err.Error()
+		eff.Status = msg.err.Error()
 	} else if msg.warnings != "" {
-		in.Status += " · " + strings.Join(strings.Fields(msg.warnings), " ")
+		eff.Status += " · " + strings.Join(strings.Fields(msg.warnings), " ")
 	}
 	if msg.refresh {
 		b.want = ""
-		in.Refresh = true
+		eff.Refresh = true
 	}
-	return in
+	return eff
 }
 
 func (b Model) View(env Env) string {

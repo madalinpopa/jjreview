@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -40,50 +39,50 @@ func (b *Model) Pick(e jj.LogEntry) tea.Cmd {
 	return b.Show()
 }
 
-func (b *Model) pickKey(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
+func (b *Model) pickKey(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	pk := b.picker
 	pending := pk.pending
 	pk.pending = nil
 	last := len(b.items)
-	switch {
-	case msg.String() == "esc":
+	switch it := b.keys.resolvePicker(msg); {
+	case it == cancelIntent:
 		b.picker = nil
 	case pk.moving || !b.listed():
-	case pending != nil && msg.String() == "y" && !msg.IsRepeat:
-		return b.movePicked(pk, *pending, true), Intent{}
-	case key.Matches(msg, b.keys.down):
+	case it == confirmIntent && pending != nil:
+		return b.movePicked(pk, *pending, true), Effect{}
+	case it == moveDownIntent:
 		pk.cursor = min(pk.cursor+1, last)
-	case key.Matches(msg, b.keys.up):
+	case it == moveUpIntent:
 		pk.cursor = max(pk.cursor-1, 0)
-	case key.Matches(msg, b.keys.top):
+	case it == firstIntent:
 		pk.cursor = 0
-	case key.Matches(msg, b.keys.bottom):
+	case it == lastIntent:
 		pk.cursor = last
-	case key.Matches(msg, b.keys.open) && !msg.IsRepeat:
+	case it == openIntent:
 		return b.choose(pk, env)
 	}
 	pk.top = ui.ScrollTop(pk.top, pk.cursor, b.pickerRoom(env), last+1)
-	return nil, Intent{}
+	return nil, Effect{}
 }
 
-func (b *Model) choose(pk *picker, env Env) (tea.Cmd, Intent) {
+func (b *Model) choose(pk *picker, env Env) (tea.Cmd, Effect) {
 	if pk.cursor = min(pk.cursor, len(b.items)); pk.cursor == 0 {
 		b.picker = nil
 		env.Head, env.HeadChange, env.HeadTitle = pk.commitID, pk.changeID, pk.title
 		cmd := b.openModal(nil, env)
 		b.modal.picked = true
-		return cmd, Intent{}
+		return cmd, Effect{}
 	}
 	s := b.items[pk.cursor-1]
 	switch {
 	case s.Conflict:
 		b.picker = nil
-		return nil, Intent{Status: s.Name + " is conflicted; resolve it with jj bookmark set"}
+		return nil, Effect{Status: s.Name + " is conflicted; resolve it with jj bookmark set"}
 	case s.CommitID == pk.commitID:
 		b.picker = nil
-		return nil, Intent{Status: s.Name + " is already on " + ui.ShortID(pk.changeID)}
+		return nil, Effect{Status: s.Name + " is already on " + ui.ShortID(pk.changeID)}
 	}
-	return b.movePicked(pk, s, false), Intent{}
+	return b.movePicked(pk, s, false), Effect{}
 }
 
 func (b *Model) movePicked(pk *picker, s jj.Bookmark, allowBackwards bool) tea.Cmd {
@@ -115,29 +114,29 @@ func moveBookmark(ctx context.Context, src Source, s jj.Bookmark, change, to str
 	return msg
 }
 
-func (b *Model) applyPicked(msg pickedMsg) Intent {
+func (b *Model) applyPicked(msg pickedMsg) Effect {
 	pk := b.picker
 	open := pk != nil && pk.moving
 	name := msg.bookmark.Name
 	if msg.refused {
 		if !open {
-			return Intent{Status: name + " would move backwards or sideways; not moved"}
+			return Effect{Status: name + " would move backwards or sideways; not moved"}
 		}
 		pk.moving = false
 		pk.pending = new(msg.bookmark)
-		return Intent{}
+		return Effect{}
 	}
 	if open {
 		b.picker = nil
 	}
-	in := Intent{Status: "moved " + name + " to " + ui.ShortID(msg.change), Refresh: true}
+	eff := Effect{Status: "moved " + name + " to " + ui.ShortID(msg.change), Refresh: true}
 	switch {
 	case msg.err != nil:
-		in.Status, _, _ = strings.Cut(msg.err.Error(), "\n")
+		eff.Status, _, _ = strings.Cut(msg.err.Error(), "\n")
 	case msg.warnings != "":
-		in.Status += " · " + strings.Join(strings.Fields(msg.warnings), " ")
+		eff.Status += " · " + strings.Join(strings.Fields(msg.warnings), " ")
 	}
-	return in
+	return eff
 }
 
 func (b Model) pickerView(env Env) string {

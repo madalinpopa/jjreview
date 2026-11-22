@@ -92,13 +92,13 @@ func TestUpdate_success(t *testing.T) {
 		cmd, _ := m.Key(press("y"), env())
 		msg := run(t, cmd)
 
-		_, in, ok := m.Update(msg, env())
+		_, eff, ok := m.Update(msg, env())
 
 		if !ok {
 			t.Errorf("Update(%T) handled = false, want true", msg)
 		}
-		if in.Status != "✓ deleted main" || !in.Refresh {
-			t.Errorf("Update(%T) intent = %+v, want deleted status and a refresh", msg, in)
+		if eff.Status != "✓ deleted main" || !eff.Refresh {
+			t.Errorf("Update(%T) effect = %+v, want deleted status and a refresh", msg, eff)
 		}
 	})
 
@@ -110,13 +110,13 @@ func TestUpdate_success(t *testing.T) {
 		cmd, _ := m.Key(press("enter"), env())
 		msg := run(t, cmd)
 
-		_, in, ok := m.Update(msg, env())
+		_, eff, ok := m.Update(msg, env())
 
 		if !ok {
 			t.Errorf("Update(%T) handled = false, want true", msg)
 		}
-		if in.Status != "✓ saved feature" || !in.Refresh {
-			t.Errorf("Update(%T) intent = %+v, want saved status and a refresh", msg, in)
+		if eff.Status != "✓ saved feature" || !eff.Refresh {
+			t.Errorf("Update(%T) effect = %+v, want saved status and a refresh", msg, eff)
 		}
 	})
 }
@@ -135,10 +135,10 @@ func TestUpdate_failed(t *testing.T) {
 			t.Parallel()
 			m := loaded(t, newSource())
 
-			cmd, in, ok := m.Update(msg, env())
+			cmd, eff, ok := m.Update(msg, env())
 
-			if ok || cmd != nil || in != (bookmarks.Intent{}) {
-				t.Errorf("Update(%T) = %v, %+v, %v, want nil, zero intent, false", msg, cmd, in, ok)
+			if ok || cmd != nil || eff != (bookmarks.Effect{}) {
+				t.Errorf("Update(%T) = %v, %+v, %v, want nil, zero effect, false", msg, cmd, eff, ok)
 			}
 		})
 	}
@@ -151,10 +151,10 @@ func TestKeyOpen_success(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, newSource())
 
-		_, in := m.Key(press("enter"), env())
+		_, eff := m.Key(press("enter"), env())
 
-		if in.Open != "aaaa" || in.Reopen {
-			t.Errorf("Key(enter) intent = %+v, want Open aaaa without Reopen", in)
+		if eff.Open != "aaaa" || eff.Reopen {
+			t.Errorf("Key(enter) effect = %+v, want Open aaaa without Reopen", eff)
 		}
 	})
 
@@ -163,10 +163,10 @@ func TestKeyOpen_success(t *testing.T) {
 		m := loaded(t, newSource())
 		m.Key(press("enter"), env())
 
-		_, in := m.Key(press("enter"), env())
+		_, eff := m.Key(press("enter"), env())
 
-		if in.Open != "aaaa" || !in.Reopen {
-			t.Errorf("Key(enter) intent = %+v, want Open aaaa and Reopen", in)
+		if eff.Open != "aaaa" || !eff.Reopen {
+			t.Errorf("Key(enter) effect = %+v, want Open aaaa and Reopen", eff)
 		}
 	})
 
@@ -178,10 +178,10 @@ func TestKeyOpen_success(t *testing.T) {
 		src.items[0].CommitID = "bbbb"
 		m.Update(run(t, m.Load()), env())
 
-		_, in := m.Key(press("enter"), env())
+		_, eff := m.Key(press("enter"), env())
 
-		if in.Open != "bbbb" || in.Reopen {
-			t.Errorf("Key(enter) intent = %+v, want Open bbbb without Reopen", in)
+		if eff.Open != "bbbb" || eff.Reopen {
+			t.Errorf("Key(enter) effect = %+v, want Open bbbb without Reopen", eff)
 		}
 	})
 }
@@ -211,10 +211,10 @@ func TestReloadRetarget_success(t *testing.T) {
 			e := env()
 			e.Active = tt.active
 
-			_, in, _ := m.Update(run(t, m.Load()), e)
+			_, eff, _ := m.Update(run(t, m.Load()), e)
 
-			if in.Retarget != tt.want {
-				t.Errorf("Update(reload) Retarget = %v, want %v", in.Retarget, tt.want)
+			if eff.Retarget != tt.want {
+				t.Errorf("Update(reload) Retarget = %v, want %v", eff.Retarget, tt.want)
 			}
 		})
 	}

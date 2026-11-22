@@ -59,25 +59,25 @@ func (m *Model) bookmarksKey(msg tea.KeyPressMsg) tea.Cmd {
 	if cmd, ok := m.globalKey(msg, armed); ok {
 		return cmd
 	}
-	cmd, in := m.bookmarks.Key(msg, m.bookmarkEnv())
-	if in.Open == "" {
-		return m.bookmarkEffects(cmd, in)
+	cmd, eff := m.bookmarks.Key(msg, m.bookmarkEnv())
+	if eff.Open == "" {
+		return m.bookmarkEffects(cmd, eff)
 	}
-	if !in.Reopen {
+	if !eff.Reopen {
 		armed = ""
 	}
-	return m.openCommit(msg, armed, in.Open)
+	return m.openCommit(msg, armed, eff.Open)
 }
 
-func (m *Model) bookmarkEffects(cmd tea.Cmd, in bookmarks.Intent) tea.Cmd {
-	if in.Status != "" {
-		m.status = in.Status
+func (m *Model) bookmarkEffects(cmd tea.Cmd, eff bookmarks.Effect) tea.Cmd {
+	if eff.Status != "" {
+		m.status = eff.Status
 	}
-	if in.Retarget && slices.Contains(m.keys.open.Keys(), m.armed) {
+	if eff.Retarget && slices.Contains(m.keys.open.Keys(), m.armed) {
 		m.armed = ""
 		m.status = ""
 	}
-	if in.Refresh {
+	if eff.Refresh {
 		if m.view == logView {
 			m.log.RestorePosition(m.log.HoldPosition().Targeting(m.log.SelectedChange()))
 		}
