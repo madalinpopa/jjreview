@@ -12,9 +12,11 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 	m.status = ""
 	armed := m.armed
 	m.armed = ""
-	if cmd, ok := m.globalKey(msg, armed); ok {
-		m.review.CancelRange()
-		return cmd
+	if !m.review.Searching() {
+		if cmd, ok := m.globalKey(msg, armed); ok {
+			m.review.CancelRange()
+			return cmd
+		}
 	}
 	cmd, eff := m.review.Key(msg, m.reviewEnv())
 	switch {
