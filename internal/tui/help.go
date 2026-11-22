@@ -12,12 +12,12 @@ import (
 const helpChrome = 4
 
 func (m *Model) helpKey(msg tea.KeyPressMsg) {
-	switch {
-	case key.Matches(msg, m.keys.closeHelp):
+	switch m.keys.resolveHelpOverlay(msg) {
+	case closeHelpIntent:
 		m.help = false
-	case key.Matches(msg, m.keys.scrollDown):
+	case scrollHelpDownIntent:
 		m.helpTop = min(m.helpTop+1, m.helpOverflow())
-	case key.Matches(msg, m.keys.scrollUp):
+	case scrollHelpUpIntent:
 		m.helpTop = max(min(m.helpTop, m.helpOverflow())-1, 0)
 	}
 }
@@ -87,4 +87,25 @@ func (m Model) helpView() string {
 		BorderForeground(p.ModalBorder).
 		Padding(0, 2).
 		Render(strings.Join(lines, "\n"))
+}
+
+type helpOverlayIntent int
+
+const (
+	noHelpOverlayIntent helpOverlayIntent = iota
+	closeHelpIntent
+	scrollHelpDownIntent
+	scrollHelpUpIntent
+)
+
+func (k globalKeyMap) resolveHelpOverlay(msg tea.KeyPressMsg) helpOverlayIntent {
+	switch {
+	case key.Matches(msg, k.closeHelp):
+		return closeHelpIntent
+	case key.Matches(msg, k.scrollDown):
+		return scrollHelpDownIntent
+	case key.Matches(msg, k.scrollUp):
+		return scrollHelpUpIntent
+	}
+	return noHelpOverlayIntent
 }

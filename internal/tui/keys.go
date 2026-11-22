@@ -16,52 +16,53 @@ func (m *Model) reviewKey(msg tea.KeyPressMsg) tea.Cmd {
 	if cmd, ok := m.globalKey(msg, armed); ok {
 		return cmd
 	}
-	switch {
-	case key.Matches(msg, m.reviewKeys.switchPane):
+	intent := m.reviewKeys.resolve(msg)
+	switch intent {
+	case reviewSwitchPaneIntent:
 		m.filesFocus = !m.filesFocus
-	case key.Matches(msg, m.reviewKeys.down):
+	case reviewDownIntent:
 		return m.move(1)
-	case key.Matches(msg, m.reviewKeys.up):
+	case reviewUpIntent:
 		return m.move(-1)
-	case key.Matches(msg, m.reviewKeys.halfDown):
+	case reviewHalfDownIntent:
 		return m.page(m.halfPage())
-	case key.Matches(msg, m.reviewKeys.halfUp):
+	case reviewHalfUpIntent:
 		return m.page(-m.halfPage())
-	case key.Matches(msg, m.reviewKeys.top):
+	case reviewTopIntent:
 		if m.filesFocus {
 			return m.moveFile(-len(m.files))
 		}
 		m.cursor = firstRow(m.rows())
-	case key.Matches(msg, m.reviewKeys.bottom):
+	case reviewBottomIntent:
 		return m.move(m.extent())
-	case key.Matches(msg, m.reviewKeys.nextHunk):
+	case reviewNextHunkIntent:
 		m.jumpHunk(1)
-	case key.Matches(msg, m.reviewKeys.prevHunk):
+	case reviewPrevHunkIntent:
 		m.jumpHunk(-1)
-	case key.Matches(msg, m.reviewKeys.nextFile):
+	case reviewNextFileIntent:
 		return m.moveFile(1)
-	case key.Matches(msg, m.reviewKeys.prevFile):
+	case reviewPrevFileIntent:
 		return m.moveFile(-1)
-	case key.Matches(msg, m.reviewKeys.workingCopy):
+	case reviewWorkingCopyIntent:
 		if m.canLoad() && m.confirmDrop(msg, armed) {
 			return m.loadRevision(workingCopyStep, "@")
 		}
-	case key.Matches(msg, m.reviewKeys.reload):
+	case reviewReloadIntent:
 		if m.canReload() && m.confirmDrop(msg, armed) {
 			return m.reload()
 		}
-	case key.Matches(msg, m.reviewKeys.full):
+	case reviewFullIntent:
 		m.full = !m.full
 		m.cursor = firstRow(m.rows())
 		return m.requestContent()
-	case key.Matches(msg, m.reviewKeys.commit):
+	case reviewCommitIntent:
 		return m.openModal()
-	case key.Matches(msg, m.reviewKeys.edit):
+	case reviewEditIntent:
 		if path, ok := m.editablePath(); ok && m.confirmDrop(msg, armed) {
 			return m.startEdit(path)
 		}
 	default:
-		m.hunkKey(msg)
+		m.hunkKey(intent)
 	}
 	return nil
 }
@@ -86,25 +87,25 @@ func (m Model) dropLabel(msg tea.KeyPressMsg) string {
 	return msg.String()
 }
 
-func (m *Model) hunkKey(msg tea.KeyPressMsg) {
+func (m *Model) hunkKey(intent reviewIntent) {
 	if !m.ready() {
 		return
 	}
-	switch {
-	case key.Matches(msg, m.reviewKeys.fold):
+	switch intent {
+	case reviewFoldIntent:
 		m.toggleFold()
-	case key.Matches(msg, m.reviewKeys.removed):
+	case reviewRemovedIntent:
 		if m.filesFocus {
 			m.status = m.reviewKeys.removed.Help().Key + " works in the diff pane; press " + m.reviewKeys.switchPane.Help().Key
 			return
 		}
 		m.toggleRemoved()
-	case key.Matches(msg, m.reviewKeys.removedAll):
+	case reviewRemovedAllIntent:
 		m.toggleRemovedAll()
-	case key.Matches(msg, m.reviewKeys.foldAll):
+	case reviewFoldAllIntent:
 		m.currentReview().foldAll()
 		m.cursor = firstRow(m.rows())
-	case key.Matches(msg, m.reviewKeys.selectHunk, m.reviewKeys.selectFile):
+	case reviewSelectHunkIntent, reviewSelectFileIntent:
 		if m.reloading {
 			m.status = reloadingStatus
 			return
@@ -117,7 +118,7 @@ func (m *Model) hunkKey(msg tea.KeyPressMsg) {
 			m.status = immutableStatus
 			return
 		}
-		if key.Matches(msg, m.reviewKeys.selectFile) || m.filesFocus {
+		if intent == reviewSelectFileIntent || m.filesFocus {
 			m.currentReview().toggleFile()
 			return
 		}

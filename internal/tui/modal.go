@@ -133,13 +133,13 @@ func (m *Model) modalKey(msg tea.KeyPressMsg) tea.Cmd {
 	if mo.committing {
 		return nil
 	}
-	switch msg.String() {
-	case "esc":
+	switch resolveCommitDialog(msg) {
+	case cancelCommitIntent:
 		m.closeModal()
 		return nil
-	case "ctrl+r":
+	case regenerateMessageIntent:
 		return m.generate()
-	case "ctrl+enter", "ctrl+s":
+	case submitCommitIntent:
 		if mo.generating {
 			return nil
 		}
@@ -250,4 +250,25 @@ func inputStyles(p theme.Theme) textarea.Styles {
 		Blurred: state,
 		Cursor:  textarea.CursorStyle{Color: p.Selection, Shape: tea.CursorBar},
 	}
+}
+
+type commitDialogIntent int
+
+const (
+	typeMessageIntent commitDialogIntent = iota
+	cancelCommitIntent
+	regenerateMessageIntent
+	submitCommitIntent
+)
+
+func resolveCommitDialog(msg tea.KeyPressMsg) commitDialogIntent {
+	switch msg.String() {
+	case "esc":
+		return cancelCommitIntent
+	case "ctrl+r":
+		return regenerateMessageIntent
+	case "ctrl+enter", "ctrl+s":
+		return submitCommitIntent
+	}
+	return typeMessageIntent
 }

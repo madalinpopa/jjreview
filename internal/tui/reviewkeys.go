@@ -2,6 +2,7 @@ package tui
 
 import (
 	"charm.land/bubbles/v2/key"
+	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -105,4 +106,82 @@ func (m Model) reviewOtherHelp() []ui.KeyHint {
 		hints = append(hints, ui.Describe(m.reviewKeys.reload), ui.Describe(m.reviewKeys.edit))
 	}
 	return append(hints, ui.Describe(m.reviewKeys.full))
+}
+
+type reviewIntent int
+
+const (
+	noReviewIntent reviewIntent = iota
+	reviewSwitchPaneIntent
+	reviewDownIntent
+	reviewUpIntent
+	reviewHalfDownIntent
+	reviewHalfUpIntent
+	reviewTopIntent
+	reviewBottomIntent
+	reviewNextHunkIntent
+	reviewPrevHunkIntent
+	reviewNextFileIntent
+	reviewPrevFileIntent
+	reviewWorkingCopyIntent
+	reviewReloadIntent
+	reviewFullIntent
+	reviewCommitIntent
+	reviewEditIntent
+	reviewFoldIntent
+	reviewRemovedIntent
+	reviewRemovedAllIntent
+	reviewFoldAllIntent
+	reviewSelectHunkIntent
+	reviewSelectFileIntent
+)
+
+func (k reviewKeyMap) resolve(msg tea.KeyPressMsg) reviewIntent {
+	switch {
+	case key.Matches(msg, k.switchPane):
+		return reviewSwitchPaneIntent
+	case key.Matches(msg, k.down):
+		return reviewDownIntent
+	case key.Matches(msg, k.up):
+		return reviewUpIntent
+	case key.Matches(msg, k.halfDown):
+		return reviewHalfDownIntent
+	case key.Matches(msg, k.halfUp):
+		return reviewHalfUpIntent
+	case key.Matches(msg, k.top):
+		return reviewTopIntent
+	case key.Matches(msg, k.bottom):
+		return reviewBottomIntent
+	case key.Matches(msg, k.nextHunk):
+		return reviewNextHunkIntent
+	case key.Matches(msg, k.prevHunk):
+		return reviewPrevHunkIntent
+	case key.Matches(msg, k.nextFile):
+		return reviewNextFileIntent
+	case key.Matches(msg, k.prevFile):
+		return reviewPrevFileIntent
+	case key.Matches(msg, k.workingCopy):
+		return reviewWorkingCopyIntent
+	case key.Matches(msg, k.reload):
+		return reviewReloadIntent
+	case key.Matches(msg, k.full):
+		return reviewFullIntent
+	case key.Matches(msg, k.commit):
+		return reviewCommitIntent
+	case key.Matches(msg, k.edit):
+		return reviewEditIntent
+	case key.Matches(msg, k.fold):
+		return reviewFoldIntent
+	case key.Matches(msg, k.removed):
+		return reviewRemovedIntent
+	case key.Matches(msg, k.removedAll):
+		return reviewRemovedAllIntent
+	case key.Matches(msg, k.foldAll):
+		return reviewFoldAllIntent
+	case key.Matches(msg, k.selectHunk):
+		return reviewSelectHunkIntent
+	case key.Matches(msg, k.selectFile):
+		return reviewSelectFileIntent
+	}
+	return noReviewIntent
 }
