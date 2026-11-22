@@ -1,12 +1,15 @@
 package logview_test
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/madalinpopa/jjreview/internal/diff"
+	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/tui/logview"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
@@ -21,12 +24,52 @@ func labels(m logview.Model) []string {
 func TestFetch_success(t *testing.T) {
 	t.Parallel()
 
-	t.Run("f asks root to fetch", func(t *testing.T) {
+	t.Run("f fetches from the remote", func(t *testing.T) {
+		t.Parallel()
+		src := &fakeSource{lines: stack()}
+		m := loaded(t, src)
+
+		fx := keys(&m, "f")
+		res, err := rewrite(t, fx)
+
+		if err != nil || src.fetched != 1 || res != (tab.Result{Done: "fetched", KeepPicks: true}) || fx.Rewrite.Pending != "fetching…" {
+			t.Errorf("Key(f) = %+v, err = %v, fetched %d times, want a fetch reported as fetched", res, err, src.fetched)
+		}
+	})
+
+	t.Run("an unchanged remote reports it is up to date", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: stack(), unchanged: true})
+
+		res, err := rewrite(t, keys(&m, "f"))
+
+		if err != nil || res.Done != "already up to date" {
+			t.Errorf("Key(f) = %+v, err = %v, want already up to date", res, err)
+		}
+	})
+}
+
+func TestFetch_failed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("f reports why the log is blocked", func(t *testing.T) {
+		t.Parallel()
+		src := &fakeSource{lines: stack()}
+		m := loaded(t, src)
+
+		_, fx := m.Key(press("f"), locked(tab.Lock{Reason: "blocked"}))
+
+		if fx != (logview.Effect{Status: "blocked"}) {
+			t.Errorf("Key(f) = %+v, want the reason", fx)
+		}
+	})
+
+	t.Run("f is ignored while the review reloads", func(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: stack()})
 
-		if in := keys(&m, "f"); !in.Fetch {
-			t.Errorf("Key(f) = %+v, want a fetch", in)
+		if !m.Ignores(press("f"), locked(tab.Lock{Busy: true})) {
+			t.Error("Ignores(f, busy) = false, want true")
 		}
 	})
 }
@@ -34,39 +77,51 @@ func TestFetch_success(t *testing.T) {
 func TestPush_success(t *testing.T) {
 	t.Parallel()
 
-	t.Run("P asks root to arm the push without arming it", func(t *testing.T) {
+	t.Run("P arms the push of the selected revision", func(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: stack()})
 
-		in := keys(&m, "P")
+		fx := keys(&m, "P")
 
-		if !in.ArmPush || m.OverlayOpen() {
-			t.Errorf("Key(P) ArmPush = %v, OverlayOpen = %v, want a request and no prompt yet", in.ArmPush, m.OverlayOpen())
+		if fx != (logview.Effect{}) || !m.OverlayOpen() {
+			t.Errorf("Key(P) = %+v, OverlayOpen = %v, want no effect and the prompt open", fx, m.OverlayOpen())
 		}
 	})
 
 	t.Run("y pushes the revision the push was armed on", func(t *testing.T) {
 		t.Parallel()
+		src := &fakeSource{lines: stack(), pushResult: []jj.PushResult{{Remote: "origin", Bookmarks: []string{"main", "feat"}}, {Remote: "fork", Bookmarks: []string{"feat"}}}}
+		m := loaded(t, src)
+
+		fx := keys(&m, "P", "y")
+		res, err := rewrite(t, fx)
+
+		if err != nil || !slices.Equal(src.pushed, []string{"c1"}) || len(src.abandoned) != 0 {
+			t.Fatalf("Key(y) pushed %v, abandoned %v, err = %v, want a push of c1", src.pushed, src.abandoned, err)
+		}
+		if res != (tab.Result{Done: "pushed main, feat to origin and feat to fork", KeepPicks: true}) || fx.Rewrite.Pending != "pushing aaaaaaaa…" || fx.Rewrite.Focus != "aaaaaaaaaaaa" {
+			t.Errorf("push = %+v, rewrite = %+v, want the pushed bookmarks focused on the change", res, *fx.Rewrite)
+		}
+	})
+
+	t.Run("nothing to push is reported", func(t *testing.T) {
+		t.Parallel()
 		m := loaded(t, &fakeSource{lines: stack()})
 
-		m.ArmPush()
-		in := keys(&m, "y")
+		res, err := rewrite(t, keys(&m, "P", "y"))
 
-		if in.Push == nil || in.Push.CommitID != "c1" || in.Abandon != nil {
-			t.Errorf("Key(y) = %+v, want a push of c1", in)
+		if err != nil || res.Done != "nothing to push" {
+			t.Errorf("push = %+v, err = %v, want nothing to push", res, err)
 		}
 	})
 
 	t.Run("an immutable revision can be pushed", func(t *testing.T) {
 		t.Parallel()
-		m := loaded(t, &fakeSource{lines: stack()})
-		keys(&m, "G")
+		src := &fakeSource{lines: stack()}
+		m := loaded(t, src)
 
-		m.ArmPush()
-		in := keys(&m, "y")
-
-		if in.Push == nil || in.Push.CommitID != "c4" {
-			t.Errorf("Key(y) = %+v, want a push of c4", in)
+		if _, err := rewrite(t, keys(&m, "G", "P", "y")); err != nil || !slices.Equal(src.pushed, []string{"c4"}) {
+			t.Errorf("pushed %v, err = %v, want a push of c4", src.pushed, err)
 		}
 	})
 
@@ -76,7 +131,7 @@ func TestPush_success(t *testing.T) {
 		lines[0].Entry.Bookmarks = []string{"main", "feat"}
 		m := loaded(t, &fakeSource{lines: lines})
 
-		m.ArmPush()
+		keys(&m, "P")
 
 		got := m.Overlay(env(true))
 		for _, want := range []string{"Push aaaaaaaa c1", "Pushes bookmarks main, feat", "y push · any other key cancels"} {
@@ -90,10 +145,48 @@ func TestPush_success(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: stack()})
 
-		m.ArmPush()
+		keys(&m, "P")
 
 		if got := m.Overlay(env(true)); !strings.Contains(got, "Creates a bookmark for the change") || strings.Contains(got, "Drops") {
 			t.Errorf("Overlay() = %q, want the new bookmark named and nothing dropped", got)
+		}
+	})
+}
+
+func TestPush_failed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("changed bookmarks ask to review the push again", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: stack(), pushErr: jj.ErrBookmarksChanged})
+
+		res, err := rewrite(t, keys(&m, "P", "y"))
+
+		if err == nil || err.Error() != "bookmarks changed; press P to review the push again" || !res.KeepPicks {
+			t.Errorf("push = %+v, err = %v, want the retry hint and the picks kept", res, err)
+		}
+	})
+
+	t.Run("a jj failure names the revision", func(t *testing.T) {
+		t.Parallel()
+		errJJ := errors.New("jj git push: exit status 1")
+		m := loaded(t, &fakeSource{lines: stack(), pushErr: errJJ})
+
+		_, err := rewrite(t, keys(&m, "P", "y"))
+
+		if !errors.Is(err, errJJ) || !strings.HasPrefix(err.Error(), "push aaaaaaaa: ") {
+			t.Errorf("push error = %v, want it wrapped with the revision", err)
+		}
+	})
+
+	t.Run("P does nothing while busy", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: stack()})
+
+		_, fx := m.Key(press("P"), locked(tab.Lock{Busy: true}))
+
+		if fx != (logview.Effect{}) || m.OverlayOpen() {
+			t.Errorf("Key(P) = %+v, OverlayOpen = %v, want nothing", fx, m.OverlayOpen())
 		}
 	})
 }
@@ -105,11 +198,10 @@ func TestPush_cancelled(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: stack()})
 
-		m.ArmPush()
-		in := keys(&m, "n", "y")
+		fx := keys(&m, "P", "n", "y")
 
-		if in.Push != nil || m.OverlayOpen() {
-			t.Errorf("Key(n, y) Push = %+v, OverlayOpen = %v, want no push and no prompt", in.Push, m.OverlayOpen())
+		if fx.Rewrite != nil || m.OverlayOpen() {
+			t.Errorf("Key(P, n, y) = %+v, OverlayOpen = %v, want no push and no prompt", fx, m.OverlayOpen())
 		}
 	})
 }
@@ -122,11 +214,11 @@ func TestReset_success(t *testing.T) {
 		m := loaded(t, &fakeSource{lines: stack(), files: []diff.File{{NewPath: "a.go"}}})
 		keys(&m, "space", "l", "j", "l")
 
-		in := keys(&m, "R")
+		fx := keys(&m, "R")
 
 		got := m.View(env(true))
-		if in.Refresh || strings.Contains(got, "●") || strings.Contains(got, "selected") || strings.Contains(got, "loading…") {
-			t.Errorf("Key(R) = %+v, View() = %q, want no refresh, no selection and no open files", in, got)
+		if fx.Refresh || strings.Contains(got, "●") || strings.Contains(got, "selected") || strings.Contains(got, "loading…") {
+			t.Errorf("Key(R) = %+v, View() = %q, want no refresh, no selection and no open files", fx, got)
 		}
 	})
 
@@ -134,8 +226,8 @@ func TestReset_success(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: stack()})
 
-		if in := keys(&m, "ctrl+r"); !in.Refresh {
-			t.Errorf("Key(ctrl+r) = %+v, want a refresh", in)
+		if fx := keys(&m, "ctrl+r"); !fx.Refresh {
+			t.Errorf("Key(ctrl+r) = %+v, want a refresh", fx)
 		}
 	})
 }

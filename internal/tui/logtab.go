@@ -18,6 +18,7 @@ func (m Model) logEnv() logview.Env {
 		Head:    m.targetHead,
 		Active:  m.view == logView,
 		Dropped: pickedUnits(m.picks()),
+		Lock:    m.lock(),
 	}
 }
 
@@ -31,7 +32,8 @@ func (m *Model) loadLog() tea.Cmd {
 }
 
 func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
-	if m.log.Ignores(msg, m.reloading) {
+	env := m.logEnv()
+	if m.log.Ignores(msg, env) {
 		return nil
 	}
 	armed := m.armed
@@ -44,60 +46,26 @@ func (m *Model) logKey(msg tea.KeyPressMsg) tea.Cmd {
 			return cmd
 		}
 	}
-	cmd, in := m.log.Key(msg, m.logEnv())
-	if c, handled := m.logIntent(msg, armed, in); handled {
-		return c
-	}
-	return m.logEffects(cmd, in)
-}
-
-func (m *Model) logIntent(msg tea.KeyPressMsg, armed string, in logview.Intent) (tea.Cmd, bool) {
+	cmd, fx := m.log.Key(msg, env)
 	switch {
-	case in.Open != "":
-		return m.openCommit(msg, armed, in.Open), true
-	case in.Arm:
-		if m.canLoad() {
-			m.status = m.log.Arm()
-		}
-	case in.Abandon != nil:
-		if m.canLoad() {
-			return m.abandon(*in.Abandon), true
-		}
-	case in.ArmPush:
-		if m.canLoad() {
-			m.log.ArmPush()
-		}
-	case in.Push != nil:
-		if m.canLoad() {
-			return m.push(*in.Push), true
-		}
-	case in.Bookmark != nil:
-		return m.bookmarks.Pick(*in.Bookmark), true
-	case in.Fetch:
-		if m.canLoad() {
-			return m.fetchRemote(), true
-		}
-	case in.Squash:
-		if m.canLoad() {
-			m.status = m.log.StartSquash()
-		}
-	case in.Squashed != nil:
-		if m.canLoad() && m.confirmDrop(msg, armed) {
-			m.log.FinishSquash()
-			return m.squash(*in.Squashed), true
-		}
-	case in.Status != "":
-		m.status = in.Status
+	case fx.Open != "":
+		return m.openCommit(msg, armed, fx.Open)
+	case fx.Rewrite != nil:
+		return m.rewrite(*fx.Rewrite)
+	case fx.Bookmark != nil:
+		return m.bookmarks.Pick(*fx.Bookmark)
+	case fx.Status != "":
+		m.status = fx.Status
 	}
-	return nil, false
+	return m.logEffects(cmd, fx)
 }
 
-func (m *Model) logEffects(cmd tea.Cmd, in logview.Intent) tea.Cmd {
-	if in.Retarget && slices.Contains(m.keys.open.Keys(), m.armed) {
+func (m *Model) logEffects(cmd tea.Cmd, fx logview.Effect) tea.Cmd {
+	if fx.Retarget && slices.Contains(m.keys.open.Keys(), m.armed) {
 		m.armed = ""
 		m.status = ""
 	}
-	if in.Refresh {
+	if fx.Refresh {
 		return tea.Batch(cmd, m.invalidate())
 	}
 	return cmd

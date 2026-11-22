@@ -2,6 +2,7 @@ package logview
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -15,12 +16,17 @@ import (
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/theme"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type Source interface {
 	Log(ctx context.Context) ([]jj.LogLine, error)
 	Diff(ctx context.Context, rev string) ([]diff.File, error)
+	Abandon(ctx context.Context, commitID string, bookmarks []string) (workingCopy bool, err error)
+	Squash(ctx context.Context, from []jj.LogEntry, into jj.LogEntry) (string, error)
+	Push(ctx context.Context, e jj.LogEntry) ([]jj.PushResult, error)
+	Fetch(ctx context.Context) (bool, error)
 }
 
 type keyMap struct {
@@ -73,27 +79,104 @@ func newKeyMap() keyMap {
 	}
 }
 
+type intent int
+
+const (
+	noIntent intent = iota
+	moveDownIntent
+	moveUpIntent
+	halfDownIntent
+	halfUpIntent
+	topIntent
+	bottomIntent
+	openIntent
+	searchIntent
+	dismissIntent
+	expandIntent
+	collapseIntent
+	abandonIntent
+	confirmIntent
+	reloadIntent
+	resetIntent
+	fetchIntent
+	pushIntent
+	bookmarkIntent
+	markIntent
+	squashIntent
+)
+
+func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
+	switch {
+	case key.Matches(msg, k.down):
+		return moveDownIntent
+	case key.Matches(msg, k.up):
+		return moveUpIntent
+	case key.Matches(msg, k.halfDown):
+		return halfDownIntent
+	case key.Matches(msg, k.halfUp):
+		return halfUpIntent
+	case key.Matches(msg, k.top):
+		return topIntent
+	case key.Matches(msg, k.bottom):
+		return bottomIntent
+	case key.Matches(msg, k.open):
+		return openIntent
+	case key.Matches(msg, k.search):
+		return searchIntent
+	case key.Matches(msg, k.clearSearch, k.cancel):
+		return dismissIntent
+	case key.Matches(msg, k.expand):
+		return expandIntent
+	case key.Matches(msg, k.collapse):
+		return collapseIntent
+	case key.Matches(msg, k.abandon):
+		return abandonIntent
+	case key.Matches(msg, k.confirm):
+		return confirmIntent
+	case key.Matches(msg, k.reload):
+		return reloadIntent
+	case key.Matches(msg, k.reset):
+		return resetIntent
+	case key.Matches(msg, k.fetch):
+		return fetchIntent
+	case key.Matches(msg, k.push):
+		return pushIntent
+	case key.Matches(msg, k.bookmark):
+		return bookmarkIntent
+	case key.Matches(msg, k.mark):
+		return markIntent
+	case key.Matches(msg, k.squash):
+		return squashIntent
+	}
+	return noIntent
+}
+
 type Env struct {
 	ui.Layout
 	Head    string
 	Active  bool
 	Dropped int
+	Lock    tab.Lock
 }
 
 func (e Env) modalInner() int {
 	return ui.InputBoxInner(e.ModalWidth)
 }
 
-type Intent struct {
+func (e Env) blocked() (Effect, bool) {
+	switch {
+	case e.Lock.Busy:
+		return Effect{}, true
+	case e.Lock.Reason != "":
+		return Effect{Status: e.Lock.Reason}, true
+	}
+	return Effect{}, false
+}
+
+type Effect struct {
 	Open     string
-	Arm      bool
-	Abandon  *jj.LogEntry
-	ArmPush  bool
 	Bookmark *jj.LogEntry
-	Push     *jj.LogEntry
-	Fetch    bool
-	Squash   bool
-	Squashed *Squash
+	Rewrite  *tab.Rewrite
 	Status   string
 	Refresh  bool
 	Retarget bool
@@ -109,11 +192,6 @@ const (
 type confirmation struct {
 	action action
 	entry  jj.LogEntry
-}
-
-type Squash struct {
-	From []jj.LogEntry
-	Into jj.LogEntry
 }
 
 type Model struct {
@@ -136,6 +214,7 @@ type Model struct {
 	confirm   *confirmation
 	marked    map[string]bool
 	squashing []jj.LogEntry
+	dropArmed bool
 	top       int
 	seq       int
 }
@@ -266,14 +345,6 @@ func (l Model) SelectedChange() string {
 	return ""
 }
 
-func (l Model) AbandonKey() string {
-	return l.keys.abandon.Help().Key
-}
-
-func (l Model) PushKey() string {
-	return l.keys.push.Help().Key
-}
-
 func (l Model) selectedCommit() string {
 	if e := l.selected(); e != nil {
 		return e.CommitID
@@ -394,21 +465,21 @@ func (l *Model) MarkStale() {
 	l.stale = true
 }
 
-func (l *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Intent, bool) {
+func (l *Model) Update(msg tea.Msg, env Env) (tea.Cmd, Effect, bool) {
 	switch msg := msg.(type) {
 	case loadedMsg:
-		cmd, in := l.applyList(msg, env)
-		return cmd, in, true
+		cmd, eff := l.applyList(msg, env)
+		return cmd, eff, true
 	case filesMsg:
 		l.files[msg.commitID] = fileList{files: msg.files, err: msg.err, loaded: true}
-		return nil, Intent{}, true
+		return nil, Effect{}, true
 	}
-	return nil, Intent{}, false
+	return nil, Effect{}, false
 }
 
-func (l *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Intent) {
+func (l *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Effect) {
 	if msg.seq != l.seq {
-		return nil, Intent{}
+		return nil, Effect{}
 	}
 	before := l.selectedCommit()
 	l.loading = false
@@ -435,109 +506,118 @@ func (l *Model) applyList(msg loadedMsg, env Env) (tea.Cmd, Intent) {
 	default:
 		l.focus(env.Head)
 	}
-	in := Intent{Retarget: env.Active && l.selectedCommit() != before}
+	eff := Effect{Retarget: env.Active && l.selectedCommit() != before}
 	if l.stale && env.Active {
-		return l.Load(), in
+		return l.Load(), eff
 	}
-	return nil, in
+	return nil, eff
 }
 
-func (l Model) Ignores(msg tea.KeyPressMsg, reloading bool) bool {
+func (l Model) Ignores(msg tea.KeyPressMsg, env Env) bool {
+	busy := msg.IsRepeat || env.Lock.Busy || l.loading
+	in := l.keys.resolve(msg)
 	if l.squashing != nil {
-		return key.Matches(msg, l.keys.confirm) && (msg.IsRepeat || reloading || l.loading)
+		return in == confirmIntent && busy
 	}
-	return l.confirm == nil && !l.searching && key.Matches(msg, l.keys.abandon, l.keys.confirm, l.keys.squash, l.keys.fetch, l.keys.push) && (msg.IsRepeat || reloading || l.loading)
+	guarded := []intent{abandonIntent, confirmIntent, squashIntent, fetchIntent, pushIntent}
+	return l.confirm == nil && !l.searching && slices.Contains(guarded, in) && busy
 }
 
-func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Intent) {
+func (l *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
+	in := l.keys.resolve(msg)
 	if l.confirm != nil {
-		return nil, l.confirmKey(msg)
+		return nil, l.confirmKey(in, msg.IsRepeat, env)
 	}
 	if l.searching {
-		return l.searchKey(msg), Intent{}
+		return l.searchKey(in, msg), Effect{}
 	}
 	if l.squashing != nil {
-		return nil, l.squashKey(msg, env)
+		return nil, l.squashKey(in, env)
 	}
-	if l.navigate(msg, env) {
-		return nil, Intent{}
+	if l.navigate(in, env) {
+		return nil, Effect{}
 	}
-	return l.browseKey(msg)
+	return l.browseKey(in, env)
 }
 
-func (l *Model) confirmKey(msg tea.KeyPressMsg) Intent {
+func (l *Model) confirmKey(in intent, repeat bool, env Env) Effect {
 	c := l.confirm
 	l.confirm = nil
-	if e := l.selected(); msg.IsRepeat || !key.Matches(msg, l.keys.confirm) || e == nil || e.CommitID != c.entry.CommitID {
-		return Intent{}
+	if e := l.selected(); repeat || in != confirmIntent || e == nil || e.CommitID != c.entry.CommitID {
+		return Effect{}
+	}
+	if fx, held := env.blocked(); held {
+		return fx
 	}
 	if c.action == pushAction {
-		return Intent{Push: &c.entry}
+		return l.push(c.entry)
 	}
-	return Intent{Abandon: &c.entry}
+	return l.abandon(c.entry)
 }
 
-func (l *Model) browseKey(msg tea.KeyPressMsg) (tea.Cmd, Intent) {
-	switch {
-	case key.Matches(msg, l.keys.search):
+func (l *Model) browseKey(in intent, env Env) (tea.Cmd, Effect) {
+	switch in {
+	case searchIntent:
 		if !l.loaded || l.err != nil {
-			return nil, Intent{}
+			return nil, Effect{}
 		}
 		l.searching = true
-		return l.query.Focus(), Intent{}
-	case key.Matches(msg, l.keys.clearSearch) && l.filtered():
-		l.clearSearch()
-	case key.Matches(msg, l.keys.cancel):
-		clear(l.marked)
-	case key.Matches(msg, l.keys.mark):
+		return l.query.Focus(), Effect{}
+	case dismissIntent:
+		if l.filtered() {
+			l.clearSearch()
+		} else {
+			clear(l.marked)
+		}
+	case markIntent:
 		if e := l.selected(); e != nil {
 			l.toggleMark(e.CommitID)
 		}
-	case key.Matches(msg, l.keys.squash):
-		return nil, Intent{Squash: l.selected() != nil || len(l.marked) > 0}
-	case key.Matches(msg, l.keys.open):
+	case squashIntent:
+		return nil, l.startSquash(env)
+	case openIntent:
 		if e := l.selected(); e != nil {
-			return nil, Intent{Open: e.CommitID}
+			return nil, Effect{Open: e.CommitID}
 		}
-	case key.Matches(msg, l.keys.expand):
-		return l.expandFiles(), Intent{}
-	case key.Matches(msg, l.keys.abandon):
-		return nil, Intent{Arm: l.selected() != nil}
-	case key.Matches(msg, l.keys.push):
-		return nil, Intent{ArmPush: l.selected() != nil}
-	case key.Matches(msg, l.keys.fetch):
-		return nil, Intent{Fetch: true}
-	case key.Matches(msg, l.keys.bookmark):
+	case expandIntent:
+		return l.expandFiles(), Effect{}
+	case abandonIntent:
+		return nil, l.armAbandon(env)
+	case pushIntent:
+		return nil, l.armPush(env)
+	case fetchIntent:
+		return nil, l.fetch(env)
+	case bookmarkIntent:
 		if e := l.selected(); e != nil {
-			return nil, Intent{Bookmark: new(*e)}
+			return nil, Effect{Bookmark: new(*e)}
 		}
-	case key.Matches(msg, l.keys.reset):
+	case resetIntent:
 		clear(l.marked)
 		clear(l.expanded)
-	case key.Matches(msg, l.keys.collapse):
+	case collapseIntent:
 		if e := l.selected(); e != nil {
 			delete(l.expanded, e.CommitID)
 		}
-	case key.Matches(msg, l.keys.reload):
-		return nil, Intent{Refresh: !l.loading}
+	case reloadIntent:
+		return nil, Effect{Refresh: !l.loading}
 	}
-	return nil, Intent{}
+	return nil, Effect{}
 }
 
-func (l *Model) navigate(msg tea.KeyPressMsg, env Env) bool {
+func (l *Model) navigate(in intent, env Env) bool {
 	half := max(env.ListHeight/2, 1)
-	switch {
-	case key.Matches(msg, l.keys.down):
+	switch in {
+	case moveDownIntent:
 		l.move(1)
-	case key.Matches(msg, l.keys.up):
+	case moveUpIntent:
 		l.move(-1)
-	case key.Matches(msg, l.keys.halfDown):
+	case halfDownIntent:
 		l.scrollPage(half, l.height(env))
-	case key.Matches(msg, l.keys.halfUp):
+	case halfUpIntent:
 		l.scrollPage(-half, l.height(env))
-	case key.Matches(msg, l.keys.top):
+	case topIntent:
 		l.jump(-len(l.shown))
-	case key.Matches(msg, l.keys.bottom):
+	case bottomIntent:
 		l.jump(len(l.shown))
 	default:
 		return false
@@ -583,7 +663,7 @@ func (l Model) squashed(commitID string) bool {
 	return slices.ContainsFunc(l.squashing, func(e jj.LogEntry) bool { return e.CommitID == commitID })
 }
 
-func (l *Model) StartSquash() string {
+func (l *Model) startSquash(env Env) Effect {
 	from := l.marks()
 	if len(from) == 0 {
 		if e := l.selected(); e != nil {
@@ -591,12 +671,16 @@ func (l *Model) StartSquash() string {
 		}
 	}
 	if len(from) == 0 {
-		return ""
+		return Effect{}
+	}
+	if fx, held := env.blocked(); held {
+		return fx
 	}
 	if i := slices.IndexFunc(from, func(e jj.LogEntry) bool { return e.Immutable }); i >= 0 {
-		return ui.ShortID(from[i].ChangeID) + " is immutable"
+		return Effect{Status: ui.ShortID(from[i].ChangeID) + " is immutable"}
 	}
 	l.squashing = from
+	l.dropArmed = false
 	l.clearSearch()
 	parents := map[string]bool{}
 	for _, e := range from {
@@ -605,44 +689,145 @@ func (l *Model) StartSquash() string {
 		}
 	}
 	l.focusWhere(func(e *jj.LogEntry) bool { return parents[e.CommitID] })
-	return ""
+	return Effect{}
 }
 
-func (l *Model) FinishSquash() {
-	l.squashing = nil
-	clear(l.marked)
-}
-
-func (l *Model) squashKey(msg tea.KeyPressMsg, env Env) Intent {
+func (l *Model) squashKey(in intent, env Env) Effect {
+	armed := l.dropArmed
+	l.dropArmed = false
 	switch {
-	case l.navigate(msg, env):
-	case key.Matches(msg, l.keys.cancel):
+	case l.navigate(in, env):
+	case in == dismissIntent:
 		l.squashing = nil
-	case key.Matches(msg, l.keys.confirm):
+	case in == confirmIntent:
 		e := l.selected()
 		switch {
 		case e == nil:
 		case l.squashed(e.CommitID):
-			return Intent{Status: "pick a revision that is not being squashed"}
+			return Effect{Status: "pick a revision that is not being squashed"}
 		case e.Immutable:
-			return Intent{Status: ui.ShortID(e.ChangeID) + " is immutable"}
+			return Effect{Status: ui.ShortID(e.ChangeID) + " is immutable"}
 		default:
-			return Intent{Squashed: &Squash{From: slices.Clone(l.squashing), Into: *e}}
+			if fx, held := env.blocked(); held {
+				return fx
+			}
+			if env.Dropped > 0 && !armed {
+				l.dropArmed = true
+				return Effect{Status: tab.DropPrompt(l.keys.confirm.Help().Key, env.Dropped)}
+			}
+			from := l.squashing
+			l.squashing = nil
+			clear(l.marked)
+			return l.squash(from, *e)
 		}
 	}
-	return Intent{}
+	return Effect{}
 }
 
-func (l *Model) Arm() string {
-	if e := l.selected(); e != nil && e.Immutable {
-		return ui.ShortID(e.ChangeID) + " is immutable"
+func (l *Model) armAbandon(env Env) Effect {
+	e := l.selected()
+	if e == nil {
+		return Effect{}
+	}
+	if fx, held := env.blocked(); held {
+		return fx
+	}
+	if e.Immutable {
+		return Effect{Status: ui.ShortID(e.ChangeID) + " is immutable"}
 	}
 	l.arm(abandonAction)
-	return ""
+	return Effect{}
 }
 
-func (l *Model) ArmPush() {
+func (l *Model) armPush(env Env) Effect {
+	if l.selected() == nil {
+		return Effect{}
+	}
+	if fx, held := env.blocked(); held {
+		return fx
+	}
 	l.arm(pushAction)
+	return Effect{}
+}
+
+func (l Model) abandon(e jj.LogEntry) Effect {
+	id := ui.ShortID(e.ChangeID)
+	retry := "bookmarks changed; press " + l.keys.abandon.Help().Key + " to review the abandon again"
+	src := l.src
+	return Effect{Rewrite: new(tab.Rewrite{Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
+		workingCopy, err := src.Abandon(ctx, e.CommitID, e.Bookmarks)
+		switch {
+		case errors.Is(err, jj.ErrBookmarksChanged):
+			return tab.Result{}, errors.New(retry)
+		case err != nil:
+			return tab.Result{}, fmt.Errorf("abandon %s: %w", id, err)
+		}
+		return tab.Result{Done: "abandoned " + id, Replaced: workingCopy || e.CommitID == head.CommitID}, nil
+	}})}
+}
+
+func (l Model) squash(from []jj.LogEntry, into jj.LogEntry) Effect {
+	done := "squashed " + ui.ShortID(from[0].ChangeID)
+	if n := len(from); n > 1 {
+		done = fmt.Sprintf("squashed %d revisions", n)
+	}
+	target := ui.ShortID(into.ChangeID)
+	src := l.src
+	return Effect{Rewrite: new(tab.Rewrite{Focus: into.ChangeID, Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
+		warnings, err := src.Squash(ctx, from, into)
+		if err != nil {
+			return tab.Result{}, fmt.Errorf("squash into %s: %w", target, err)
+		}
+		replaced := slices.ContainsFunc(from, func(e jj.LogEntry) bool { return e.CommitID == head.CommitID })
+		return tab.Result{Done: done + " into " + target, Replaced: replaced, Warnings: warnings}, nil
+	}})}
+}
+
+func (l Model) push(e jj.LogEntry) Effect {
+	id := ui.ShortID(e.ChangeID)
+	retry := "bookmarks changed; press " + l.keys.push.Help().Key + " to review the push again"
+	src := l.src
+	return Effect{Rewrite: new(tab.Rewrite{Pending: "pushing " + id + "…", Focus: e.ChangeID, Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
+		r, err := src.Push(ctx, e)
+		res := tab.Result{KeepPicks: true}
+		switch {
+		case errors.Is(err, jj.ErrBookmarksChanged):
+			return res, errors.New(retry)
+		case err != nil:
+			return res, fmt.Errorf("push %s: %w", id, err)
+		case len(r) == 0:
+			res.Done = "nothing to push"
+		default:
+			res.Done = "pushed " + pushSummary(r)
+		}
+		return res, nil
+	}})}
+}
+
+func pushSummary(results []jj.PushResult) string {
+	parts := make([]string, len(results))
+	for i, r := range results {
+		parts[i] = strings.Join(r.Bookmarks, ", ") + " to " + r.Remote
+	}
+	return strings.Join(parts, " and ")
+}
+
+func (l Model) fetch(env Env) Effect {
+	if fx, held := env.blocked(); held {
+		return fx
+	}
+	src := l.src
+	return Effect{Rewrite: new(tab.Rewrite{Pending: "fetching…", Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
+		changed, err := src.Fetch(ctx)
+		res := tab.Result{KeepPicks: true, Done: "fetched"}
+		switch {
+		case err != nil:
+			return res, fmt.Errorf("fetch: %w", err)
+		case !changed:
+			res.Done = "already up to date"
+		}
+		return res, nil
+	}})}
 }
 
 func (l *Model) arm(a action) {
@@ -750,11 +935,11 @@ func (l *Model) scrollPage(delta, height int) {
 	}
 }
 
-func (l *Model) searchKey(msg tea.KeyPressMsg) tea.Cmd {
-	switch {
-	case key.Matches(msg, l.keys.clearSearch):
+func (l *Model) searchKey(in intent, msg tea.KeyPressMsg) tea.Cmd {
+	switch in {
+	case dismissIntent:
 		l.clearSearch()
-	case key.Matches(msg, l.keys.open):
+	case openIntent:
 		l.searching = false
 		l.query.Blur()
 	default:

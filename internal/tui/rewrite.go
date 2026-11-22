@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -26,34 +25,6 @@ type rewrittenMsg struct {
 	warnings  string
 	keepPicks bool
 	err       error
-}
-
-func (m *Model) abandon(e jj.LogEntry) tea.Cmd {
-	src := m.src
-	return m.rewrite(tab.Rewrite{Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
-		workingCopy, err := src.Abandon(ctx, e.CommitID, e.Bookmarks)
-		if err != nil {
-			return tab.Result{}, fmt.Errorf("abandon %s: %w", ui.ShortID(e.ChangeID), err)
-		}
-		return tab.Result{Done: "abandoned " + ui.ShortID(e.ChangeID), Replaced: workingCopy || e.CommitID == head.CommitID}, nil
-	}})
-}
-
-func (m *Model) squash(s logview.Squash) tea.Cmd {
-	done := "squashed " + ui.ShortID(s.From[0].ChangeID)
-	if n := len(s.From); n > 1 {
-		done = fmt.Sprintf("squashed %d revisions", n)
-	}
-	into := ui.ShortID(s.Into.ChangeID)
-	src := m.src
-	return m.rewrite(tab.Rewrite{Focus: s.Into.ChangeID, Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
-		warnings, err := src.Squash(ctx, s.From, s.Into)
-		if err != nil {
-			return tab.Result{}, fmt.Errorf("squash into %s: %w", into, err)
-		}
-		replaced := slices.ContainsFunc(s.From, func(e jj.LogEntry) bool { return e.CommitID == head.CommitID })
-		return tab.Result{Done: done + " into " + into, Replaced: replaced, Warnings: warnings}, nil
-	}})
 }
 
 func (m *Model) rewrite(rw tab.Rewrite) tea.Cmd {
@@ -105,8 +76,6 @@ func (m *Model) applyRewritten(msg rewrittenMsg) tea.Cmd {
 	m.log.RestorePosition(keep)
 	status := msg.done
 	switch {
-	case errors.Is(msg.err, jj.ErrBookmarksChanged):
-		status = "bookmarks changed; press " + m.log.AbandonKey() + " to review the abandon again"
 	case msg.err != nil:
 		status, _, _ = strings.Cut(msg.err.Error(), "\n")
 	case msg.warnings != "":

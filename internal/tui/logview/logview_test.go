@@ -2,6 +2,8 @@ package logview_test
 
 import (
 	"context"
+	"errors"
+	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
@@ -9,11 +11,26 @@ import (
 	"github.com/madalinpopa/jjreview/internal/diff"
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/tui/logview"
+	"github.com/madalinpopa/jjreview/internal/tui/tab"
 )
 
+type squashCall struct {
+	from []string
+	into string
+}
+
 type fakeSource struct {
-	lines []jj.LogLine
-	files []diff.File
+	lines      []jj.LogLine
+	files      []diff.File
+	abandoned  []string
+	abandonErr error
+	squashes   []squashCall
+	warnings   string
+	pushed     []string
+	pushResult []jj.PushResult
+	pushErr    error
+	fetched    int
+	unchanged  bool
 }
 
 func (s *fakeSource) Log(context.Context) ([]jj.LogLine, error) {
@@ -22,6 +39,41 @@ func (s *fakeSource) Log(context.Context) ([]jj.LogLine, error) {
 
 func (s *fakeSource) Diff(context.Context, string) ([]diff.File, error) {
 	return s.files, nil
+}
+
+func (s *fakeSource) Abandon(_ context.Context, commitID string, _ []string) (bool, error) {
+	s.abandoned = append(s.abandoned, commitID)
+	return false, s.abandonErr
+}
+
+func (s *fakeSource) Squash(_ context.Context, from []jj.LogEntry, into jj.LogEntry) (string, error) {
+	s.squashes = append(s.squashes, squashCall{from: commits(from), into: into.CommitID})
+	return s.warnings, nil
+}
+
+func (s *fakeSource) Push(_ context.Context, e jj.LogEntry) ([]jj.PushResult, error) {
+	s.pushed = append(s.pushed, e.CommitID)
+	return s.pushResult, s.pushErr
+}
+
+func (s *fakeSource) Fetch(context.Context) (bool, error) {
+	s.fetched++
+	return !s.unchanged, nil
+}
+
+func rewrite(t *testing.T, fx logview.Effect) (tab.Result, error) {
+	t.Helper()
+
+	if fx.Rewrite == nil {
+		t.Fatalf("Effect = %+v, want a rewrite", fx)
+	}
+	return fx.Rewrite.Run(t.Context(), tab.Head{CommitID: "c1", WorkingCopy: true})
+}
+
+func locked(l tab.Lock) logview.Env {
+	e := env(true)
+	e.Lock = l
+	return e
 }
 
 func entry(graph, changeID, commitID string) jj.LogLine {
@@ -52,8 +104,8 @@ func loaded(t *testing.T, src *fakeSource) logview.Model {
 	t.Helper()
 
 	m := logview.New(t.Context(), src)
-	if _, in, ok := m.Update(run(t, m.Show("c1")), env(false)); !ok || in != (logview.Intent{}) {
-		t.Fatalf("Update(log result) = %+v, %v, want no intent and handled while inactive", in, ok)
+	if _, fx, ok := m.Update(run(t, m.Show("c1")), env(false)); !ok || fx != (logview.Effect{}) {
+		t.Fatalf("Update(log result) = %+v, %v, want no effect and handled while inactive", fx, ok)
 	}
 	return m
 }
@@ -120,10 +172,10 @@ func TestUpdate_failed(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: twoEntries()})
 
-		cmd, in, ok := m.Update(tea.FocusMsg{}, env(true))
+		cmd, fx, ok := m.Update(tea.FocusMsg{}, env(true))
 
-		if ok || cmd != nil || in != (logview.Intent{}) {
-			t.Errorf("Update(FocusMsg) = %v, %+v, %v, want nothing and unhandled", cmd != nil, in, ok)
+		if ok || cmd != nil || fx != (logview.Effect{}) {
+			t.Errorf("Update(FocusMsg) = %v, %+v, %v, want nothing and unhandled", cmd != nil, fx, ok)
 		}
 	})
 }
@@ -229,33 +281,38 @@ func TestKey_success(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: twoEntries()})
 
-		_, in := m.Key(press("enter"), env(true))
+		_, fx := m.Key(press("enter"), env(true))
 
-		if in.Open != "c1" {
-			t.Errorf("Key(enter) Open = %q, want c1", in.Open)
+		if fx.Open != "c1" {
+			t.Errorf("Key(enter) Open = %q, want c1", fx.Open)
 		}
 	})
 
-	t.Run("a asks root to arm the abandon without arming it", func(t *testing.T) {
+	t.Run("a arms the abandon of the selected revision", func(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: twoEntries()})
 
-		_, in := m.Key(press("a"), env(true))
+		_, fx := m.Key(press("a"), env(true))
 
-		if !in.Arm || m.OverlayOpen() {
-			t.Errorf("Key(a) Arm = %v, OverlayOpen = %v, want arm requested and nothing armed", in.Arm, m.OverlayOpen())
+		if fx != (logview.Effect{}) || !m.OverlayOpen() || m.Overlay(env(true)) == "" {
+			t.Errorf("Key(a) = %+v, OverlayOpen = %v, want no effect and the confirmation open", fx, m.OverlayOpen())
 		}
 	})
 
-	t.Run("y after arming returns the entry to abandon", func(t *testing.T) {
+	t.Run("y after arming abandons the armed revision", func(t *testing.T) {
 		t.Parallel()
-		m := loaded(t, &fakeSource{lines: twoEntries()})
-		m.Arm()
+		src := &fakeSource{lines: twoEntries()}
+		m := loaded(t, src)
+		m.Key(press("a"), env(true))
 
-		_, in := m.Key(press("y"), env(true))
+		_, fx := m.Key(press("y"), env(true))
+		res, err := rewrite(t, fx)
 
-		if in.Abandon == nil || in.Abandon.CommitID != "c1" || m.OverlayOpen() {
-			t.Errorf("Key(y) Abandon = %+v, OverlayOpen = %v, want c1 and the confirmation closed", in.Abandon, m.OverlayOpen())
+		if err != nil || len(src.abandoned) != 1 || src.abandoned[0] != "c1" || m.OverlayOpen() {
+			t.Fatalf("Key(y) abandoned %v, err = %v, OverlayOpen = %v, want c1 and the confirmation closed", src.abandoned, err, m.OverlayOpen())
+		}
+		if res.Done != "abandoned aaaaaaaa" || !res.Replaced || fx.Rewrite.Pending != "" || fx.Rewrite.Focus != "" {
+			t.Errorf("abandon = %+v, rewrite = %+v, want the done status and the head replaced", res, *fx.Rewrite)
 		}
 	})
 
@@ -280,7 +337,7 @@ func TestKey_failed(t *testing.T) {
 		t.Parallel()
 		src := &fakeSource{lines: twoEntries()}
 		m := loaded(t, src)
-		m.Arm()
+		m.Key(press("a"), env(true))
 		src.lines = []jj.LogLine{
 			{Graph: "@  ", Entry: &jj.LogEntry{ChangeID: "cccccccccccc", CommitID: "c3", WorkingCopy: true}},
 			{Graph: "○  ", Entry: &jj.LogEntry{ChangeID: "bbbbbbbbbbbb", CommitID: "c2", Immutable: true}},
@@ -288,10 +345,10 @@ func TestKey_failed(t *testing.T) {
 		m.Update(run(t, m.Load()), env(true))
 		open := m.OverlayOpen()
 
-		_, in := m.Key(press("y"), env(true))
+		_, fx := m.Key(press("y"), env(true))
 
-		if !open || m.SelectedChange() != "cccccccccccc" || in.Abandon != nil {
-			t.Errorf("after reload OverlayOpen = %v, selected = %q; Key(y) Abandon = %+v, want open, cccccccccccc and nil", open, m.SelectedChange(), in.Abandon)
+		if !open || m.SelectedChange() != "cccccccccccc" || fx.Rewrite != nil {
+			t.Errorf("after reload OverlayOpen = %v, selected = %q; Key(y) = %+v, want open, cccccccccccc and no rewrite", open, m.SelectedChange(), fx)
 		}
 	})
 
@@ -299,49 +356,107 @@ func TestKey_failed(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: twoEntries()})
 
-		if !m.Ignores(press("a"), true) {
-			t.Error("Ignores(a, reloading) = false, want true")
+		if !m.Ignores(press("a"), locked(tab.Lock{Busy: true})) {
+			t.Error("Ignores(a, busy) = false, want true")
 		}
 	})
-}
 
-func TestArm_success(t *testing.T) {
-	t.Parallel()
-
-	t.Run("arms the selected mutable revision", func(t *testing.T) {
+	t.Run("a is not ignored while idle", func(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: twoEntries()})
 
-		status := m.Arm()
-
-		if status != "" || !m.OverlayOpen() || m.Overlay(env(true)) == "" {
-			t.Errorf("Arm() = %q, OverlayOpen = %v, want no status and the confirmation open", status, m.OverlayOpen())
+		if m.Ignores(press("a"), env(true)) {
+			t.Error("Ignores(a, idle) = true, want false")
 		}
 	})
-}
 
-func TestArm_failed(t *testing.T) {
-	t.Parallel()
-
-	t.Run("refuses an immutable revision", func(t *testing.T) {
+	t.Run("a refuses an immutable revision", func(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, &fakeSource{lines: twoEntries()})
 		m.Key(press("j"), env(true))
 
-		status := m.Arm()
+		_, fx := m.Key(press("a"), env(true))
 
-		if status != "bbbbbbbb is immutable" || m.OverlayOpen() || m.Overlay(env(true)) != "" {
-			t.Errorf("Arm() = %q, OverlayOpen = %v, want the immutable status and nothing armed", status, m.OverlayOpen())
+		if fx.Status != "bbbbbbbb is immutable" || m.OverlayOpen() || m.Overlay(env(true)) != "" {
+			t.Errorf("Key(a) = %+v, OverlayOpen = %v, want the immutable status and nothing armed", fx, m.OverlayOpen())
+		}
+	})
+
+	t.Run("a does nothing while busy", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: twoEntries()})
+
+		_, fx := m.Key(press("a"), locked(tab.Lock{Busy: true}))
+
+		if fx != (logview.Effect{}) || m.OverlayOpen() {
+			t.Errorf("Key(a) = %+v, OverlayOpen = %v, want nothing", fx, m.OverlayOpen())
+		}
+	})
+
+	t.Run("a reports why the log is blocked", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: twoEntries()})
+
+		_, fx := m.Key(press("a"), locked(tab.Lock{Reason: "blocked"}))
+
+		if fx != (logview.Effect{Status: "blocked"}) || m.OverlayOpen() {
+			t.Errorf("Key(a) = %+v, OverlayOpen = %v, want the reason and nothing armed", fx, m.OverlayOpen())
+		}
+	})
+
+	t.Run("y closes the confirmation without abandoning while busy", func(t *testing.T) {
+		t.Parallel()
+		src := &fakeSource{lines: twoEntries()}
+		m := loaded(t, src)
+		m.Key(press("a"), env(true))
+
+		_, fx := m.Key(press("y"), locked(tab.Lock{Busy: true}))
+
+		if fx != (logview.Effect{}) || m.OverlayOpen() {
+			t.Errorf("Key(y) = %+v, OverlayOpen = %v, want nothing and the confirmation closed", fx, m.OverlayOpen())
+		}
+	})
+
+	t.Run("y reports why the log is blocked instead of abandoning", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: twoEntries()})
+		m.Key(press("a"), env(true))
+
+		_, fx := m.Key(press("y"), locked(tab.Lock{Reason: "blocked"}))
+
+		if fx != (logview.Effect{Status: "blocked"}) {
+			t.Errorf("Key(y) = %+v, want the reason", fx)
 		}
 	})
 }
 
-func TestAbandonKey_success(t *testing.T) {
+func TestAbandon_failed(t *testing.T) {
 	t.Parallel()
 
-	m := logview.New(t.Context(), &fakeSource{})
+	t.Run("changed bookmarks ask to review the abandon again", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, &fakeSource{lines: twoEntries(), abandonErr: jj.ErrBookmarksChanged})
+		m.Key(press("a"), env(true))
 
-	if got := m.AbandonKey(); got != "a" {
-		t.Errorf("AbandonKey() = %q, want a", got)
-	}
+		_, fx := m.Key(press("y"), env(true))
+		_, err := rewrite(t, fx)
+
+		if err == nil || err.Error() != "bookmarks changed; press a to review the abandon again" {
+			t.Errorf("abandon error = %v, want the retry hint", err)
+		}
+	})
+
+	t.Run("a jj failure names the revision", func(t *testing.T) {
+		t.Parallel()
+		errJJ := errors.New("jj abandon: exit status 1")
+		m := loaded(t, &fakeSource{lines: twoEntries(), abandonErr: errJJ})
+		m.Key(press("a"), env(true))
+
+		_, fx := m.Key(press("y"), env(true))
+		_, err := rewrite(t, fx)
+
+		if !errors.Is(err, errJJ) || !strings.HasPrefix(err.Error(), "abandon aaaaaaaa: ") {
+			t.Errorf("abandon error = %v, want it wrapped with the revision", err)
+		}
+	})
 }
