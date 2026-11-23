@@ -20,6 +20,28 @@
   </picture>
 </p>
 
+## Features
+
+`jjr` is a terminal UI for jj built around reviewing a change before you
+commit it.
+
+- **Review hunk by hunk**: a file tree beside a unified diff, with folding,
+  removed lines on demand, a full-file view and search across files.
+- **Split by selection**: pick single lines, line ranges, hunks or whole files
+  and commit them with `jj split`, so `jj undo` still applies.
+- **AI commit messages**: optional drafts from Anthropic or the GitHub Copilot
+  CLI, always editable before committing.
+- **Long lines**: scroll the diff sideways, or press `w` to zoom it to the full
+  width.
+- **Log tab**: browse every revision, review any of them, squash, abandon,
+  fetch and push.
+- **Bookmarks tab**: create, rename, move and delete bookmarks and see how they
+  track their remotes.
+- **Operations tab**: browse `jj op log` and restore, undo or abandon
+  operations.
+- **Command notifications**: a corner notification shows each jj command while
+  it runs and its result when it finishes.
+
 `jjr` shows the diff of a jj change in a terminal UI, lets you pick single
 lines, hunks or whole files, and commits the selection with `jj split`, so your
 jj configuration and `jj undo` still apply. When a message provider is
