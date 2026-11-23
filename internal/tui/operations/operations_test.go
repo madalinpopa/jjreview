@@ -309,13 +309,15 @@ func TestKey_success(t *testing.T) {
 	})
 
 	tests := map[string]struct {
-		key  string
-		run  string
-		want tab.Result
+		key     string
+		run     string
+		title   string
+		command string
+		want    tab.Result
 	}{
-		"r then y restores": {key: "r", run: "restore cccc3333eeee", want: tab.Result{Done: "restored operation cccc3333", Replaced: true, Restored: true}},
-		"u then y undoes":   {key: "u", run: "revert cccc3333eeee", want: tab.Result{Done: "undid operation cccc3333", Replaced: true, Restored: true}},
-		"a then y abandons": {key: "a", run: "abandon cccc3333eeee", want: tab.Result{Done: "abandoned operation cccc3333", KeepPicks: true}},
+		"r then y restores": {key: "r", run: "restore cccc3333eeee", title: "Restore operation cccc3333", command: "jj operation restore cccc3333", want: tab.Result{Done: "restored operation cccc3333", Replaced: true, Restored: true}},
+		"u then y undoes":   {key: "u", run: "revert cccc3333eeee", title: "Undo operation cccc3333", command: "jj operation revert cccc3333", want: tab.Result{Done: "undid operation cccc3333", Replaced: true, Restored: true}},
+		"a then y abandons": {key: "a", run: "abandon cccc3333eeee", title: "Abandon operation cccc3333", command: "jj operation abandon cccc3333", want: tab.Result{Done: "abandoned operation cccc3333", KeepPicks: true}},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -336,6 +338,9 @@ func TestKey_success(t *testing.T) {
 			}
 			if eff.Rewrite == nil {
 				t.Fatalf("Key(y) = %+v, want a rewrite", eff)
+			}
+			if eff.Rewrite.Title != tt.title || eff.Rewrite.CommandLabel != tt.command {
+				t.Errorf("Rewrite title, command = %q, %q, want %q, %q", eff.Rewrite.Title, eff.Rewrite.CommandLabel, tt.title, tt.command)
 			}
 			if len(src.runs) != 0 {
 				t.Errorf("runs before the rewrite = %v, want none", src.runs)

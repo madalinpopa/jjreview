@@ -33,6 +33,7 @@ type Effect struct {
 	Open      string
 	Pick      *jj.LogEntry
 	Rewrite   *Rewrite
+	Notice    *Notice
 }
 
 type View interface {
@@ -61,9 +62,18 @@ type Result struct {
 }
 
 type Rewrite struct {
-	Pending string
-	Focus   string
-	Run     func(ctx context.Context, head Head) (Result, error)
+	Title        string
+	CommandLabel string
+	Focus        string
+	Run          func(ctx context.Context, head Head) (Result, error)
+}
+
+type Notice struct {
+	Seq          int
+	Title        string
+	CommandLabel string
+	Done         bool
+	Result       ui.ToastResult
 }
 
 type Lock struct {

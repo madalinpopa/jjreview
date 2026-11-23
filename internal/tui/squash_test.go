@@ -71,9 +71,7 @@ func TestLogSquash_success(t *testing.T) {
 
 		m := press(t, loaded(t, src), "2", "s", "y")
 
-		got := view(m)
-		assertContains(t, got, "squashed kxyzabcd into pqrspare · New conflicts appeared in 1 commits:")
-		assertMissing(t, got, "1fd99db8")
+		assertContains(t, toastText(t, m), "! Squash into pqrspare", "squashed kxyzabcd into pqrspare New conflicts appeared in 1 commits: pqrspare 1fd99db8 (conflict) parent")
 	})
 
 	t.Run("squashing the working copy into the reviewed revision keeps the review", func(t *testing.T) {
@@ -186,8 +184,7 @@ func TestLogSquash_failed(t *testing.T) {
 
 		m := press(t, loaded(t, src), "2", "s", "y")
 
-		got := view(m)
-		assertContains(t, got, "squash into pqrspare: jj squash: exit status 1: Error: Commit pqrspare is immutable")
-		assertMissing(t, got, "Hint: details")
+		assertContains(t, toastText(t, m), "squash into pqrspare: jj squash: exit status 1: Error: Commit pqrspare is immutable")
+		assertMissing(t, view(m), "Hint: details")
 	})
 }

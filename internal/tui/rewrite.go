@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -14,6 +15,7 @@ import (
 )
 
 type rewrittenMsg struct {
+	toast     int
 	done      string
 	focus     string
 	keep      logview.Position
@@ -25,16 +27,35 @@ type rewrittenMsg struct {
 	err       error
 }
 
+type noticeRef struct {
+	from view
+	seq  int
+	id   int
+}
+
+func (m *Model) notify(from view, n tab.Notice) tea.Cmd {
+	if !n.Done {
+		id, cmd := m.toast.Start(n.Title, n.CommandLabel)
+		m.notice = noticeRef{from: from, seq: n.Seq, id: id}
+		return cmd
+	}
+	if m.notice.from == from && m.notice.seq == n.Seq {
+		if cmd, ok := m.toast.Finish(m.notice.id, n.Result); ok {
+			return cmd
+		}
+	}
+	m.status = n.Result.Summary()
+	return nil
+}
+
 func (m *Model) rewrite(rw tab.Rewrite) tea.Cmd {
 	keep := m.log.HoldPosition()
 	m.reloading = true
-	if rw.Pending != "" {
-		m.status = rw.Pending
-	}
+	id, spin := m.toast.Start(rw.Title, rw.CommandLabel)
 	ctx, src, target := m.ctx, m.src, m.target
 	head := m.head()
-	return func() tea.Msg {
-		msg := rewrittenMsg{focus: rw.Focus, keep: keep}
+	return tea.Batch(spin, func() tea.Msg {
+		msg := rewrittenMsg{toast: id, focus: rw.Focus, keep: keep}
 		r, err := rw.Run(ctx, head)
 		msg.done, msg.warnings, msg.keepPicks, msg.err = r.Done, r.Warnings, r.KeepPicks, err
 		if target == "" || r.Replaced {
@@ -43,7 +64,7 @@ func (m *Model) rewrite(rw tab.Rewrite) tea.Cmd {
 		}
 		msg.step, msg.loaded, msg.lost = reviewedAfterRewrite(ctx, src, target, head.CommitID, r.Restored)
 		return msg
-	}
+	})
 }
 
 func reviewedAfterRewrite(ctx context.Context, src Source, target, head string, restored bool) (revisionStep, loadedMsg, string) {
@@ -72,23 +93,21 @@ func (m *Model) applyRewritten(msg rewrittenMsg) tea.Cmd {
 		keep = keep.Targeting(msg.focus)
 	}
 	m.log.RestorePosition(keep)
-	status := msg.done
-	switch {
-	case msg.err != nil:
-		status, _, _ = strings.Cut(msg.err.Error(), "\n")
-	case msg.warnings != "":
-		warning, _, _ := strings.Cut(msg.warnings, "\n")
-		status += " · " + warning
+	result := ui.ToastResult{Text: msg.done, Warning: msg.warnings, Err: msg.err}
+	done, shown := m.toast.Finish(msg.toast, result)
+	var status string
+	if !shown {
+		status = result.Summary()
 	}
 	if msg.lost != "" {
-		status += "; " + msg.lost + " was rewritten, reviewing the working copy"
+		status = joinStatus(status, msg.lost+" was rewritten, reviewing the working copy")
 	}
 	if err := msg.loaded.err; err != nil {
 		m.reloading = false
 		m.outdated = true
 		m.change.WorkingCopy = false
-		m.status = status + "; " + msg.step.failure(err)
-		return m.refreshAfterRewrite()
+		m.status = joinStatus(status, msg.step.failure(err))
+		return tea.Batch(done, m.refreshAfterRewrite())
 	}
 	held := m.review.Hold()
 	if msg.step == workingCopyStep {
@@ -101,7 +120,11 @@ func (m *Model) applyRewritten(msg rewrittenMsg) tea.Cmd {
 		m.review.KeepPicks(held)
 	}
 	m.status = status
-	return tea.Batch(cmd, m.refreshAfterRewrite())
+	return tea.Batch(done, cmd, m.refreshAfterRewrite())
+}
+
+func joinStatus(parts ...string) string {
+	return strings.Join(slices.DeleteFunc(parts, func(s string) bool { return s == "" }), "; ")
 }
 
 func (m *Model) refreshAfterRewrite() tea.Cmd {

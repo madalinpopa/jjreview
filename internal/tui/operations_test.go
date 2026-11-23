@@ -444,7 +444,7 @@ func TestOperationsTab_failed(t *testing.T) {
 
 		m := press(t, loaded(t, src), "4", "j", "j", "r", "y")
 
-		assertContains(t, view(m), "restore operation cccc3333: jj operation restore: exit status 1")
+		assertContains(t, toastText(t, m), "restore operation cccc3333: jj operation restore: exit status 1")
 	})
 
 	t.Run("a restore that leaves the reviewed change divergent reviews the working copy", func(t *testing.T) {

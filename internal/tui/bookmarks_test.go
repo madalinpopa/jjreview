@@ -739,7 +739,7 @@ func TestBookmarkDelete_success(t *testing.T) {
 		m = press(t, m, "y")
 
 		assertBookmarks(t, src, "feature=childcommit", "split=", "todo=commit1")
-		assertMissing(t, view(m), "Delete bookmark", " main ")
+		assertMissing(t, view(m), "y delete · any other key cancels", "│▌ main ", "│  main ")
 		if got := m.BookmarkCursor(); got != "split" {
 			t.Errorf("BookmarkCursor() = %q, want %q", got, "split")
 		}
@@ -1056,7 +1056,8 @@ func TestBookmarkRound2_failed(t *testing.T) {
 
 		m := press(t, loaded(t, src), "3", "d", "y")
 
-		assertContains(t, view(m), "jj crashed", "now: feature does not exist", "bookmark 1/3")
+		assertContains(t, toastText(t, m), "jj crashed", "now: feature does not exist")
+		assertContains(t, view(m), "bookmark 1/3")
 	})
 }
 

@@ -3,6 +3,7 @@ package tui
 import (
 	"context"
 	"os/exec"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -15,6 +16,7 @@ import (
 	"github.com/madalinpopa/jjreview/internal/tui/logview"
 	"github.com/madalinpopa/jjreview/internal/tui/operations"
 	"github.com/madalinpopa/jjreview/internal/tui/review"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 const (
@@ -68,6 +70,8 @@ type Model struct {
 	bookmarks  bookmarks.Model
 	operations operations.Model
 	review     review.Model
+	toast      ui.Toast
+	notice     noticeRef
 }
 
 func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
@@ -83,6 +87,7 @@ func New(ctx context.Context, src Source, gen llm.Provider, rev string) Model {
 		log:        logview.New(ctx, src),
 		bookmarks:  bookmarks.New(ctx, src),
 		operations: operations.New(ctx, src),
+		toast:      ui.NewToast(tickAfter),
 		width:      defaultWidth,
 		height:     defaultHeight,
 	}
@@ -97,6 +102,15 @@ func (m Model) WithTheme(s theme.Set) Model {
 	return m
 }
 
+func (m Model) WithToastTimer(after func(time.Duration, tea.Msg) tea.Cmd) Model {
+	m.toast = ui.NewToast(after)
+	return m
+}
+
+func tickAfter(d time.Duration, msg tea.Msg) tea.Cmd {
+	return tea.Tick(d, func(time.Time) tea.Msg { return msg })
+}
+
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{load(m.ctx, m.src, m.rev), func() tea.Msg { return queryBackgroundMsg{} }}
 	if m.autoTheme() {
@@ -106,6 +120,13 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	visible := m.toast.Visible()
+	if cmd, ok := m.toast.Update(msg); ok {
+		if m.toast.Visible() != visible {
+			m.relayout()
+		}
+		return m, cmd
+	}
 	var cmd tea.Cmd
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -165,11 +186,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = m.updateTabs(msg)
 		}
 	}
+	m.relayout()
+	return m, cmd
+}
+
+func (m *Model) relayout() {
 	env := m.reviewEnv()
 	m.review.Sync(env)
 	m.bookmarks.Resize(m.env(bookmarksView))
 	m.scroll(env)
-	return m, cmd
 }
 
 func (m *Model) keyPress(msg tea.KeyPressMsg) tea.Cmd {

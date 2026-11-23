@@ -42,7 +42,7 @@ func TestLogFetch_success(t *testing.T) {
 
 		m, _ = update(t, m, keyMsg("f"))
 
-		assertContains(t, view(m), "fetching…")
+		assertContains(t, view(m), "Fetch", "jj git fetch")
 	})
 
 	t.Run("selected hunks are kept", func(t *testing.T) {
@@ -76,10 +76,10 @@ func TestLogFetch_failed(t *testing.T) {
 		src := revisionSource()
 		src.fetchErr = errors.New("jj git fetch: exit status 1: Error: No git remote named 'origin'\nHint: details")
 
-		got := view(press(t, loaded(t, src), "2", "f"))
+		m := press(t, loaded(t, src), "2", "f")
 
-		assertContains(t, got, "fetch: jj git fetch: exit status 1: Error: No git remote named 'origin'")
-		assertMissing(t, got, "Hint: details")
+		assertContains(t, toastText(t, m), "fetch: jj git fetch: exit status 1: Error: No git remote named 'origin'")
+		assertMissing(t, view(m), "Hint: details")
 	})
 }
 
@@ -111,7 +111,7 @@ func TestLogPush_success(t *testing.T) {
 
 		m := press(t, loaded(t, src), "2", "P", "y")
 
-		assertContains(t, view(m), "pushed feature to mirror and feature, main to origin")
+		assertContains(t, toastText(t, m), "pushed feature to mirror and feature, main to origin")
 	})
 
 	t.Run("the prompt lists the bookmarks that are pushed", func(t *testing.T) {
@@ -175,19 +175,19 @@ func TestLogPush_failed(t *testing.T) {
 		src := revisionSource()
 		src.pushErr = errors.New("jj git push: exit status 1: Error: Won't push commit 1234 since it has no description\nHint: details")
 
-		got := view(press(t, loaded(t, src), "2", "P", "y"))
+		m := press(t, loaded(t, src), "2", "P", "y")
 
-		assertContains(t, got, "push kxyzabcd: jj git push: exit status 1: Error: Won't push commit 1234 since it has no description")
-		assertMissing(t, got, "Hint: details")
+		assertContains(t, toastText(t, m), "push kxyzabcd: jj git push: exit status 1: Error: Won't push commit 1234 since it has no description")
+		assertMissing(t, view(m), "Hint: details")
 	})
 
 	t.Run("bookmarks changed since the log was listed", func(t *testing.T) {
 		src := revisionSource()
 		src.pushErr = fmt.Errorf("push commit1: %w", jj.ErrBookmarksChanged)
 
-		got := view(press(t, loaded(t, src), "2", "P", "y"))
+		m := press(t, loaded(t, src), "2", "P", "y")
 
-		assertContains(t, got, "bookmarks changed; press P to review the push again")
+		assertContains(t, toastText(t, m), "bookmarks changed; press P to review the push again")
 	})
 }
 

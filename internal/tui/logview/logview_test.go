@@ -379,7 +379,7 @@ func TestKey_success(t *testing.T) {
 		if err != nil || len(src.abandoned) != 1 || src.abandoned[0] != "c1" || m.OverlayOpen() {
 			t.Fatalf("Key(y) abandoned %v, err = %v, OverlayOpen = %v, want c1 and the confirmation closed", src.abandoned, err, m.OverlayOpen())
 		}
-		if res.Done != "abandoned aaaaaaaa" || !res.Replaced || fx.Rewrite.Pending != "" || fx.Rewrite.Focus != "" {
+		if res.Done != "abandoned aaaaaaaa" || !res.Replaced || fx.Rewrite.Title != "Abandon aaaaaaaa" || fx.Rewrite.CommandLabel != "jj abandon -r aaaaaaaa" || fx.Rewrite.Focus != "" {
 			t.Errorf("abandon = %+v, rewrite = %+v, want the done status and the head replaced", res, *fx.Rewrite)
 		}
 	})

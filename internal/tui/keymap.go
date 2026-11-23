@@ -19,6 +19,7 @@ type globalKeyMap struct {
 	scrollDown    key.Binding
 	scrollUp      key.Binding
 	open          key.Binding
+	dismiss       key.Binding
 }
 
 func newGlobalKeyMap() globalKeyMap {
@@ -33,6 +34,7 @@ func newGlobalKeyMap() globalKeyMap {
 		scrollDown:    key.NewBinding(key.WithKeys("j", "down"), key.WithHelp("j", "scroll down")),
 		scrollUp:      key.NewBinding(key.WithKeys("k", "up"), key.WithHelp("k", "scroll up")),
 		open:          key.NewBinding(key.WithKeys("enter"), key.WithHelp("enter", "review the revision")),
+		dismiss:       key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "dismiss the notification")),
 	}
 }
 
@@ -96,6 +98,10 @@ func (m *Model) globalKey(msg tea.KeyPressMsg, armed string) (tea.Cmd, bool) {
 	return nil, true
 }
 
+func (m *Model) dismissKey(msg tea.KeyPressMsg) bool {
+	return key.Matches(msg, m.keys.dismiss) && m.toast.Dismiss()
+}
+
 func (m Model) keyHints() []ui.KeyHint {
 	help := ui.Hint("help", m.keys.help)
 	if t, ok := m.active(); ok {
@@ -130,7 +136,7 @@ func (m Model) helpSections() []helpSection {
 	for _, k := range m.tabKeys() {
 		views.hints = append(views.hints, ui.Describe(k))
 	}
-	other := []ui.KeyHint{ui.Describe(m.keys.help), ui.Describe(m.keys.quit)}
+	other := []ui.KeyHint{ui.Describe(m.keys.dismiss), ui.Describe(m.keys.help), ui.Describe(m.keys.quit)}
 	var own []helpSection
 	if t, ok := m.active(); ok {
 		own = []helpSection{{title: t.label, hints: t.tab.Help()}}

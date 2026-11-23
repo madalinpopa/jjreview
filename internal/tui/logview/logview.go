@@ -691,7 +691,7 @@ func (l Model) abandon(e jj.LogEntry) tab.Effect {
 	id := ui.ShortID(e.ChangeID)
 	retry := "bookmarks changed; press " + l.keys.abandon.Help().Key + " to review the abandon again"
 	src := l.src
-	return tab.Effect{Rewrite: new(tab.Rewrite{Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
+	return tab.Effect{Rewrite: new(tab.Rewrite{Title: "Abandon " + id, CommandLabel: "jj abandon -r " + id, Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
 		workingCopy, err := src.Abandon(ctx, e.CommitID, e.Bookmarks)
 		switch {
 		case errors.Is(err, jj.ErrBookmarksChanged):
@@ -709,8 +709,16 @@ func (l Model) squash(from []jj.LogEntry, into jj.LogEntry) tab.Effect {
 		done = fmt.Sprintf("squashed %d revisions", n)
 	}
 	target := ui.ShortID(into.ChangeID)
+	sources := make([]string, len(from))
+	for i, e := range from {
+		sources[i] = ui.ShortID(e.ChangeID)
+	}
+	revset := strings.Join(sources, "|")
+	if len(from) > 1 {
+		revset = "'" + revset + "'"
+	}
 	src := l.src
-	return tab.Effect{Rewrite: new(tab.Rewrite{Focus: into.ChangeID, Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
+	return tab.Effect{Rewrite: new(tab.Rewrite{Title: "Squash into " + target, CommandLabel: "jj squash --from " + revset + " --into " + target, Focus: into.ChangeID, Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
 		warnings, err := src.Squash(ctx, from, into)
 		if err != nil {
 			return tab.Result{}, fmt.Errorf("squash into %s: %w", target, err)
@@ -723,8 +731,12 @@ func (l Model) squash(from []jj.LogEntry, into jj.LogEntry) tab.Effect {
 func (l Model) push(e jj.LogEntry) tab.Effect {
 	id := ui.ShortID(e.ChangeID)
 	retry := "bookmarks changed; press " + l.keys.push.Help().Key + " to review the push again"
+	command := "jj git push --change " + id
+	if len(e.Bookmarks) > 0 {
+		command = "jj git push --bookmark " + strings.Join(e.Bookmarks, " --bookmark ")
+	}
 	src := l.src
-	return tab.Effect{Rewrite: new(tab.Rewrite{Pending: "pushing " + id + "…", Focus: e.ChangeID, Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
+	return tab.Effect{Rewrite: new(tab.Rewrite{Title: "Push " + id, CommandLabel: command, Focus: e.ChangeID, Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
 		r, err := src.Push(ctx, e)
 		res := tab.Result{KeepPicks: true}
 		switch {
@@ -754,7 +766,7 @@ func (l Model) fetch(env tab.Env) tab.Effect {
 		return fx
 	}
 	src := l.src
-	return tab.Effect{Rewrite: new(tab.Rewrite{Pending: "fetching…", Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
+	return tab.Effect{Rewrite: new(tab.Rewrite{Title: "Fetch", CommandLabel: "jj git fetch", Run: func(ctx context.Context, _ tab.Head) (tab.Result, error) {
 		changed, err := src.Fetch(ctx)
 		res := tab.Result{KeepPicks: true, Done: "fetched"}
 		switch {

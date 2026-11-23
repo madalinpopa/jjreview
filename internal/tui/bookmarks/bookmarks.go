@@ -42,6 +42,7 @@ type Model struct {
 	modal    *dialog
 	deleting *jj.Bookmark
 	picker   *picker
+	notices  int
 }
 
 func New(ctx context.Context, src Source) Model {
@@ -69,6 +70,7 @@ type loadedMsg struct {
 }
 
 type deletedMsg struct {
+	seq      int
 	name     string
 	warnings string
 	refresh  bool
@@ -186,7 +188,7 @@ func (b *Model) applyList(msg loadedMsg, env tab.Env) (tea.Cmd, tab.Effect) {
 func (b *Model) Key(msg tea.KeyPressMsg, env tab.Env) (tea.Cmd, tab.Effect) {
 	switch {
 	case b.deleting != nil:
-		return b.deleteKey(msg), tab.Effect{}
+		return b.deleteKey(msg)
 	case b.modal != nil:
 		return b.modalKey(msg), tab.Effect{}
 	case b.picker != nil:
@@ -243,16 +245,20 @@ func (b *Model) open() tab.Effect {
 	return eff
 }
 
-func (b *Model) deleteKey(msg tea.KeyPressMsg) tea.Cmd {
+func (b *Model) deleteKey(msg tea.KeyPressMsg) (tea.Cmd, tab.Effect) {
 	d := *b.deleting
 	b.deleting = nil
 	if b.keys.resolveDelete(msg) != confirmIntent {
-		return nil
+		return nil, tab.Effect{}
 	}
-	ref, ctx, src := refOf(d), b.ctx, b.src
+	b.notices++
+	seq, ref, ctx, src := b.notices, refOf(d), b.ctx, b.src
+	eff := tab.Effect{Notice: new(tab.Notice{Seq: seq, Title: "Delete bookmark " + d.Name, CommandLabel: "jj bookmark delete " + d.Name})}
 	return func() tea.Msg {
-		return removeBookmark(ctx, src, ref)
-	}
+		msg := removeBookmark(ctx, src, ref)
+		msg.seq = seq
+		return msg
+	}, eff
 }
 
 func (b Model) Overlay(env tab.Env) string {
@@ -360,12 +366,11 @@ func observe(ctx context.Context, src Source, names ...string) string {
 }
 
 func (b *Model) applyDeleted(msg deletedMsg) tab.Effect {
-	eff := tab.Effect{Status: "✓ deleted " + msg.name}
+	result := ui.ToastResult{Text: "deleted " + msg.name, Warning: msg.warnings, Err: msg.err}
 	if msg.err != nil {
-		eff.Status = msg.err.Error()
-	} else if msg.warnings != "" {
-		eff.Status += " · " + strings.Join(strings.Fields(msg.warnings), " ")
+		result = ui.ToastResult{Err: msg.err}
 	}
+	eff := tab.Effect{Notice: new(tab.Notice{Seq: msg.seq, Done: true, Result: result})}
 	if msg.refresh {
 		b.want = ""
 		eff.Refresh = true

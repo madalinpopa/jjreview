@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strconv"
 	"strings"
-	"unicode"
 
 	"charm.land/bubbles/v2/key"
 	tea "charm.land/bubbletea/v2"
@@ -195,22 +193,9 @@ func details(op jj.Operation, width int) []string {
 	width = max(width-indent(op), 1)
 	var out []string
 	for line := range strings.SplitSeq(op.Args, "\n") {
-		out = append(out, strings.Split(ansi.Hardwrap(ansi.Wrap(printable(line), width, ""), width, true), "\n")...)
+		out = append(out, strings.Split(ansi.Hardwrap(ansi.Wrap(ui.Printable(line), width, ""), width, true), "\n")...)
 	}
 	return out
-}
-
-func printable(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if unicode.IsControl(r) {
-			q := strconv.QuoteRune(r)
-			b.WriteString(q[1 : len(q)-1])
-			continue
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
 }
 
 func (o Model) rows(width int) []row {
@@ -402,7 +387,14 @@ func (o *Model) confirmKey(msg tea.KeyPressMsg, env tab.Env) tab.Effect {
 
 func (o Model) rewrite(c pending) tab.Rewrite {
 	src, id, short := o.src, c.op.ID, ui.ShortID(c.op.ID)
-	return tab.Rewrite{Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
+	title, command := "Abandon operation ", "jj operation abandon "
+	switch c.action {
+	case restoreIntent:
+		title, command = "Restore operation ", "jj operation restore "
+	case undoIntent:
+		title, command = "Undo operation ", "jj operation revert "
+	}
+	return tab.Rewrite{Title: title + short, CommandLabel: command + short, Run: func(ctx context.Context, head tab.Head) (tab.Result, error) {
 		switch c.action {
 		case restoreIntent:
 			if err := src.RestoreOperation(ctx, id); err != nil {

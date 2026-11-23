@@ -19,6 +19,7 @@ func TestKeyScopes_noSharedKeys(t *testing.T) {
 		"operationsTab": g.operationsTab,
 		"help":          g.help,
 		"quit":          g.quit,
+		"dismiss":       g.dismiss,
 	}
 	helpOverlay := map[string]key.Binding{
 		"closeHelp":  g.closeHelp,

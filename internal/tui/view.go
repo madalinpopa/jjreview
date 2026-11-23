@@ -16,19 +16,38 @@ import (
 const modalMaxWidth = 64
 
 func (m Model) View() tea.View {
-	content := m.screen()
+	toast, bar := m.chrome()
+	content := m.screen(bar)
 	if box := m.overlay(); box != "" {
-		x := max((m.width-lipgloss.Width(box))/2, 0)
-		y := max((m.height-lipgloss.Height(box))/2, 0)
-		content = lipgloss.NewCompositor(
-			lipgloss.NewLayer(content),
-			lipgloss.NewLayer(box).X(x).Y(y).Z(1),
-		).Render()
+		content = layer(content, box, max((m.width-lipgloss.Width(box))/2, 0), max((m.height-lipgloss.Height(box))/2, 0))
+	} else if toast != "" {
+		content = layer(content, toast, m.width-lipgloss.Width(toast)-1, m.height-1-len(bar)-lipgloss.Height(toast))
 	}
 	v := tea.NewView(fit(content, m.width, m.height))
 	v.AltScreen = true
 	v.ReportFocus = m.autoTheme()
 	return v
+}
+
+func layer(content, box string, x, y int) string {
+	return lipgloss.NewCompositor(
+		lipgloss.NewLayer(content),
+		lipgloss.NewLayer(box).X(x).Y(y).Z(1),
+	).Render()
+}
+
+func (m Model) chrome() (string, []string) {
+	bar := m.bar(m.statusFor(m.status))
+	if !m.toast.Visible() {
+		return "", bar
+	}
+	if !m.overlayOpen() {
+		box := m.toast.View(m.pal, m.width, ui.Hint("dismiss", m.keys.dismiss))
+		if box != "" && lipgloss.Height(box) <= m.height-2-len(bar) {
+			return box, bar
+		}
+	}
+	return "", m.bar(m.statusFor(joinStatus(m.toast.Summary(), m.status)))
 }
 
 func fit(content string, width, height int) string {
@@ -40,18 +59,19 @@ func fit(content string, width, height int) string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) screen() string {
+func (m Model) screen(bar []string) string {
 	var body string
 	if t, ok := m.active(); ok {
 		body = t.tab.View(m.env(t.view))
 	} else {
 		body = m.review.View(m.reviewEnv())
 	}
-	return strings.Join(append([]string{m.topBar(), body}, m.bottomBar()...), "\n")
+	return strings.Join(append([]string{m.topBar(), body}, bar...), "\n")
 }
 
 func (m Model) bodyHeight() int {
-	return max(m.height-1-len(m.bottomBar()), 0)
+	_, bar := m.chrome()
+	return max(m.height-1-len(bar), 0)
 }
 
 func (m Model) diffHeight() int {
@@ -147,7 +167,7 @@ func (m Model) tab(v view, b key.Binding, label string) ui.Seg {
 	return ui.Pill(m.pal.Chip, m.pal.ChipText, text)
 }
 
-func (m Model) bottomBar() []string {
+func (m Model) bar(statusText string) []string {
 	p := m.pal
 	sep := ui.Span(ui.Fg(p.Faint), " · ")
 	var lines [][]ui.Seg
@@ -168,23 +188,23 @@ func (m Model) bottomBar() []string {
 		line = append(line, segs...)
 		used += w
 	}
-	status := []ui.Seg{ui.Span(ui.Fg(p.Status), m.statusText())}
+	status := []ui.Seg{ui.Span(ui.Fg(p.Status), statusText)}
 	out := make([]string, 0, len(lines)+2)
 	for _, l := range lines {
 		out = append(out, ui.Paint(m.width, p.Page, l, nil))
 	}
-	if used+1+lipgloss.Width(m.statusText()) <= m.width {
+	if used+1+lipgloss.Width(statusText) <= m.width {
 		return append(out, ui.Paint(m.width, p.Page, line, status))
 	}
 	return append(out, ui.Paint(m.width, p.Page, line, nil), ui.Paint(m.width, p.Page, nil, status))
 }
 
-func (m Model) statusText() string {
-	if m.status == "" && m.outdated {
+func (m Model) statusFor(status string) string {
+	if status == "" && m.outdated {
 		return review.OutdatedStatus
 	}
-	if m.status != "" || m.view != reviewView {
-		return m.status
+	if status != "" || m.view != reviewView {
+		return status
 	}
 	return m.review.Status(review.Env{Change: m.change, Loaded: m.loaded, Err: m.err})
 }

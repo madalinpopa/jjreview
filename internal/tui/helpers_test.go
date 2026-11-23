@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/madalinpopa/jjreview/internal/diff"
@@ -405,7 +406,7 @@ func run(tb testing.TB, m tui.Model, cmd tea.Cmd) tui.Model {
 
 func start(tb testing.TB, src tui.Source, gen llm.Provider, width, height int) tui.Model {
 	tb.Helper()
-	m := tui.New(tb.Context(), src, gen, "@")
+	m := tui.New(tb.Context(), src, gen, "@").WithToastTimer(func(time.Duration, tea.Msg) tea.Cmd { return nil })
 	m, _ = update(tb, m, tea.WindowSizeMsg{Width: width, Height: height})
 	return run(tb, m, m.Init())
 }

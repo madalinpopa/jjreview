@@ -32,7 +32,7 @@ func TestFetch_success(t *testing.T) {
 		fx := keys(&m, "f")
 		res, err := rewrite(t, fx)
 
-		if err != nil || src.fetched != 1 || res != (tab.Result{Done: "fetched", KeepPicks: true}) || fx.Rewrite.Pending != "fetching…" {
+		if err != nil || src.fetched != 1 || res != (tab.Result{Done: "fetched", KeepPicks: true}) || fx.Rewrite.Title != "Fetch" || fx.Rewrite.CommandLabel != "jj git fetch" {
 			t.Errorf("Key(f) = %+v, err = %v, fetched %d times, want a fetch reported as fetched", res, err, src.fetched)
 		}
 	})
@@ -99,7 +99,7 @@ func TestPush_success(t *testing.T) {
 		if err != nil || !slices.Equal(src.pushed, []string{"c1"}) || len(src.abandoned) != 0 {
 			t.Fatalf("Key(y) pushed %v, abandoned %v, err = %v, want a push of c1", src.pushed, src.abandoned, err)
 		}
-		if res != (tab.Result{Done: "pushed main, feat to origin and feat to fork", KeepPicks: true}) || fx.Rewrite.Pending != "pushing aaaaaaaa…" || fx.Rewrite.Focus != "aaaaaaaaaaaa" {
+		if res != (tab.Result{Done: "pushed main, feat to origin and feat to fork", KeepPicks: true}) || fx.Rewrite.Title != "Push aaaaaaaa" || fx.Rewrite.CommandLabel != "jj git push --change aaaaaaaa" || fx.Rewrite.Focus != "aaaaaaaaaaaa" {
 			t.Errorf("push = %+v, rewrite = %+v, want the pushed bookmarks focused on the change", res, *fx.Rewrite)
 		}
 	})
@@ -138,6 +138,19 @@ func TestPush_success(t *testing.T) {
 			if !strings.Contains(got, want) {
 				t.Errorf("Overlay() = %q, want it to contain %q", got, want)
 			}
+		}
+	})
+
+	t.Run("the command names every bookmark to push", func(t *testing.T) {
+		t.Parallel()
+		lines := stack()
+		lines[0].Entry.Bookmarks = []string{"main", "feat"}
+		m := loaded(t, &fakeSource{lines: lines})
+
+		fx := keys(&m, "P", "y")
+
+		if fx.Rewrite == nil || fx.Rewrite.Title != "Push aaaaaaaa" || fx.Rewrite.CommandLabel != "jj git push --bookmark main --bookmark feat" {
+			t.Errorf("Key(y) = %+v, want the push titled and both bookmarks in the command", fx)
 		}
 	})
 

@@ -245,9 +245,8 @@ func TestLogAbandon_bookmarksChanged(t *testing.T) {
 
 		m = press(t, m, "y")
 
-		got := view(m)
-		assertContains(t, got, "bookmarks changed; press a to review the abandon again")
-		assertMissing(t, got, "y abandon ·")
+		assertContains(t, toastText(t, m), "bookmarks changed; press a to review the abandon again")
+		assertMissing(t, view(m), "y abandon ·")
 		m = press(t, m, "a")
 		assertContains(t, view(m), "Deletes bookmarks feature, other")
 		press(t, m, "y")
@@ -450,7 +449,8 @@ func TestLogAbandon_success(t *testing.T) {
 		if got := src.changeRevs[len(src.changeRevs)-1]; got != "@" {
 			t.Errorf("Change() last rev = %q, want %q", got, "@")
 		}
-		assertContains(t, view(m), "abandoned pqrspare; wxyzchil was rewritten, reviewing the working copy")
+		assertContains(t, toastText(t, m), "abandoned pqrspare")
+		assertContains(t, view(m), "wxyzchil was rewritten, reviewing the working copy")
 		assertContains(t, view(press(t, m, "1")), "@ kxyzabcd")
 	})
 
@@ -465,7 +465,8 @@ func TestLogAbandon_success(t *testing.T) {
 		if got := src.changeRevs[len(src.changeRevs)-1]; got != "@" {
 			t.Errorf("Change() last rev = %q, want %q", got, "@")
 		}
-		assertContains(t, view(m), "abandoned pqrspare; wxyzchil was rewritten, reviewing the working copy")
+		assertContains(t, toastText(t, m), "abandoned pqrspare")
+		assertContains(t, view(m), "wxyzchil was rewritten, reviewing the working copy")
 	})
 
 	t.Run("a commit after abandoning an ancestor splits the rebased revision", func(t *testing.T) {
@@ -495,8 +496,9 @@ func TestLogAbandon_failed(t *testing.T) {
 
 		m = press(t, m, "a", "y")
 
+		assertContains(t, toastText(t, m), "abandon wxyzchil: jj abandon: exit status 1: Error: Commit childcom is immutable")
 		got := view(m)
-		assertContains(t, got, "abandon wxyzchil: jj abandon: exit status 1: Error: Commit childcom is immutable", "child feature")
+		assertContains(t, got, "child feature")
 		assertMissing(t, got, "Hint")
 		assertLogTab(t, m)
 		if src.logCalls != calls+1 {
@@ -528,7 +530,8 @@ func TestLogAbandon_failed(t *testing.T) {
 
 		m = press(t, m, "y")
 
-		assertContains(t, view(m), "abandoned pqrspare; ", "jj exploded")
+		assertContains(t, toastText(t, m), "abandoned pqrspare")
+		assertContains(t, view(m), "jj exploded")
 		m = press(t, m, "1", "2", "1")
 		assertContains(t, view(m), "review out of date; press @ to review the working copy", "1 hunk selected")
 		m = press(t, m, "c")

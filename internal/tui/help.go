@@ -22,6 +22,13 @@ func (m *Model) helpKey(msg tea.KeyPressMsg) {
 	}
 }
 
+func (m Model) overlayOpen() bool {
+	if t, ok := m.active(); ok && t.tab.OverlayOpen() {
+		return true
+	}
+	return m.review.ModalOpen() || m.bookmarks.OverlayOpen() || m.help
+}
+
 func (m Model) overlay() string {
 	switch {
 	case m.review.ModalOpen():

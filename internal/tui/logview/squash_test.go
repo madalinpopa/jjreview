@@ -73,7 +73,7 @@ func TestSquash_success(t *testing.T) {
 		if !slices.Equal(got.from, []string{"c1"}) || got.into != "c2" {
 			t.Errorf("Squash() = %v into %s, want [c1] into c2", got.from, got.into)
 		}
-		if res != (tab.Result{Done: "squashed aaaaaaaa into bbbbbbbb", Replaced: true}) || fx.Rewrite.Focus != "bbbbbbbbbbbb" || fx.Rewrite.Pending != "" {
+		if res != (tab.Result{Done: "squashed aaaaaaaa into bbbbbbbb", Replaced: true}) || fx.Rewrite.Focus != "bbbbbbbbbbbb" || fx.Rewrite.Title != "Squash into bbbbbbbb" || fx.Rewrite.CommandLabel != "jj squash --from aaaaaaaa --into bbbbbbbb" {
 			t.Errorf("squash = %+v, rewrite = %+v, want the done status, the head replaced and the destination focused", res, *fx.Rewrite)
 		}
 	})
@@ -84,13 +84,17 @@ func TestSquash_success(t *testing.T) {
 		m := loaded(t, src)
 		keys(&m, "space", "j", "space")
 
-		res, got := squashed(t, src, keys(&m, "s", "y"))
+		fx := keys(&m, "s", "y")
+		res, got := squashed(t, src, fx)
 
 		if !slices.Equal(got.from, []string{"c1", "c2"}) || got.into != "c3" {
 			t.Errorf("Squash() = %v into %s, want [c1 c2] into c3", got.from, got.into)
 		}
 		if res.Done != "squashed 2 revisions into cccccccc" {
 			t.Errorf("squash Done = %q, want squashed 2 revisions into cccccccc", res.Done)
+		}
+		if fx.Rewrite.CommandLabel != "jj squash --from 'aaaaaaaa|bbbbbbbb' --into cccccccc" {
+			t.Errorf("squash CommandLabel = %q, want both sources and the destination", fx.Rewrite.CommandLabel)
 		}
 	})
 

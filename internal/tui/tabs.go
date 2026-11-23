@@ -93,6 +93,9 @@ func (m *Model) tabKey(t tabEntry, msg tea.KeyPressMsg) tea.Cmd {
 		m.status = ""
 	}
 	if !t.tab.Captures() {
+		if m.dismissKey(msg) {
+			return nil
+		}
 		if cmd, ok := m.globalKey(msg, armed); ok {
 			return cmd
 		}
@@ -108,6 +111,9 @@ func (m *Model) tabKey(t tabEntry, msg tea.KeyPressMsg) tea.Cmd {
 }
 
 func (m *Model) applyEffect(from view, cmd tea.Cmd, eff tab.Effect) tea.Cmd {
+	if eff.Notice != nil {
+		cmd = tea.Batch(cmd, m.notify(from, *eff.Notice))
+	}
 	switch {
 	case eff.Rewrite != nil:
 		return tea.Batch(cmd, m.rewrite(*eff.Rewrite))

@@ -9,6 +9,7 @@ import (
 	"github.com/madalinpopa/jjreview/internal/jj"
 	"github.com/madalinpopa/jjreview/internal/tui/bookmarks"
 	"github.com/madalinpopa/jjreview/internal/tui/tab"
+	"github.com/madalinpopa/jjreview/internal/tui/ui"
 )
 
 type fakeSource struct {
@@ -86,11 +87,24 @@ func TestUpdate_success(t *testing.T) {
 		}
 	})
 
+	t.Run("starts a notice when a delete is confirmed", func(t *testing.T) {
+		t.Parallel()
+		m := loaded(t, newSource())
+		m.Key(press("d"), env())
+
+		_, eff := m.Key(press("y"), env())
+
+		want := tab.Notice{Seq: 1, Title: "Delete bookmark main", CommandLabel: "jj bookmark delete main"}
+		if eff.Notice == nil || *eff.Notice != want {
+			t.Errorf("Key(y) effect = %+v, want the notice %+v", eff, want)
+		}
+	})
+
 	t.Run("handles the result of a delete", func(t *testing.T) {
 		t.Parallel()
 		m := loaded(t, newSource())
 		m.Key(press("d"), env())
-		cmd, _ := m.Key(press("y"), env())
+		cmd, started := m.Key(press("y"), env())
 		msg := run(t, cmd)
 
 		_, eff, ok := m.Update(msg, env())
@@ -98,8 +112,9 @@ func TestUpdate_success(t *testing.T) {
 		if !ok {
 			t.Errorf("Update(%T) handled = false, want true", msg)
 		}
-		if eff.Status != "✓ deleted main" || !eff.Refresh {
-			t.Errorf("Update(%T) effect = %+v, want deleted status and a refresh", msg, eff)
+		want := tab.Notice{Seq: started.Notice.Seq, Done: true, Result: ui.ToastResult{Text: "deleted main"}}
+		if eff.Notice == nil || *eff.Notice != want || eff.Status != "" || !eff.Refresh {
+			t.Errorf("Update(%T) effect = %+v, want the finished notice and a refresh", msg, eff)
 		}
 	})
 

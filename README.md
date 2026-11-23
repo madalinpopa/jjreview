@@ -143,6 +143,7 @@ file whose changes match, or whose loaded content matches, and the next `n` /
 | `R` | Reload the working copy to pick up edits made outside jjr |
 | `e` | Edit the current file in `$VISUAL` / `$EDITOR` (default `vi`); working copy only |
 | `f` | Switch between changes only and the full file |
+| `x` | Dismiss the notification of a finished command |
 | `?` | Show all keys |
 | `q` | Quit |
 
@@ -180,6 +181,7 @@ included, contains it, ignoring case.
 | `esc` | Clear the search, or the selection |
 | `R` | Clear the selection and hide all files |
 | `ctrl+r` | Refresh the log |
+| `x` | Dismiss the notification of a finished command |
 | `?` | Show all keys |
 | `q` | Quit |
 
@@ -220,6 +222,7 @@ a minimum, such as `↑10+`. Conflicted bookmarks are marked too.
 | `e` | Rename the bookmark or move it to another revision; a conflicted bookmark has to be resolved with `jj bookmark set` first |
 | `d` | Delete the bookmark: a box shows it and its target, `y` deletes it and any other key cancels |
 | `R` | Refresh the bookmarks |
+| `x` | Dismiss the notification of a finished command |
 | `?` | Show all keys |
 | `q` | Quit |
 
@@ -258,6 +261,7 @@ current operation; snapshots and the root operation are dimmed.
 | `u` | Undo the operation by applying its inverse (`jj op revert`); `y` confirms |
 | `a` | Abandon the operation from the history (`jj op abandon`); the repo is unchanged; `y` confirms |
 | `R` | Refresh the operations |
+| `x` | Dismiss the notification of a finished command |
 | `?` | Show all keys |
 | `q` | Quit |
 
@@ -269,6 +273,13 @@ the root operation can't be undone or abandoned.
 
 `R` in the log, bookmarks or operations tab refreshes the lists, not the review;
 press `R` in the review tab to pick up file changes.
+
+Fetch, push, abandon, squash, the operation actions and bookmark deletion show
+a notification in the bottom-right corner with the command, a spinner while it
+runs and then its result. A success closes after a few seconds; a failure or a
+warning stays until `x` dismisses it or the next command starts. When the
+notification does not fit, or a dialog is open, the result is shown in the
+status bar instead.
 
 Commit dialog:
 
