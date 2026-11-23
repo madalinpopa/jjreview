@@ -68,6 +68,14 @@ Type@300ms "lll"
 Sleep 1.5s
 Type@300ms "hhh"
 Sleep 800ms
+Type "w"
+Sleep 2s
+Type@300ms "ll"
+Sleep 1.2s
+Type@300ms "hh"
+Sleep 600ms
+Type "w"
+Sleep 1s
 
 Tab
 Sleep 600ms
