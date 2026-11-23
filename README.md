@@ -126,6 +126,7 @@ file whose changes match, or whose loaded content matches, and the next `n` /
 | `]` / `[` | Next hunk / start of the current or previous hunk |
 | `J` / `K` | Next / previous file from either pane |
 | `h` / `l` | Scroll the diff left / right by 8 columns; a new file starts at the first column again |
+| `w` | Zoom the diff pane to the full width and hide the file pane, or zoom back out; `tab` also zooms out and focuses the file pane |
 | `@` | Go back to the working-copy revision |
 | `/` | Search the diff; `enter` jumps to the first match from the cursor on, `esc` cancels |
 | `n` / `N` | Next / previous match; past the last match of a file they move on to the next file with one and wrap around at the ends |

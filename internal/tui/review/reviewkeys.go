@@ -30,6 +30,7 @@ type keyMap struct {
 	full        key.Binding
 	scrollLeft  key.Binding
 	scrollRight key.Binding
+	zoom        key.Binding
 	search      key.Binding
 	nextMatch   key.Binding
 	prevMatch   key.Binding
@@ -71,6 +72,7 @@ func newKeyMap() keyMap {
 		full:        key.NewBinding(key.WithKeys("f"), key.WithHelp("f", "full file / changes only")),
 		scrollLeft:  key.NewBinding(key.WithKeys("h"), key.WithHelp("h", "scroll the diff left")),
 		scrollRight: key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "scroll the diff right")),
+		zoom:        key.NewBinding(key.WithKeys("w"), key.WithHelp("w", "zoom the diff pane in / out")),
 		search:      key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "search the diff")),
 		nextMatch:   key.NewBinding(key.WithKeys("n"), key.WithHelp("n", "next match")),
 		prevMatch:   key.NewBinding(key.WithKeys("N"), key.WithHelp("N", "previous match")),
@@ -106,6 +108,11 @@ func (m Model) Hints(c jj.Change) []ui.KeyHint {
 			hints = append(hints, ui.Hint("scroll", k.scrollLeft, k.scrollRight))
 		}
 	}
+	if m.zoomed {
+		hints = append(hints, ui.Hint("unzoom", k.zoom))
+	} else if m.overflow > 0 {
+		hints = append(hints, ui.Hint("zoom", k.zoom))
+	}
 	if m.needle != "" {
 		hints = append(hints, ui.Hint("match", k.nextMatch, k.prevMatch), ui.Hint("clear", k.cancelRange))
 	}
@@ -130,6 +137,7 @@ func (m Model) Help(c jj.Change) ([]HelpSection, []ui.KeyHint) {
 	}
 	review = append(review, ui.Describe(k.fold), ui.Describe(k.foldAll), ui.Describe(k.removed), ui.Describe(k.removedAll),
 		ui.Hint("scroll the diff left / right", k.scrollLeft, k.scrollRight),
+		ui.Describe(k.zoom),
 		ui.Hint(k.search.Help().Desc+"; next / previous match", k.search, k.nextMatch, k.prevMatch),
 		ui.Hint(dismiss, k.cancelRange))
 	sections := []HelpSection{
@@ -185,6 +193,7 @@ func Bindings() map[string]key.Binding {
 		"full":        k.full,
 		"scrollLeft":  k.scrollLeft,
 		"scrollRight": k.scrollRight,
+		"zoom":        k.zoom,
 		"search":      k.search,
 		"nextMatch":   k.nextMatch,
 		"prevMatch":   k.prevMatch,
@@ -222,6 +231,7 @@ const (
 	selectFileIntent
 	scrollLeftIntent
 	scrollRightIntent
+	zoomIntent
 	searchIntent
 	nextMatchIntent
 	prevMatchIntent
@@ -283,6 +293,8 @@ func (k keyMap) resolve(msg tea.KeyPressMsg) intent {
 		return scrollLeftIntent
 	case key.Matches(msg, k.scrollRight):
 		return scrollRightIntent
+	case key.Matches(msg, k.zoom):
+		return zoomIntent
 	case key.Matches(msg, k.search):
 		return searchIntent
 	case key.Matches(msg, k.nextMatch):

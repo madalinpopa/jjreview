@@ -62,6 +62,7 @@ func TestReviewResolve_success(t *testing.T) {
 		"S selects the file":                {msg: tea.KeyPressMsg{Code: 'S', Text: "S"}, want: selectFileIntent},
 		"h scrolls the diff left":           {msg: tea.KeyPressMsg{Code: 'h', Text: "h"}, want: scrollLeftIntent},
 		"l scrolls the diff right":          {msg: tea.KeyPressMsg{Code: 'l', Text: "l"}, want: scrollRightIntent},
+		"w zooms the diff pane":             {msg: tea.KeyPressMsg{Code: 'w', Text: "w"}, want: zoomIntent},
 		"unbound keys do nothing":           {msg: tea.KeyPressMsg{Code: 'x', Text: "x"}, want: noIntent},
 	}
 	for name, tt := range tests {

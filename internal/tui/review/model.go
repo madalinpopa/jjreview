@@ -82,6 +82,7 @@ type Model struct {
 	listTop     int
 	treeWidth   int
 	full        bool
+	zoomed      bool
 	filesFocus  bool
 	modal       *commitModal
 	genSeq      int
@@ -137,6 +138,7 @@ func (m *Model) Reset() {
 
 func (m *Model) ChangesOnly() {
 	m.full = false
+	m.zoomed = false
 }
 
 func (m Model) Hold() Held {

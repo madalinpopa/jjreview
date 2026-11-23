@@ -13,6 +13,9 @@ import (
 const maxListWidth = 60
 
 func (m Model) View(env Env) string {
+	if m.zoomed {
+		return m.diffCard(env)
+	}
 	return lipgloss.JoinHorizontal(lipgloss.Top,
 		m.filesCard(env),
 		ui.Blank(1, env.Theme.Page),
@@ -58,6 +61,9 @@ func (m Model) measureTree(p theme.Theme) int {
 }
 
 func (m Model) diffCardWidth(width int) int {
+	if m.zoomed {
+		return max(width, 1)
+	}
 	return max(width-m.listWidth(width)-1, 1)
 }
 

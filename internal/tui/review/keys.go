@@ -28,7 +28,12 @@ func (m *Model) Key(msg tea.KeyPressMsg, env Env) (tea.Cmd, Effect) {
 	}
 	switch intent {
 	case switchPaneIntent:
-		m.filesFocus = !m.filesFocus
+		m.filesFocus = !m.filesFocus || m.zoomed
+		m.zoomed = false
+	case zoomIntent:
+		m.zoomed = !m.zoomed
+		m.filesFocus = false
+		m.diffLeft = min(m.diffLeft, m.maxLeft(env))
 	case downIntent:
 		return m.move(env, 1), Effect{}
 	case upIntent:
@@ -143,7 +148,7 @@ func (m *Model) startRange(env Env) string {
 
 func (m *Model) rangeKey(env Env, intent intent) (string, bool) {
 	switch intent {
-	case downIntent, upIntent, halfDownIntent, halfUpIntent, topIntent, bottomIntent, nextHunkIntent, prevHunkIntent, scrollLeftIntent, scrollRightIntent:
+	case downIntent, upIntent, halfDownIntent, halfUpIntent, topIntent, bottomIntent, nextHunkIntent, prevHunkIntent, scrollLeftIntent, scrollRightIntent, zoomIntent:
 		return "", false
 	case selectLineIntent, selectHunkIntent:
 		m.ranging = false
