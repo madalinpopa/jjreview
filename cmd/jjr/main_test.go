@@ -289,12 +289,40 @@ func TestFinishProgram_failed(t *testing.T) {
 func TestProvider_none(t *testing.T) {
 	t.Parallel()
 
-	gen, err := provider(config.Config{Provider: config.ProviderNone})
+	gen, err := provider(t.Context(), config.Config{Provider: config.ProviderNone})
 
 	if err != nil {
 		t.Fatalf("provider() error = %v", err)
 	}
 	if gen != nil {
 		t.Errorf("provider() = %T, want no generator", gen)
+	}
+}
+
+func TestProvider_success(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("GOOGLE_API_KEY", "")
+	t.Setenv("GEMINI_API_KEY", "")
+
+	tests := map[string]struct {
+		cfg  config.Config
+		want string
+	}{
+		"openai with a key":    {cfg: config.Config{Provider: config.ProviderOpenAI, OpenAI: config.Provider{APIKey: "sk-test"}}, want: "llm.OpenAI"},
+		"openai without a key": {cfg: config.Config{Provider: config.ProviderOpenAI}, want: "llm.OpenAI"},
+		"gemini with a key":    {cfg: config.Config{Provider: config.ProviderGemini, Gemini: config.Provider{APIKey: "gm-test"}}, want: "*llm.Gemini"},
+		"gemini without a key": {cfg: config.Config{Provider: config.ProviderGemini}, want: "*llm.Gemini"},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			gen, err := provider(t.Context(), tt.cfg)
+
+			if err != nil {
+				t.Fatalf("provider(%q) error = %v", tt.cfg.Provider, err)
+			}
+			if got := fmt.Sprintf("%T", gen); got != tt.want {
+				t.Errorf("provider(%q) = %s, want %s", tt.cfg.Provider, got, tt.want)
+			}
+		})
 	}
 }

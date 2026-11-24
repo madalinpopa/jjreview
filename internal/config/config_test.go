@@ -176,12 +176,52 @@ model = "gpt-5-mini"
 			t.Errorf("Load() provider = %q, copilot = %+v", got.Provider, got.Copilot)
 		}
 	})
+
+	t.Run("reads the openai provider", func(t *testing.T) {
+		path := writeConfig(t, `
+provider = "openai"
+
+[providers.openai]
+api_key = "sk-test"
+model = "gpt-5.4"
+`)
+
+		got, err := config.Load(path)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+
+		want := config.Provider{APIKey: "sk-test", Model: "gpt-5.4"}
+		if got.Provider != config.ProviderOpenAI || got.OpenAI != want {
+			t.Errorf("Load() provider = %q, openai = %+v, want %q, %+v", got.Provider, got.OpenAI, config.ProviderOpenAI, want)
+		}
+	})
+
+	t.Run("reads the gemini provider", func(t *testing.T) {
+		path := writeConfig(t, `
+provider = "gemini"
+
+[providers.gemini]
+api_key = "gm-test"
+model = "gemini-3.6-pro"
+`)
+
+		got, err := config.Load(path)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+
+		want := config.Provider{APIKey: "gm-test", Model: "gemini-3.6-pro"}
+		if got.Provider != config.ProviderGemini || got.Gemini != want {
+			t.Errorf("Load() provider = %q, gemini = %+v, want %q, %+v", got.Provider, got.Gemini, config.ProviderGemini, want)
+		}
+	})
 }
 
 func TestLoad_failure(t *testing.T) {
 	for name, tc := range map[string]struct{ body, want string }{
 		"invalid toml":               {body: "provider = ", want: "config.toml"},
-		"unknown provider":           {body: `provider = "openai"`, want: `unknown provider "openai"; supported: none, anthropic, copilot`},
+		"unknown provider":           {body: `provider = "mistral"`, want: `unknown provider "mistral"; supported: none, anthropic, copilot, openai, gemini`},
 		"copilot api key":            {body: "[providers.copilot]\napi_key = \"secret\"\n", want: "api_key"},
 		"unknown theme key":          {body: "[theme.base]\nbordr = \"red\"\n", want: "unknown colour theme.base.bordr"},
 		"unknown section":            {body: "[theme.colors]\nborder = \"red\"\n", want: "unknown section theme.colors"},

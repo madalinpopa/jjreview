@@ -13,8 +13,10 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/anthropics/anthropic-sdk-go/v2/option"
+	anthropicoption "github.com/anthropics/anthropic-sdk-go/v2/option"
 	"github.com/charmbracelet/x/ansi"
+	openaioption "github.com/openai/openai-go/v3/option"
+	"google.golang.org/genai"
 
 	"github.com/madalinpopa/jjreview/internal/config"
 	"github.com/madalinpopa/jjreview/internal/jj"
@@ -89,7 +91,7 @@ func run(ctx context.Context, args []string, stdout io.Writer) error {
 		return err
 	}
 
-	gen, err := provider(cfg)
+	gen, err := provider(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -129,18 +131,26 @@ func resetColorScheme(w io.Writer, mode theme.Mode) error {
 	return err
 }
 
-func provider(cfg config.Config) (llm.Provider, error) {
+func provider(ctx context.Context, cfg config.Config) (llm.Provider, error) {
 	switch cfg.Provider {
 	case config.ProviderNone:
 		return nil, nil
 	case config.ProviderAnthropic:
-		var opts []option.RequestOption
+		var opts []anthropicoption.RequestOption
 		if cfg.Anthropic.APIKey != "" {
-			opts = append(opts, option.WithAPIKey(cfg.Anthropic.APIKey))
+			opts = append(opts, anthropicoption.WithAPIKey(cfg.Anthropic.APIKey))
 		}
 		return llm.NewAnthropic(cfg.Anthropic.Model, opts...), nil
 	case config.ProviderCopilot:
 		return llm.NewCopilot(cfg.Copilot.Model), nil
+	case config.ProviderOpenAI:
+		var opts []openaioption.RequestOption
+		if cfg.OpenAI.APIKey != "" {
+			opts = append(opts, openaioption.WithAPIKey(cfg.OpenAI.APIKey))
+		}
+		return llm.NewOpenAI(cfg.OpenAI.Model, opts...), nil
+	case config.ProviderGemini:
+		return llm.NewGemini(ctx, cfg.Gemini.Model, cfg.Gemini.APIKey, genai.HTTPOptions{}), nil
 	default:
 		return nil, fmt.Errorf("unknown provider %q", cfg.Provider)
 	}

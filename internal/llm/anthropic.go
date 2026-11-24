@@ -13,18 +13,7 @@ import (
 	"github.com/madalinpopa/jjreview/internal/prompt"
 )
 
-const (
-	DefaultAnthropicModel = "claude-haiku-5-5"
-	maxTokens             = 16000
-	fence                 = "```"
-)
-
-var (
-	ErrEmptyPatch    = errors.New("commit message: empty patch")
-	ErrRefused       = errors.New("commit message: model refused the request")
-	ErrTruncated     = errors.New("commit message: response hit the token limit")
-	ErrEmptyResponse = errors.New("commit message: model returned no text")
-)
+const DefaultAnthropicModel = "claude-haiku-5-5"
 
 var _ Provider = Anthropic{}
 
@@ -72,20 +61,6 @@ func (g Anthropic) Generate(ctx context.Context, patch string) (string, error) {
 		return "", ErrEmptyResponse
 	}
 	return msg, nil
-}
-
-func clean(text string) string {
-	text = strings.TrimSpace(text)
-	if !strings.HasPrefix(text, fence) {
-		return text
-	}
-	_, body, found := strings.Cut(text, "\n")
-	if !found {
-		return ""
-	}
-	body = strings.TrimSpace(body)
-	body = strings.TrimSuffix(body, fence)
-	return strings.TrimSpace(body)
 }
 
 func describe(err error) error {

@@ -20,6 +20,8 @@ const (
 	ProviderNone      = "none"
 	ProviderAnthropic = "anthropic"
 	ProviderCopilot   = "copilot"
+	ProviderOpenAI    = "openai"
+	ProviderGemini    = "gemini"
 )
 
 type Provider struct {
@@ -35,6 +37,8 @@ type Config struct {
 	Provider  string
 	Anthropic Provider
 	Copilot   Copilot
+	OpenAI    Provider
+	Gemini    Provider
 	Theme     theme.Set
 }
 
@@ -72,11 +76,19 @@ func Load(path string) (Config, error) {
 		Copilot: Copilot{
 			Model: v.GetString("providers.copilot.model"),
 		},
+		OpenAI: Provider{
+			APIKey: v.GetString("providers.openai.api_key"),
+			Model:  v.GetString("providers.openai.model"),
+		},
+		Gemini: Provider{
+			APIKey: v.GetString("providers.gemini.api_key"),
+			Model:  v.GetString("providers.gemini.model"),
+		},
 	}
 	switch cfg.Provider {
-	case ProviderNone, ProviderAnthropic, ProviderCopilot:
+	case ProviderNone, ProviderAnthropic, ProviderCopilot, ProviderOpenAI, ProviderGemini:
 	default:
-		return Config{}, fmt.Errorf("config: %s: unknown provider %q; supported: %s, %s, %s", path, cfg.Provider, ProviderNone, ProviderAnthropic, ProviderCopilot)
+		return Config{}, fmt.Errorf("config: %s: unknown provider %q; supported: %s, %s, %s, %s, %s", path, cfg.Provider, ProviderNone, ProviderAnthropic, ProviderCopilot, ProviderOpenAI, ProviderGemini)
 	}
 	if v.IsSet("providers.copilot.api_key") {
 		return Config{}, fmt.Errorf("config: %s: providers.copilot does not take api_key; sign in by running copilot", path)

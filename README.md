@@ -29,8 +29,8 @@ commit it.
   removed lines on demand, a full-file view and search across files.
 - **Split by selection**: pick single lines, line ranges, hunks or whole files
   and commit them with `jj split`, so `jj undo` still applies.
-- **AI commit messages**: optional drafts from Anthropic or the GitHub Copilot
-  CLI, always editable before committing.
+- **AI commit messages**: optional drafts from Anthropic, OpenAI, Gemini or the
+  GitHub Copilot CLI, always editable before committing.
 - **Long lines**: scroll the diff sideways, or press `w` to zoom it to the full
   width.
 - **Log tab**: browse every revision, review any of them, squash, abandon,
@@ -70,8 +70,9 @@ Prebuilt archives for Linux and macOS (amd64, arm64) are attached to each
 `jjr` requires jj 0.47 or newer in `PATH`. Commit message generation is off by
 default (`provider = "none"`), so you write the message yourself. To turn it on,
 set `provider = "anthropic"` and provide an Anthropic API key (in the config
-file, in `ANTHROPIC_API_KEY`, or through `ant auth login`), or set
-`provider = "copilot"` to use a signed-in
+file, in `ANTHROPIC_API_KEY`, or through `ant auth login`), set
+`provider = "openai"` with an OpenAI API key, set `provider = "gemini"` with a
+Gemini API key, or set `provider = "copilot"` to use a signed-in
 [GitHub Copilot CLI](https://github.com/github/copilot-cli).
 
 ## Quick start
@@ -334,11 +335,19 @@ optional; a missing file means the defaults below. Keep the file private
 (`chmod 600`) if it holds an API key.
 
 ```toml
-provider = "none"             # "anthropic" or "copilot" to generate messages
+provider = "none"             # "anthropic", "openai", "gemini" or "copilot" to generate messages
 
 [providers.anthropic]
 api_key = ""                  # falls back to ANTHROPIC_API_KEY / ant auth login
 model = "claude-haiku-5-5"
+
+[providers.openai]
+api_key = ""                  # falls back to OPENAI_API_KEY
+model = "gpt-6-luna"
+
+[providers.gemini]
+api_key = ""                  # falls back to GOOGLE_API_KEY / GEMINI_API_KEY
+model = "gemini-3.5-flash-lite"
 
 [providers.copilot]
 model = "auto"
@@ -438,6 +447,24 @@ missing or too old, the message box shows the error. Requests run without tools,
 MCP servers or custom instructions, time out after two minutes, and count
 against your Copilot plan.
 
+### OpenAI
+
+With `provider = "openai"`, `jjr` uses the API key from the config file, or
+`OPENAI_API_KEY` when it is empty. The default model is `gpt-6-luna`; low
+reasoning effort is requested only for that model. Requests time out after two
+minutes. Set `OPENAI_BASE_URL` to use a different endpoint.
+
+### Gemini
+
+With `provider = "gemini"`, `jjr` uses the API key from the config file, or
+`GOOGLE_API_KEY`, then `GEMINI_API_KEY`, when it is empty. It always uses the
+Gemini API, not Vertex AI. The default model is `gemini-3.5-flash-lite`; low
+thinking is requested only for that model. If both `GOOGLE_API_KEY` and
+`GEMINI_API_KEY` are set, the Gemini SDK prints a warning at startup and uses
+`GOOGLE_API_KEY`. Server and connection errors are retried up to two times, and
+requests time out after two minutes.
+Set `GOOGLE_GEMINI_BASE_URL` to use a different endpoint.
+
 ### Data sent to the model
 
 Only the selected hunks and lines are sent, formatted as a unified diff,
@@ -468,7 +495,7 @@ Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and
 | [`internal/config`](internal/config) | Loading the TOML config file |
 | [`internal/theme`](internal/theme) | Colours and colour parsing |
 | [`internal/prompt`](internal/prompt) | Commit message system prompt and prompt construction |
-| [`internal/llm`](internal/llm) | Commit message `Provider` interface and the Anthropic and Copilot implementations |
+| [`internal/llm`](internal/llm) | Commit message `Provider` interface and the Anthropic, OpenAI, Gemini and Copilot implementations |
 | [`internal/tui`](internal/tui) | The Bubble Tea interface |
 
 ## Contributing

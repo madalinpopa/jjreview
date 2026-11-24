@@ -20,7 +20,6 @@ import (
 
 const (
 	DefaultCopilotModel = "auto"
-	generateTimeout     = 2 * time.Minute
 	cleanupTimeout      = 5 * time.Second
 	shutdownTimeout     = 3 * time.Second
 )
