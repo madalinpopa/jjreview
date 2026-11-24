@@ -15,6 +15,8 @@ import (
 
 const DefaultAnthropicModel = "claude-haiku-5-5"
 
+var errAnthropicTimeout = fmt.Errorf("Anthropic did not respond within %s", generateTimeout)
+
 var _ Provider = Anthropic{}
 
 type Anthropic struct {
@@ -33,15 +35,25 @@ func (g Anthropic) Generate(ctx context.Context, patch string) (string, error) {
 	if strings.TrimSpace(patch) == "" {
 		return "", ErrEmptyPatch
 	}
-	resp, err := g.client.Messages.New(ctx, anthropic.MessageNewParams{
+	ctx, cancel := context.WithTimeoutCause(ctx, generateTimeout, errAnthropicTimeout)
+	defer cancel()
+
+	params := anthropic.MessageNewParams{
 		Model:     g.model,
 		MaxTokens: maxTokens,
 		System:    []anthropic.TextBlockParam{{Text: prompt.System}},
 		Messages: []anthropic.MessageParam{
 			anthropic.NewUserMessage(anthropic.NewTextBlock(prompt.Build(patch))),
 		},
-	})
+	}
+	if g.model == DefaultAnthropicModel {
+		params.OutputConfig = anthropic.OutputConfigParam{Effort: anthropic.OutputConfigEffortLow}
+	}
+	resp, err := g.client.Messages.New(ctx, params)
 	if err != nil {
+		if cause := context.Cause(ctx); cause != nil {
+			return "", fmt.Errorf("generate commit message: %w", cause)
+		}
 		return "", describe(err)
 	}
 	switch resp.StopReason {

@@ -439,6 +439,13 @@ comment = "#6e6a86"
 default), `jjr` follows the terminal's background colour and switches when it
 changes. Terminals that don't report their background get the dark profile.
 
+### Anthropic
+
+With `provider = "anthropic"`, `jjr` uses the API key from the config file, or
+`ANTHROPIC_API_KEY` or `ant auth login` when it is empty. The default model is
+`claude-haiku-5-5`; low effort is requested only for that model. Requests time
+out after two minutes.
+
 ### GitHub Copilot
 
 With `provider = "copilot"`, `jjr` uses the `copilot` CLI from `PATH`, or the

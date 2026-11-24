@@ -19,14 +19,15 @@ import (
 const samplePatch = "diff --git a/main.go b/main.go\n--- a/main.go\n+++ b/main.go\n@@ -1 +1 @@\n-package old\n+package main\n"
 
 type request struct {
-	Model       string         `json:"model"`
-	MaxTokens   int64          `json:"max_tokens"`
-	System      []textBlock    `json:"system"`
-	Messages    []message      `json:"messages"`
-	Temperature jsontext.Value `json:"temperature"`
-	TopP        jsontext.Value `json:"top_p"`
-	TopK        jsontext.Value `json:"top_k"`
-	Thinking    jsontext.Value `json:"thinking"`
+	Model        string         `json:"model"`
+	MaxTokens    int64          `json:"max_tokens"`
+	System       []textBlock    `json:"system"`
+	Messages     []message      `json:"messages"`
+	Temperature  jsontext.Value `json:"temperature"`
+	TopP         jsontext.Value `json:"top_p"`
+	TopK         jsontext.Value `json:"top_k"`
+	Thinking     jsontext.Value `json:"thinking"`
+	OutputConfig jsontext.Value `json:"output_config"`
 }
 
 type textBlock struct {
@@ -171,6 +172,12 @@ func TestGenerate_success(t *testing.T) {
 			t.Errorf("request sets %s = %s, want absent", name, field)
 		}
 	}
+	var outputConfig struct {
+		Effort string `json:"effort"`
+	}
+	if err := json.Unmarshal(req.OutputConfig, &outputConfig); err != nil || outputConfig.Effort != "low" {
+		t.Errorf("output_config = %s, want effort low", req.OutputConfig)
+	}
 	if n := len(req.Messages); n != 1 || req.Messages[0].Role != "user" {
 		t.Errorf("messages = %+v, want a single user message", req.Messages)
 	}
@@ -184,8 +191,12 @@ func TestGenerate_customModel(t *testing.T) {
 		t.Fatalf("Generate() error = %v", err)
 	}
 
-	if got := api.request(t).Model; got != "claude-sonnet-5-5" {
-		t.Errorf("model = %q, want %q", got, "claude-sonnet-5-5")
+	req := api.request(t)
+	if req.Model != "claude-sonnet-5-5" {
+		t.Errorf("model = %q, want %q", req.Model, "claude-sonnet-5-5")
+	}
+	if req.OutputConfig != nil {
+		t.Errorf("output_config = %s, want absent for a custom model", req.OutputConfig)
 	}
 }
 
