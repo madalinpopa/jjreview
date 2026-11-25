@@ -22,6 +22,8 @@ const (
 	ProviderCopilot   = "copilot"
 	ProviderOpenAI    = "openai"
 	ProviderGemini    = "gemini"
+	ProviderClaude    = "claude"
+	ProviderCodex     = "codex"
 )
 
 type Provider struct {
@@ -29,14 +31,16 @@ type Provider struct {
 	Model  string
 }
 
-type Copilot struct {
+type CLI struct {
 	Model string
 }
 
 type Config struct {
 	Provider  string
 	Anthropic Provider
-	Copilot   Copilot
+	Copilot   CLI
+	Claude    CLI
+	Codex     CLI
 	OpenAI    Provider
 	Gemini    Provider
 	Theme     theme.Set
@@ -73,8 +77,14 @@ func Load(path string) (Config, error) {
 			APIKey: v.GetString("providers.anthropic.api_key"),
 			Model:  v.GetString("providers.anthropic.model"),
 		},
-		Copilot: Copilot{
+		Copilot: CLI{
 			Model: v.GetString("providers.copilot.model"),
+		},
+		Claude: CLI{
+			Model: v.GetString("providers.claude.model"),
+		},
+		Codex: CLI{
+			Model: v.GetString("providers.codex.model"),
 		},
 		OpenAI: Provider{
 			APIKey: v.GetString("providers.openai.api_key"),
@@ -86,12 +96,18 @@ func Load(path string) (Config, error) {
 		},
 	}
 	switch cfg.Provider {
-	case ProviderNone, ProviderAnthropic, ProviderCopilot, ProviderOpenAI, ProviderGemini:
+	case ProviderNone, ProviderAnthropic, ProviderCopilot, ProviderOpenAI, ProviderGemini, ProviderClaude, ProviderCodex:
 	default:
-		return Config{}, fmt.Errorf("config: %s: unknown provider %q; supported: %s, %s, %s, %s, %s", path, cfg.Provider, ProviderNone, ProviderAnthropic, ProviderCopilot, ProviderOpenAI, ProviderGemini)
+		return Config{}, fmt.Errorf("config: %s: unknown provider %q; supported: %s, %s, %s, %s, %s, %s, %s", path, cfg.Provider, ProviderNone, ProviderAnthropic, ProviderCopilot, ProviderOpenAI, ProviderGemini, ProviderClaude, ProviderCodex)
 	}
-	if v.IsSet("providers.copilot.api_key") {
-		return Config{}, fmt.Errorf("config: %s: providers.copilot does not take api_key; sign in by running copilot", path)
+	for _, cli := range []struct{ name, signIn string }{
+		{ProviderCopilot, "copilot"},
+		{ProviderClaude, "claude"},
+		{ProviderCodex, "codex login"},
+	} {
+		if v.IsSet("providers." + cli.name + ".api_key") {
+			return Config{}, fmt.Errorf("config: %s: providers.%s does not take api_key; sign in by running %s", path, cli.name, cli.signIn)
+		}
 	}
 
 	raw, ok := v.Get("theme").(map[string]any)

@@ -40,6 +40,9 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(0)
 	}
+	if reply, ok := os.LookupEnv(envFakeCLIReply); ok {
+		fakeCLIMain(reply)
+	}
 	os.Exit(m.Run())
 }
 
@@ -142,6 +145,7 @@ func runFakeRuntime(r io.Reader, w io.Writer, reply, logPath string) (err error)
 func newFakeCopilot(t *testing.T, model, reply string) (*llm.Copilot, string) {
 	t.Helper()
 	logPath := filepath.Join(t.TempDir(), "requests.jsonl")
+	t.Setenv("GORACE", "atexit_sleep_ms=0")
 	t.Setenv("COPILOT_CLI_PATH", os.Args[0])
 	t.Setenv(envFakeReply, reply)
 	t.Setenv(envFakeLog, logPath)

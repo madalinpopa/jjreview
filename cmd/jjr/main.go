@@ -151,6 +151,10 @@ func provider(ctx context.Context, cfg config.Config) (llm.Provider, error) {
 		return llm.NewOpenAI(cfg.OpenAI.Model, opts...), nil
 	case config.ProviderGemini:
 		return llm.NewGemini(ctx, cfg.Gemini.Model, cfg.Gemini.APIKey, genai.HTTPOptions{}), nil
+	case config.ProviderClaude:
+		return llm.NewClaude(cfg.Claude.Model), nil
+	case config.ProviderCodex:
+		return llm.NewCodex(cfg.Codex.Model), nil
 	default:
 		return nil, fmt.Errorf("unknown provider %q", cfg.Provider)
 	}

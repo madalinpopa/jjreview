@@ -312,6 +312,8 @@ func TestProvider_success(t *testing.T) {
 		"openai without a key": {cfg: config.Config{Provider: config.ProviderOpenAI}, want: "llm.OpenAI"},
 		"gemini with a key":    {cfg: config.Config{Provider: config.ProviderGemini, Gemini: config.Provider{APIKey: "gm-test"}}, want: "*llm.Gemini"},
 		"gemini without a key": {cfg: config.Config{Provider: config.ProviderGemini}, want: "*llm.Gemini"},
+		"claude":               {cfg: config.Config{Provider: config.ProviderClaude, Claude: config.CLI{Model: "sonnet"}}, want: "llm.Claude"},
+		"codex":                {cfg: config.Config{Provider: config.ProviderCodex, Codex: config.CLI{Model: "gpt-5.4-mini"}}, want: "llm.Codex"},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {

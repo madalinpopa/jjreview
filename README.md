@@ -29,7 +29,8 @@ commit it.
   removed lines on demand, a full-file view and search across files.
 - **Split by selection**: pick single lines, line ranges, hunks or whole files
   and commit them with `jj split`, so `jj undo` still applies.
-- **AI commit messages**: optional drafts from Anthropic, OpenAI, Gemini or the
+- **AI commit messages**: optional drafts from Anthropic, OpenAI, Gemini, or
+  your Claude, ChatGPT or Copilot subscription through the Claude Code, Codex or
   GitHub Copilot CLI, always editable before committing.
 - **Long lines**: scroll the diff sideways, or press `w` to zoom it to the full
   width.
@@ -66,7 +67,10 @@ default (`provider = "none"`), so you write the message yourself. To turn it on,
 set `provider = "anthropic"` and provide an Anthropic API key (in the config
 file, in `ANTHROPIC_API_KEY`, or through `ant auth login`), set
 `provider = "openai"` with an OpenAI API key, set `provider = "gemini"` with a
-Gemini API key, or set `provider = "copilot"` to use a signed-in
+Gemini API key, or use a signed-in CLI with your subscription:
+`provider = "claude"` for [Claude Code](https://code.claude.com),
+`provider = "codex"` for [Codex](https://github.com/openai/codex) or
+`provider = "copilot"` for the
 [GitHub Copilot CLI](https://github.com/github/copilot-cli).
 
 ## Quick start
@@ -280,7 +284,7 @@ optional; a missing file means the defaults below. Keep the file private
 (`chmod 600`) if it holds an API key.
 
 ```toml
-provider = "none"             # "anthropic", "openai", "gemini" or "copilot" to generate messages
+provider = "none"             # "anthropic", "openai", "gemini", "claude", "codex" or "copilot" to generate messages
 
 [providers.anthropic]
 api_key = ""                  # falls back to ANTHROPIC_API_KEY / ant auth login
@@ -293,6 +297,12 @@ model = "gpt-6-luna"
 [providers.gemini]
 api_key = ""                  # falls back to GOOGLE_API_KEY / GEMINI_API_KEY
 model = "gemini-3.5-flash-lite"
+
+[providers.claude]
+model = "haiku"
+
+[providers.codex]
+model = ""                    # empty uses the Codex default
 
 [providers.copilot]
 model = "auto"
@@ -391,6 +401,24 @@ With `provider = "anthropic"`, `jjr` uses the API key from the config file, or
 `claude-haiku-5-5`; low effort is requested only for that model. Requests time
 out after two minutes.
 
+### Claude Code
+
+With `provider = "claude"`, `jjr` runs the `claude` CLI from `PATH`, or the one
+in `CLAUDE_CLI_PATH`. Sign in once by running `claude`. `ANTHROPIC_API_KEY` and
+`ANTHROPIC_AUTH_TOKEN` are not passed to the CLI, so it uses the account it is
+signed in with. The default model is `haiku` with low effort. Requests run in safe mode
+without tools, MCP servers, hooks or `CLAUDE.md`, and time out after two minutes.
+
+### Codex
+
+With `provider = "codex"`, `jjr` runs the `codex` CLI from `PATH`, or the one in
+`CODEX_CLI_PATH`. Sign in once with `codex login`. `CODEX_API_KEY` and
+`OPENAI_API_KEY` are not passed to the CLI, so it uses the account it is signed
+in with. Requests use low reasoning effort and a read-only sandbox without
+shell, web search, apps, plugins, hooks or `~/.codex/config.toml`, and time out
+after two minutes. An empty model uses the Codex default; with a ChatGPT login,
+only models available to that plan work.
+
 ### GitHub Copilot
 
 With `provider = "copilot"`, `jjr` uses the `copilot` CLI from `PATH`, or the
@@ -447,7 +475,7 @@ Requires Go 1.27.4+, jj 0.47+, [Task](https://taskfile.dev), and
 | [`internal/config`](internal/config) | Loading the TOML config file |
 | [`internal/theme`](internal/theme) | Colours and colour parsing |
 | [`internal/prompt`](internal/prompt) | Commit message system prompt and prompt construction |
-| [`internal/llm`](internal/llm) | Commit message `Provider` interface and the Anthropic, OpenAI, Gemini and Copilot implementations |
+| [`internal/llm`](internal/llm) | Commit message `Provider` interface and the Anthropic, OpenAI, Gemini, Claude Code, Codex and Copilot implementations |
 | [`internal/tui`](internal/tui) | The Bubble Tea interface |
 
 ## Contributing

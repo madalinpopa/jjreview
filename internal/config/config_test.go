@@ -177,6 +177,44 @@ model = "gpt-5-mini"
 		}
 	})
 
+	t.Run("reads the claude provider", func(t *testing.T) {
+		path := writeConfig(t, `
+provider = "claude"
+
+[providers.claude]
+model = "sonnet"
+`)
+
+		got, err := config.Load(path)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+
+		want := config.CLI{Model: "sonnet"}
+		if got.Provider != config.ProviderClaude || got.Claude != want {
+			t.Errorf("Load() provider = %q, claude = %+v, want %q, %+v", got.Provider, got.Claude, config.ProviderClaude, want)
+		}
+	})
+
+	t.Run("reads the codex provider", func(t *testing.T) {
+		path := writeConfig(t, `
+provider = "codex"
+
+[providers.codex]
+model = "gpt-5.4"
+`)
+
+		got, err := config.Load(path)
+		if err != nil {
+			t.Fatalf("Load() error = %v", err)
+		}
+
+		want := config.CLI{Model: "gpt-5.4"}
+		if got.Provider != config.ProviderCodex || got.Codex != want {
+			t.Errorf("Load() provider = %q, codex = %+v, want %q, %+v", got.Provider, got.Codex, config.ProviderCodex, want)
+		}
+	})
+
 	t.Run("reads the openai provider", func(t *testing.T) {
 		path := writeConfig(t, `
 provider = "openai"
@@ -221,8 +259,10 @@ model = "gemini-3.6-pro"
 func TestLoad_failure(t *testing.T) {
 	for name, tc := range map[string]struct{ body, want string }{
 		"invalid toml":               {body: "provider = ", want: "config.toml"},
-		"unknown provider":           {body: `provider = "mistral"`, want: `unknown provider "mistral"; supported: none, anthropic, copilot, openai, gemini`},
-		"copilot api key":            {body: "[providers.copilot]\napi_key = \"secret\"\n", want: "api_key"},
+		"unknown provider":           {body: `provider = "mistral"`, want: `unknown provider "mistral"; supported: none, anthropic, copilot, openai, gemini, claude, codex`},
+		"copilot api key":            {body: "[providers.copilot]\napi_key = \"secret\"\n", want: "providers.copilot does not take api_key; sign in by running copilot"},
+		"claude api key":             {body: "[providers.claude]\napi_key = \"secret\"\n", want: "providers.claude does not take api_key; sign in by running claude"},
+		"codex api key":              {body: "[providers.codex]\napi_key = \"secret\"\n", want: "providers.codex does not take api_key; sign in by running codex login"},
 		"unknown theme key":          {body: "[theme.base]\nbordr = \"red\"\n", want: "unknown colour theme.base.bordr"},
 		"unknown section":            {body: "[theme.colors]\nborder = \"red\"\n", want: "unknown section theme.colors"},
 		"non-string colour":          {body: "[theme.base]\nborder = 1\n", want: "theme.base.border"},
