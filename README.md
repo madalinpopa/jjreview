@@ -42,12 +42,6 @@ commit it.
 - **Command notifications**: a corner notification shows each jj command while
   it runs and its result when it finishes.
 
-`jjr` shows the diff of a jj change in a terminal UI, lets you pick single
-lines, hunks or whole files, and commits the selection with `jj split`, so your
-jj configuration and `jj undo` still apply. When a message provider is
-configured, the commit message is generated from the selection; either way, you
-can edit it before committing.
-
 The interface may change before v1.
 
 ## Installation
@@ -114,30 +108,6 @@ jjr -R ~/src/app # review a repository elsewhere
 ```
 
 ### Keys
-
-The file tree is on the left and the unified diff of the current file on the
-right. The diff shows each hunk as it reads after the change: added and context
-lines only. Press `d` on a hunk to see its removed lines too, or `D` for every
-hunk in the file. A hunk that is selected in part always shows its removed
-lines, so a replaced line is never committed without you seeing both sides.
-
-A selected line has its line number and sign drawn as a solid block in the
-`picked` colour. A hunk header shows `○` when nothing in it is
-selected, `◐` when some of its lines are, `●` when all of them are and `✓` once
-it is committed. Binary files, symlinks and files without hunks can only be
-selected whole.
-
-Lines wider than the diff pane are cut at its edge: `l` and `h` scroll the code
-sideways while the line numbers and signs stay in place, and `‹` / `›` mark the
-edge that hides text.
-
-`/` searches the code lines on screen for the query as plain text, ignoring
-case. Removed lines hidden by default and lines in folded hunks are not
-searched until `d` or `z` shows them. Every match is highlighted, the current
-one in the selection colour, and the status bar shows its position in the
-file, such as `/query 3/12`. In the full-file view, `n` / `N` move to the next
-file whose changes match, or whose loaded content matches, and the next `n` /
-`N` continues inside it.
 
 | Key | Action |
 |-----|--------|
@@ -208,17 +178,8 @@ included, contains it, ignoring case.
 | `?` | Show all keys |
 | `q` | Quit |
 
-`a` asks for confirmation and names the local bookmarks that will be deleted
-and the selected hunks that will be dropped; press `y` to abandon, any other key
-cancels. As with `jj abandon`, descendants are rebased onto the parent, and
-abandoning `@` starts a new empty change. Immutable revisions can't be
-abandoned.
-
-`P` asks for confirmation and names the bookmarks it pushes. A revision without
-bookmarks is pushed with `jj git push --change`, which creates a bookmark for
-it. Fetch and push use jj's default remote and run without a terminal, so a
-remote that needs a password or an SSH passphrase must get it from a credential
-helper or `ssh-agent`.
+Fetch and push use jj's default remote and run without a terminal, so a remote
+that needs a password must get it from a credential helper or `ssh-agent`.
 
 Bookmarks tab:
 
@@ -287,22 +248,6 @@ current operation; snapshots and the root operation are dimmed.
 | `x` | Dismiss the notification of a finished command |
 | `?` | Show all keys |
 | `q` | Quit |
-
-Each action shows the operation, its command line and its age before it runs;
-press `y` to go ahead, any other key cancels. Restore and undo create a new
-operation, so they can be undone in turn, and drop the selected hunks; the
-prompt says so. The current operation can't be abandoned (undo it first), and
-the root operation can't be undone or abandoned.
-
-`R` in the log, bookmarks or operations tab refreshes the lists, not the review;
-press `R` in the review tab to pick up file changes.
-
-Fetch, push, abandon, squash, the operation actions and bookmark deletion show
-a notification in the bottom-right corner with the command, a spinner while it
-runs and then its result. A success closes after a few seconds; a failure or a
-warning stays until `x` dismisses it or the next command starts. When the
-notification does not fit, or a dialog is open, the result is shown in the
-status bar instead.
 
 Commit dialog:
 
