@@ -36,6 +36,7 @@ func NewGemini(ctx context.Context, model, apiKey string, httpOpts genai.HTTPOpt
 			HTTPStatusCodes: []int32{http.StatusInternalServerError, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout},
 		}
 	}
+	httpOpts.APIVersion = cmp.Or(httpOpts.APIVersion, "v1beta")
 	model = cmp.Or(model, DefaultGeminiModel)
 	if cmp.Or(apiKey, os.Getenv("GOOGLE_API_KEY"), os.Getenv("GEMINI_API_KEY")) == "" {
 		return &Gemini{model: model, err: errGeminiMissingKey}
