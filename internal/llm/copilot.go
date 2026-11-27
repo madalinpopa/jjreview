@@ -139,7 +139,7 @@ func (c *Copilot) generate(ctx context.Context, patch string) (msg string, err e
 }
 
 func (c *Copilot) disabledMCPServers(ctx context.Context) ([]string, error) {
-	config, err := c.client.RPC.MCP.Config().List(ctx)
+	config, err := c.client.RPC.MCP.Config().List(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("list Copilot MCP servers: %w", err)
 	}
